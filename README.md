@@ -2,6 +2,19 @@
 
 Aplicativo simples para Windows que captura o microfone, aplica ganho livre e pitch em tempo real, e envia o audio processado para um dispositivo de audio virtual. Ele tambem pode tocar a propria voz no fone quando o monitoramento estiver ligado.
 
+---
+
+## 📥 Como Baixar (Download Rápido)
+
+Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem precisar configurar nada:
+
+1. Vá para a seção de **[Releases (Lançamentos)](https://github.com/OtavioBiazzi/MicStudio/releases)** no topo direito desta página do GitHub.
+2. Localize a versão mais recente (marcada como **Latest**).
+3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 0.4.0.exe`) para baixá-lo.
+4. Execute o arquivo baixado. O aplicativo será instalado automaticamente de forma portátil e os atalhos serão criados no seu Menu Iniciar para busca rápida!
+
+---
+
 ## O que o app faz
 
 - Detecta automaticamente um microfone Fifine quando ele aparece na lista de dispositivos.

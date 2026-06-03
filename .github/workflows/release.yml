@@ -44,7 +44,7 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --name MicFudiddoBackend --distpath backend-dist --workpath build/backend backend_run.py
 
       - name: Package Electron App
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

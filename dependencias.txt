@@ -1,0 +1,18 @@
+INSTRUÇÕES DE INSTALAÇÃO & DEPENDÊNCIAS - MicFudiddo Studio
+
+Para que o MicFudiddo Studio funcione corretamente no seu sistema, leia com atenção:
+
+1. DEPENDÊNCIA OBRIGATÓRIA: CABO DE ÁUDIO VIRTUAL (VB-CABLE)
+   O aplicativo necessita do driver de áudio VB-CABLE instalado no seu Windows para poder rotear a sua voz modificada e os efeitos do soundboard para outros aplicativos (como Discord, Skype, jogos, etc.).
+   
+   * Se você NÃO possui o VB-CABLE instalado:
+     Você pode baixá-lo gratuitamente no site oficial: https://vb-audio.com/Cable/
+     ou através do instalador unificado do repositório.
+   
+2. CONFIGURAÇÃO NO DISCORD / JOGOS
+   Após concluir a instalação e abrir o MicFudiddo Studio:
+   * Abra as configurações de voz do Discord (ou do seu jogo).
+   * Defina o "Dispositivo de Entrada" (Microfone) como: CABLE Output (VB-Audio Virtual Cable).
+   * Defina o "Dispositivo de Saída" como: O seu fone de ouvido ou alto-falante padrão.
+
+Ao clicar em "Eu concordo", o assistente irá prosseguir com a instalação do MicFudiddo Studio e criar os atalhos.

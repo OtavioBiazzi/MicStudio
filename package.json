@@ -48,7 +48,6 @@
     ],
     "win": {
       "icon": "assets/micfudiddo.ico",
-      "signAndEditExecutable": false,
       "target": [
         "nsis",
         "portable"
@@ -69,6 +68,10 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "unicode": true,
+      "installerLanguages": [
+        "pt_BR",
+        "en_US"
+      ],
       "include": "build/installer.nsh"
     }
   }

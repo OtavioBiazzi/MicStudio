@@ -7,7 +7,7 @@
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
   ; Check if VB-CABLE is already installed by looking for the driver
-  nsExec::ExecToStack 'powershell -NoProfile -Command "if (Get-WmiObject Win32_SoundDevice | Where-Object { $_.Name -like ''*VB-Audio*'' -or $_.Name -like ''*CABLE*'' }) { exit 0 } else { exit 1 }"'
+  nsExec::ExecToStack 'powershell -NoProfile -Command "if (Get-WmiObject Win32_SoundDevice | Where-Object { $$_.Name -like ''*VB-Audio*'' -or $$_.Name -like ''*CABLE*'' }) { exit 0 } else { exit 1 }"'
   Pop $0
   ${If} $0 != "0"
     ; VB-CABLE not found - ask user
@@ -45,7 +45,7 @@
       DetailPrint "Instalando VB-CABLE (sera necessario permissao de administrador)..."
       
       ; Find and run VBCABLE_Setup_x64.exe or VBCABLE_Setup.exe
-      nsExec::ExecToStack 'powershell -NoProfile -Command "$setupPath = Get-ChildItem -Path ''$PLUGINSDIR\vbcable\extracted'' -Filter ''VBCABLE_Setup_x64.exe'' -Recurse | Select-Object -First 1 -ExpandProperty FullName; if ($setupPath) { Start-Process -FilePath $setupPath -Verb RunAs -Wait; exit 0 } else { $setupPath = Get-ChildItem -Path ''$PLUGINSDIR\vbcable\extracted'' -Filter ''VBCABLE_Setup.exe'' -Recurse | Select-Object -First 1 -ExpandProperty FullName; if ($setupPath) { Start-Process -FilePath $setupPath -Verb RunAs -Wait; exit 0 } else { exit 1 } }"'
+      nsExec::ExecToStack 'powershell -NoProfile -Command "$$setupPath = Get-ChildItem -Path ''$PLUGINSDIR\vbcable\extracted'' -Filter ''VBCABLE_Setup_x64.exe'' -Recurse | Select-Object -First 1 -ExpandProperty FullName; if ($$setupPath) { Start-Process -FilePath $$setupPath -Verb RunAs -Wait; exit 0 } else { $$setupPath = Get-ChildItem -Path ''$PLUGINSDIR\vbcable\extracted'' -Filter ''VBCABLE_Setup.exe'' -Recurse | Select-Object -First 1 -ExpandProperty FullName; if ($$setupPath) { Start-Process -FilePath $$setupPath -Verb RunAs -Wait; exit 0 } else { exit 1 } }"'
       Pop $0
       
       ${If} $0 == "0"

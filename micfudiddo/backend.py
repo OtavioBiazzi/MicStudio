@@ -1110,10 +1110,27 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/api/selection":
             selected = data.get("selected", data)
-            STATE.selected_input = _optional_int(selected.get("input"), STATE.selected_input)
-            STATE.selected_output = _optional_int(selected.get("output"), STATE.selected_output)
-            STATE.selected_monitor = _optional_int(selected.get("monitor"), STATE.selected_monitor)
+            was_running = STATE.engine.running
+            was_monitor_only = STATE.monitor_only_active
+            if was_running or was_monitor_only:
+                STATE.stop()
+            if "input" in selected:
+                STATE.selected_input = _optional_int(selected.get("input"), STATE.selected_input)
+            if "output" in selected:
+                STATE.selected_output = _optional_int(selected.get("output"), STATE.selected_output)
+            if "monitor" in selected:
+                STATE.selected_monitor = _optional_int(selected.get("monitor"), STATE.selected_monitor)
             STATE.save_profile()
+            if was_running:
+                try:
+                    STATE.start()
+                except Exception as e:
+                    STATE.status = f"Erro ao reiniciar: {e}"
+            elif was_monitor_only:
+                try:
+                    STATE.start_monitor_only()
+                except Exception as e:
+                    STATE.status = f"Erro ao reiniciar monitoramento: {e}"
             return None
         if path == "/api/controls":
             controls = data.get("controls", data)

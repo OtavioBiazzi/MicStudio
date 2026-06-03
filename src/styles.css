@@ -3562,6 +3562,10 @@ html,body,#root {
   padding: 4px;
 }
 
+.audioPlayersContainer.single-player {
+  grid-template-columns: 1fr;
+}
+
 /* Custom scrollbar for players container */
 .audioPlayersContainer::-webkit-scrollbar {
   width: 6px;

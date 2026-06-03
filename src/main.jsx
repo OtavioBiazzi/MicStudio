@@ -1964,7 +1964,7 @@ function Sidebar({ page, setPage, state, profileName, profileSub, profilePlan, p
           </div>
         </div>
         <div style={{ padding: "8px 4px 0 4px", fontSize: "9px", color: "var(--text-muted)", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "12px", width: "100%", opacity: 0.8 }}>
-          v0.4.0 (Atualizada - Clique para Tocar)
+          v0.4.0
         </div>
       </div>
     </aside>
@@ -2130,7 +2130,7 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
 
             <button
               className="bbBtn icon-only"
-              onClick={() => callSilent("/api/sounds/stop").catch(() => {})}
+              onClick={() => call("/api/sounds/stop").catch(() => {})}
               title="Parar todos os sons"
               style={{ width: 28, height: 28 }}
             >
@@ -2230,9 +2230,9 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
               className={`dock-soundboard-quick-play ${isSoundPlaying ? "playing" : ""}`}
               onClick={() => {
                 if (isSoundPlaying) {
-                  callSilent("/api/sounds/stop").catch(() => {});
+                  call("/api/sounds/stop").catch(() => {});
                 } else {
-                  callSilent("/api/sounds/play", { id: lastPlayedSound.id }).catch(() => {});
+                  call("/api/sounds/play", { id: lastPlayedSound.id }).catch(() => {});
                 }
               }}
               onContextMenu={handleSoundboardJump}
@@ -2267,7 +2267,7 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
         <div className="dock-soundboard-quick-play-menu" style={{ left: menuPos.x, top: menuPos.y }} onClick={(e) => e.stopPropagation()}>
           <div className="menu-title">Últimos Tocados</div>
           {recentSounds.map((s) => (
-            <button key={s.id} onClick={() => { callSilent("/api/sounds/play", { id: s.id }).catch(() => {}); setShowMenu(false); }}>
+            <button key={s.id} onClick={() => { call("/api/sounds/play", { id: s.id }).catch(() => {}); setShowMenu(false); }}>
               <Play size={12} /> {s.name}
             </button>
           ))}
@@ -2275,7 +2275,7 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
 
           <div className="menu-title">Favoritos</div>
           {favoriteSounds.map((s) => (
-            <button key={s.id} onClick={() => { callSilent("/api/sounds/play", { id: s.id }).catch(() => {}); setShowMenu(false); }}>
+            <button key={s.id} onClick={() => { call("/api/sounds/play", { id: s.id }).catch(() => {}); setShowMenu(false); }}>
               <Star size={12} color="var(--amber)" weight="fill" /> {s.name}
             </button>
           ))}
@@ -3324,8 +3324,8 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
           <button className="btn btn-ghost" onClick={addSounds}><UploadSimple size={14} /> Importar</button>
           <button className="btn btn-ghost" onClick={addFolders}><FolderOpen size={14} /> Pasta</button>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
-          <button className="btn btn-ghost" onClick={() => callSilent("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={14} /></button>
-          <button className="btn btn-ghost" onClick={() => callSilent("/api/sounds/stop").catch(() => {})}><StopCircle size={14} /></button>
+          <button className="btn btn-ghost" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={14} /></button>
+          <button className="btn btn-ghost" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={14} /></button>
         </div>
       </div>
 
@@ -3379,7 +3379,7 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
                 <div
                   key={sound.id}
                   className={`soundCard ${selected?.id === sound.id && selectedSound !== null ? "active" : ""} ${isPlaying ? "playing" : ""}`}
-                  onClick={() => { setSelectedSound(sound.id); callSilent("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message)); }}
+                  onClick={() => { setSelectedSound(sound.id); call("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message)); }}
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, sound }); }}
                 >
                   <button
@@ -3474,7 +3474,7 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
       {/* Context menu */}
       {contextMenu && (
         <div className="contextMenu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => { callSilent("/api/sounds/play", { id: contextMenu.sound.id }).catch((e) => setToast(e.message)); setContextMenu(null); }}>
+          <button onClick={() => { call("/api/sounds/play", { id: contextMenu.sound.id }).catch((e) => setToast(e.message)); setContextMenu(null); }}>
             <Play size={14} /> Tocar
           </button>
           <button onClick={() => { setEditingSoundId(contextMenu.sound.id); setContextMenu(null); }}>
@@ -3933,7 +3933,7 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
 
   const handleStopPreview = async () => {
     try {
-      await callSilent("/api/sounds/stop");
+      await call("/api/sounds/stop");
       setToast("Prévia interrompida.");
     } catch (e) {
       setToast("Erro ao parar prévia: " + e.message);
@@ -3960,7 +3960,7 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
         end: endSec === "" ? null : Number(endSec),
         effects: getEffectsPayload()
       };
-      await callSilent("/api/sounds/preview", payload);
+      await call("/api/sounds/preview", payload);
       setToast("Tocando prévia editada...");
     } catch (e) {
       setToast("Erro na prévia: " + e.message);
@@ -4249,11 +4249,7 @@ function AudioPlayer({ state, selected, call }) {
       marginRight: isPinned ? "-8px" : "0",
       marginBottom: 16
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, paddingLeft: 4, paddingRight: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Sparkle size={14} color="var(--purple)" />
-          <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text-secondary)", letterSpacing: "0.5px" }}>REPRODUÇÕES ATIVAS ({players.length})</span>
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 4, paddingRight: 4 }}>
         <button
           onClick={togglePin}
           title={isPinned ? "Desafixar Player" : "Fixar Player"}
@@ -4270,7 +4266,7 @@ function AudioPlayer({ state, selected, call }) {
         </button>
       </div>
 
-      <div className="audioPlayersContainer">
+      <div className={`audioPlayersContainer ${players.length === 1 ? "single-player" : ""}`}>
         {players.map((p) => {
           const isDragging = !!draggingRef.current[p.playbackId];
           const currentPos = isDragging ? (dragPositions[p.playbackId] ?? 0) : (localPositions[p.playbackId] ?? p.current ?? 0);
@@ -4295,6 +4291,15 @@ function AudioPlayer({ state, selected, call }) {
                     {isPlayActive ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
                   </button>
                   <button
+                    onClick={() => {
+                      call("/api/sounds/play", { id: p.soundId, seconds: 0 }).catch(() => {});
+                    }}
+                    title="Reiniciar"
+                    style={{ padding: 0 }}
+                  >
+                    <ArrowCounterClockwise size={14} />
+                  </button>
+                  <button
                     className={p.loop ? "activeBtn" : ""}
                     onClick={() => handlePlaybackUpdate({ loop: !p.loop })}
                     title="Loop"
@@ -4303,7 +4308,7 @@ function AudioPlayer({ state, selected, call }) {
                     <ArrowClockwise size={14} weight={p.loop ? "bold" : "regular"} />
                   </button>
                   <button
-                    onClick={() => callSilent("/api/sounds/stop", { playbackId: p.playbackId }).catch(() => {})}
+                    onClick={() => call("/api/player/stop", { playbackId: p.playbackId }).catch(() => {})}
                     title="Parar"
                     style={{ color: "var(--danger-soft)", padding: 0 }}
                   >
@@ -4345,39 +4350,6 @@ function AudioPlayer({ state, selected, call }) {
                   />
                 </div>
                 <div className="cardTime">{formatTime(currentPos)} / {formatTime(p.duration)}</div>
-              </div>
-
-              {/* Live Playback Sliders */}
-              <div className="cardSliders">
-                <div className="sliderRow">
-                  <div className="sliderWrapper">
-                    <input
-                      type="range" min={0} max={10} step={0.1} value={p.volume}
-                      onChange={(e) => handlePlaybackUpdate({ volume: Number(e.target.value) })}
-                    />
-                  </div>
-                  <span className="sliderValue">{Math.round(p.volume * 100)}%</span>
-                </div>
-
-                <div className="sliderRow">
-                  <div className="sliderWrapper">
-                    <input
-                      type="range" min={0.25} max={4.0} step={0.05} value={p.speed}
-                      onChange={(e) => handlePlaybackUpdate({ speed: Number(e.target.value) })}
-                    />
-                  </div>
-                  <span className="sliderValue">{Number(p.speed).toFixed(2)}x</span>
-                </div>
-
-                <div className="sliderRow">
-                  <div className="sliderWrapper">
-                    <input
-                      type="range" min={1} max={100} step={1} value={p.gain}
-                      onChange={(e) => handlePlaybackUpdate({ gain: Number(e.target.value) })}
-                    />
-                  </div>
-                  <span className="sliderValue">{Math.round(p.gain)}x</span>
-                </div>
               </div>
             </div>
           );
@@ -4438,7 +4410,7 @@ function FavoritosPage({ state, call, favorites, toggleFavorite, updateControls,
               <div
                 key={sound.id}
                 className="soundCard"
-                onClick={() => callSilent("/api/sounds/play", { id: sound.id }).catch(() => {})}
+                onClick={() => call("/api/sounds/play", { id: sound.id }).catch(() => {})}
               >
                 <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
                   {sound.coverUrl ? <img src={sound.coverUrl} alt="" /> : <MusicNotes size={18} />}
@@ -5180,9 +5152,9 @@ function SoundboardQuickPanel({ sound, state, call, setToast, onClose, toggleSou
 
   const togglePreview = () => {
     if (isPlaying) {
-      callSilent("/api/sounds/stop").catch(() => {});
+      call("/api/sounds/stop").catch(() => {});
     } else {
-      callSilent("/api/sounds/play", { id: sound.id }).catch(() => {});
+      call("/api/sounds/play", { id: sound.id }).catch(() => {});
     }
   };
 
@@ -5560,9 +5532,9 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
   const handlePlayPreview = async (sound) => {
     const isPlaying = state.player?.state === "playing" && state.player?.soundId === sound.id;
     if (isPlaying) {
-      await callSilent("/api/sounds/stop").catch(() => {});
+      await call("/api/sounds/stop").catch(() => {});
     } else {
-      await callSilent("/api/sounds/play-online", {
+      await call("/api/sounds/play-online", {
         id: sound.id,
         url: sound.url,
         name: sound.name

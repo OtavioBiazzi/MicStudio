@@ -28,14 +28,14 @@ def _sounddevice():
     return sd
 
 
-def query_audio_devices() -> list[AudioDevice]:
+def query_audio_devices(preferred_api: str = "Windows WASAPI") -> list[AudioDevice]:
     sd = _sounddevice()
     hostapis = sd.query_hostapis()
-    devices = []
+    all_devices = []
     for index, raw in enumerate(sd.query_devices()):
         hostapi_index = int(raw.get("hostapi", -1))
         hostapi = hostapis[hostapi_index]["name"] if 0 <= hostapi_index < len(hostapis) else "Unknown"
-        devices.append(
+        all_devices.append(
             AudioDevice(
                 index=index,
                 name=str(raw.get("name", f"Device {index}")),
@@ -45,7 +45,13 @@ def query_audio_devices() -> list[AudioDevice]:
                 default_samplerate=float(raw.get("default_samplerate", 48000.0)),
             )
         )
-    return devices
+    # Filter to preferred API to avoid confusing duplicates like
+    # "Mapeador de Dispositivo Microsoft" from MME/DirectSound APIs.
+    if preferred_api:
+        filtered = [d for d in all_devices if preferred_api.lower() in d.hostapi.lower()]
+        if filtered:
+            return filtered
+    return all_devices
 
 
 def default_input_index() -> int | None:

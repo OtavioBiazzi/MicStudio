@@ -16,6 +16,23 @@ let shortcutTimer;
 let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
 
+function getIconPath() {
+  if (isDev) {
+    return path.join(ROOT, "assets", "micfudiddo.ico");
+  }
+  // In packaged app, try multiple locations
+  const candidates = [
+    path.join(__dirname, "..", "assets", "micfudiddo.ico"),
+    path.join(process.resourcesPath, "assets", "micfudiddo.ico"),
+    path.join(ROOT, "assets", "micfudiddo.ico"),
+  ];
+  const fs = require("fs");
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0]; // fallback
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -218,7 +235,7 @@ function createWindow() {
     minHeight: 740,
     title: "MicFudiddo Studio",
     backgroundColor: "#07111d",
-    icon: path.join(ROOT, "assets", "micfudiddo.ico"),
+    icon: getIconPath(),
     frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -245,7 +262,7 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(ROOT, "assets", "micfudiddo.ico"));
+  tray = new Tray(getIconPath());
   tray.setToolTip("MicFudiddo Studio");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Mostrar", click: () => mainWindow?.show() },

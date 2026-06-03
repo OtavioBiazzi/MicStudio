@@ -1,6 +1,6 @@
 {
   "name": "micfudiddo-studio",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "description": "MicFudiddo Studio Electron UI",
   "main": "electron/main.cjs",
@@ -47,11 +47,17 @@
       }
     ],
     "win": {
-      "icon": "assets/micfudiddo.png",
+      "icon": "assets/micfudiddo.ico",
       "signAndEditExecutable": false,
       "target": [
         "nsis",
         "portable"
+      ],
+      "extraFiles": [
+        {
+          "from": "assets/micfudiddo.ico",
+          "to": "resources/assets/micfudiddo.ico"
+        }
       ]
     },
     "nsis": {
@@ -62,7 +68,8 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "license": "dependencias.txt"
+      "unicode": true,
+      "include": "build/installer.nsh"
     }
   }
 }

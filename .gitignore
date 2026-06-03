@@ -1,6 +1,7 @@
 .venv/
 node_modules/
 build/
+!build/installer.nsh
 __pycache__/
 *.py[cod]
 

@@ -5556,6 +5556,108 @@ function SoundboardQuickPanel({ sound, state, call, setToast, onClose, toggleSou
 }
 
 /* ============================================================
+   YOUTUBE IMPORT MODAL
+   ============================================================ */
+
+function YoutubeImportModal({ onClose, call, setToast }) {
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+
+  const handleImport = async () => {
+    if (!youtubeUrl || !youtubeUrl.trim()) {
+      setToast("Cole uma URL válida do YouTube.");
+      return;
+    }
+    setYoutubeLoading(true);
+    setToast("Processando vídeo do YouTube...");
+    try {
+      await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
+      setToast("Áudio importado com sucesso!");
+      onClose();
+    } catch (err) {
+      setToast("Erro: " + err.message);
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
+            <YoutubeLogo size={20} color="#FF0000" weight="fill" />
+            <span>Adicionar Som do YouTube</span>
+          </h3>
+          <button className="closeBtn" onClick={onClose} disabled={youtubeLoading} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            Cole o link de um vídeo do YouTube abaixo para converter e importar o áudio diretamente para o seu Soundboard.
+          </p>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Link do Vídeo</span>
+            <input
+              type="text"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              disabled={youtubeLoading}
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font)",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+          
+          <small style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
+            💡 O processo pode demorar alguns segundos dependendo do tamanho do vídeo.
+          </small>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose} disabled={youtubeLoading}>
+            Cancelar
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "8px 20px", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}
+            onClick={handleImport}
+            disabled={youtubeLoading}
+          >
+            {youtubeLoading && (
+              <div
+                className="spinner"
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.2)",
+                  borderTopColor: "#fff",
+                  animation: "spin 0.6s linear infinite",
+                }}
+              />
+            )}
+            {youtubeLoading ? "Convertendo..." : "Importar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    ONLINE SOUNDS EXPLORER PAGE (Online Library)
    ============================================================ */
 
@@ -5575,9 +5677,7 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
   const [minDur, setMinDur] = useState(0);
   const [maxDur, setMaxDur] = useState(300);
   const [showFilters, setShowFilters] = useState(false);
-  const [showYoutubePanel, setShowYoutubePanel] = useState(false);
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeLoading, setYoutubeLoading] = useState(false);
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
 
   const parseDuration = (durVal) => {
     if (durVal === null || durVal === undefined) return 3.0;
@@ -5823,7 +5923,7 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
           </button>
           <button
             onClick={() => {
-              setShowYoutubePanel(!showYoutubePanel);
+              setShowYoutubeModal(true);
               setShowFilters(false);
             }}
             style={{
@@ -5831,18 +5931,18 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
               alignItems: "center",
               gap: 6,
               padding: "10px 16px",
-              background: showYoutubePanel ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
-              border: showYoutubePanel ? "1px solid var(--purple)" : "1px solid var(--border)",
+              background: showYoutubeModal ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
+              border: showYoutubeModal ? "1px solid var(--purple)" : "1px solid var(--border)",
               borderRadius: "var(--radius-sm)",
-              color: showYoutubePanel ? "var(--text)" : "var(--text-secondary)",
+              color: showYoutubeModal ? "var(--text)" : "var(--text-secondary)",
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 12,
               height: 38,
               transition: "all 0.2s"
             }}
-            onMouseEnter={(e) => { if (!showYoutubePanel) e.currentTarget.style.borderColor = "var(--purple-soft)"; }}
-            onMouseLeave={(e) => { if (!showYoutubePanel) e.currentTarget.style.borderColor = "var(--border)"; }}
+            onMouseEnter={(e) => { if (!showYoutubeModal) e.currentTarget.style.borderColor = "var(--purple-soft)"; }}
+            onMouseLeave={(e) => { if (!showYoutubeModal) e.currentTarget.style.borderColor = "var(--border)"; }}
           >
             <YoutubeLogo size={16} color="#FF0000" />
             <span>Adicionar Som do YouTube</span>
@@ -5850,84 +5950,6 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
         </div>
 
         <AnimatePresence>
-          {showYoutubePanel && (
-            <motion.div
-              initial={{ height: 0, opacity: 0, marginTop: 0 }}
-              animate={{ height: "auto", opacity: 1, marginTop: 4 }}
-              exit={{ height: 0, opacity: 0, marginTop: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              style={{ overflow: "hidden" }}
-            >
-              <div className="collapsible-youtube-panel" style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid var(--border)",
-                padding: "16px",
-                borderRadius: "var(--radius-md)",
-                width: "100%"
-              }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>Link do Vídeo do YouTube</span>
-                  <input
-                    type="text"
-                    placeholder="Cole a URL do YouTube (ex: https://www.youtube.com/watch?v=...)"
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    disabled={youtubeLoading}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "var(--bg-input)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                      outline: "none"
-                    }}
-                  />
-                </div>
-                <button
-                  onClick={async () => {
-                    if (!youtubeUrl || !youtubeUrl.trim()) {
-                      setToast("Cole uma URL válida do YouTube.");
-                      return;
-                    }
-                    setYoutubeLoading(true);
-                    setToast("Processando vídeo do YouTube...");
-                    try {
-                      const res = await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
-                      setToast("Áudio importado com sucesso!");
-                      setYoutubeUrl("");
-                      setShowYoutubePanel(false);
-                    } catch (err) {
-                      setToast("Erro: " + err.message);
-                    } finally {
-                      setYoutubeLoading(false);
-                    }
-                  }}
-                  disabled={youtubeLoading}
-                  className="btn btn-primary"
-                  style={{ height: 36, alignSelf: "flex-end", padding: "0 20px" }}
-                >
-                  {youtubeLoading ? (
-                    <div
-                      className="spinner"
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: "50%",
-                        border: "2px solid rgba(255,255,255,0.2)",
-                        borderTopColor: "#fff",
-                        animation: "spin 0.6s linear infinite",
-                      }}
-                    />
-                  ) : "Importar"}
-                </button>
-              </div>
-            </motion.div>
-          )}
 
           {showFilters && (
             <motion.div
@@ -6150,6 +6172,16 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
           )}
         </div>
       )}
+
+      <AnimatePresence>
+        {showYoutubeModal && (
+          <YoutubeImportModal
+            onClose={() => setShowYoutubeModal(false)}
+            call={call}
+            setToast={setToast}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

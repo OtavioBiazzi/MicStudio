@@ -696,10 +696,12 @@ function formatValue(v, suffix) {
 }
 
 function formatTime(s) {
-  if (!s || !isFinite(s)) return "0:00";
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+  if (s === undefined || s === null || s === "" || s === "N/A" || s === "Nuvem") return "00:00";
+  const totalSeconds = parseFloat(s);
+  if (isNaN(totalSeconds) || !isFinite(totalSeconds) || totalSeconds <= 0) return "00:00";
+  const m = Math.floor(totalSeconds / 60);
+  const sec = Math.floor(totalSeconds % 60);
+  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
 
 function formatLastUsed(timestamp) {
@@ -813,6 +815,7 @@ function App() {
     return pages.some((p) => p.id === saved) ? saved : "vozes";
   });
   const [selectedSound, setSelectedSound] = useState(null);
+  const [pinnedSoundId, setPinnedSoundId] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem("micfudiddo.voiceFavorites") || "[]"); } catch { return []; }
@@ -1142,6 +1145,15 @@ function App() {
     if (state?.recordSelected) setSelectedRecordDevices(state.recordSelected);
   }, [state?.recordSelected?.join("|")]);
 
+  const allowMultiple = state?.settings?.allowMultipleSounds;
+  useEffect(() => {
+    if (lastPlayedSound) {
+      if (!allowMultiple || !pinnedSoundId) {
+        setSelectedSound(lastPlayedSound.id);
+      }
+    }
+  }, [lastPlayedSound?.id, allowMultiple, pinnedSoundId]);
+
   useEffect(() => {
     if (!state || autoBootTried) return;
     setAutoBootTried(true);
@@ -1267,7 +1279,7 @@ function App() {
 
         <main className="mainContent">
           <ErrorBoundary>
-            <AudioPlayer state={state} selected={selected} call={call} />
+            <AudioPlayer state={state} selected={selected} call={call} pinnedSoundId={pinnedSoundId} setPinnedSoundId={setPinnedSoundId} setSelectedSound={setSelectedSound} />
           </ErrorBoundary>
           <AnimatePresence mode="wait">
             <motion.div
@@ -3379,11 +3391,17 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
                 <div
                   key={sound.id}
                   className={`soundCard ${selected?.id === sound.id && selectedSound !== null ? "active" : ""} ${isPlaying ? "playing" : ""}`}
-                  onClick={() => { setSelectedSound(sound.id); call("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message)); }}
+                  onMouseDown={(e) => {
+                    if (e.button === 0) {
+                      call("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message));
+                    }
+                  }}
+                  onClick={() => { setSelectedSound(sound.id); }}
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, sound }); }}
                 >
                   <button
                     className={`soundcard-fav-btn ${isFav ? "favorited" : ""}`}
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => { e.stopPropagation(); toggleSoundboardFavorite(sound.id); }}
                     style={{
                       position: "absolute",
@@ -3404,7 +3422,7 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
                   </div>
                   <div className="soundName">{sound.name.replace(/\.[^/.]+$/, "")}</div>
                   <div className="soundCategory">
-                    {sound.category || "Sem categoria"} • {sound.duration ? (typeof sound.duration === "number" ? sound.duration.toFixed(1) + "s" : sound.duration) : "3.0s"} • {sound.plays || 0} plays
+                    {sound.category || "Sem categoria"} • {formatTime(sound.duration)} • {sound.plays || 0} plays
                   </div>
                   {isPlaying && <span className="soundBadge" style={{ right: 8, top: 8 }}>▶</span>}
                   {sound.shortcut && (
@@ -4067,8 +4085,8 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
               {/* Sliders Grid */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <Slider label="Volume Geral (100x)" value={draft.volume ?? 1.0} min={0} max={100} step={0.1} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
-                <Slider label="Boost de Volume" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
+                <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={100} step={0.1} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
+                <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
                 <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
               </div>
 
@@ -4171,10 +4189,10 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
    AUDIO PLAYER
    ============================================================ */
 
-function AudioPlayer({ state, selected, call }) {
+function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSoundId, setSelectedSound }) {
   const players = state.players || [];
-  const [isPinned, setIsPinned] = useState(() => {
-    return localStorage.getItem("micfudiddo.playerPinned") === "true";
+  const [isSticky, setIsSticky] = useState(() => {
+    return localStorage.getItem("micfudiddo.playerSticky") === "true";
   });
 
   const [localPositions, setLocalPositions] = useState({});
@@ -4226,43 +4244,43 @@ function AudioPlayer({ state, selected, call }) {
     return () => clearInterval(interval);
   }, []);
 
-  const togglePin = () => {
-    const next = !isPinned;
-    setIsPinned(next);
-    localStorage.setItem("micfudiddo.playerPinned", String(next));
+  const toggleSticky = () => {
+    const next = !isSticky;
+    setIsSticky(next);
+    localStorage.setItem("micfudiddo.playerSticky", String(next));
   };
 
   if (players.length === 0) return null;
 
   return (
-    <div className={`audioPlayerSection ${isPinned ? "pinned" : ""}`} style={{
+    <div className={`audioPlayerSection ${isSticky ? "pinned" : ""}`} style={{
       width: "100%",
-      position: isPinned ? "sticky" : "relative",
-      top: isPinned ? 0 : "auto",
-      zIndex: isPinned ? 100 : 1,
-      background: isPinned ? "rgba(11, 17, 26, 0.98)" : "transparent",
-      boxShadow: isPinned ? "0 10px 30px rgba(0,0,0,0.4), 0 0 15px var(--purple-soft)" : "none",
-      border: isPinned ? "1px solid var(--purple-soft)" : "none",
+      position: isSticky ? "sticky" : "relative",
+      top: isSticky ? 0 : "auto",
+      zIndex: isSticky ? 100 : 1,
+      background: isSticky ? "rgba(11, 17, 26, 0.98)" : "transparent",
+      boxShadow: isSticky ? "0 10px 30px rgba(0,0,0,0.4), 0 0 15px var(--purple-soft)" : "none",
+      border: isSticky ? "1px solid var(--purple-soft)" : "none",
       borderRadius: "var(--radius-md)",
-      padding: isPinned ? "12px 24px" : "0",
-      marginLeft: isPinned ? "-8px" : "0",
-      marginRight: isPinned ? "-8px" : "0",
+      padding: isSticky ? "12px 24px" : "0",
+      marginLeft: isSticky ? "-8px" : "0",
+      marginRight: isSticky ? "-8px" : "0",
       marginBottom: 16
     }}>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 4, paddingRight: 4 }}>
         <button
-          onClick={togglePin}
-          title={isPinned ? "Desafixar Player" : "Fixar Player"}
+          onClick={toggleSticky}
+          title={isSticky ? "Desafixar Barra da Tela" : "Fixar Barra no Topo"}
           style={{
             background: "none",
             border: "none",
-            color: isPinned ? "var(--purple)" : "var(--text-muted)",
+            color: isSticky ? "var(--purple)" : "var(--text-muted)",
             cursor: "pointer",
             display: "flex",
             alignItems: "center"
           }}
         >
-          <PushPin size={16} weight={isPinned ? "fill" : "regular"} />
+          <PushPin size={16} weight={isSticky ? "fill" : "regular"} />
         </button>
       </div>
 
@@ -4308,9 +4326,27 @@ function AudioPlayer({ state, selected, call }) {
                     <ArrowClockwise size={14} weight={p.loop ? "bold" : "regular"} />
                   </button>
                   <button
+                    onClick={() => {
+                      if (pinnedSoundId === p.soundId) {
+                        setPinnedSoundId(null);
+                      } else {
+                        setPinnedSoundId(p.soundId);
+                        setSelectedSound(p.soundId);
+                      }
+                    }}
+                    title={pinnedSoundId === p.soundId ? "Desafixar Som" : "Fixar Som"}
+                    style={{
+                      color: pinnedSoundId === p.soundId ? "var(--purple)" : "var(--text-muted)",
+                      padding: 0
+                    }}
+                  >
+                    <PushPin size={14} weight={pinnedSoundId === p.soundId ? "fill" : "regular"} />
+                  </button>
+                  <button
                     onClick={() => call("/api/player/stop", { playbackId: p.playbackId }).catch(() => {})}
                     title="Parar"
-                    style={{ color: "var(--danger-soft)", padding: 0 }}
+                    className="stopBtn"
+                    style={{ padding: 0 }}
                   >
                     <StopCircle size={14} />
                   </button>
@@ -4417,7 +4453,7 @@ function FavoritosPage({ state, call, favorites, toggleFavorite, updateControls,
                 </div>
                 <div className="soundName">{sound.name.replace(/\.[^/.]+$/, "")}</div>
                 <div className="soundCategory">
-                  {sound.category || ""} • {sound.duration ? (typeof sound.duration === "number" ? sound.duration.toFixed(1) + "s" : sound.duration) : "3.0s"}
+                  {sound.category || ""} • {formatTime(sound.duration)}
                 </div>
               </div>
             ))}
@@ -5416,10 +5452,16 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
         audio.preload = "metadata";
         audio.onloadedmetadata = () => {
           const dur = audio.duration;
-          if (dur && !isNaN(dur)) {
+          if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
             setSounds((prev) =>
               prev.map((s) =>
                 s.id === sound.id ? { ...s, duration: `${dur.toFixed(1)}s` } : s
+              )
+            );
+          } else {
+            setSounds((prev) =>
+              prev.map((s) =>
+                s.id === sound.id ? { ...s, duration: "Nuvem" } : s
               )
             );
           }
@@ -5446,12 +5488,18 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
     }
 
     try {
-      let endpoint = `/api/sounds/trending?page=${pageNumber}`;
+      let endpoint = `${API}/api/sounds/trending?page=${pageNumber}`;
       if (queryStr) {
-        endpoint = `/api/sounds/search?q=${encodeURIComponent(queryStr)}&page=${pageNumber}`;
+        endpoint = `${API}/api/sounds/search?q=${encodeURIComponent(queryStr)}&page=${pageNumber}`;
       }
 
-      const res = await call(endpoint);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      if (!response.ok) throw new Error("Erro na requisição dos sons online");
+      const res = await response.json();
       const newSounds = res.sounds || [];
 
       if (newSounds.length < 15) {
@@ -5761,7 +5809,7 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
                         {sound.name}
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-                        {sound.category || "Online"} • {sound.plays} plays • {sound.duration && sound.duration !== "N/A" ? (sound.duration === "Nuvem" ? "Nuvem" : sound.duration) : "..."}
+                        {sound.category || "Online"} • {sound.plays} plays • {sound.duration === "Nuvem" ? "Nuvem" : (sound.duration && sound.duration !== "N/A" ? formatTime(sound.duration) : "...")}
                       </div>
                     </div>
                   </div>

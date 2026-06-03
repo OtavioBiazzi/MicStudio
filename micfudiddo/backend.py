@@ -946,6 +946,7 @@ class AppState:
             "level": self.engine.last_level,
             "route": route,
             "virtualMode": self.virtual_mode_active,
+            "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
             "selected": {
                 "input": self.selected_input,
                 "output": self.selected_output,

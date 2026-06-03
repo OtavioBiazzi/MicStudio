@@ -642,7 +642,8 @@ function controlsForPreset(controls, preset) {
 
 function isVoicePresetActive(controls, preset) {
   if (!controls) return false;
-  if (Math.abs(Number(controls.gain) - preset.gain) > 0.15) return false;
+  const isMuted = Number(controls.gain) === 0;
+  if (!isMuted && Math.abs(Number(controls.gain) - preset.gain) > 0.15) return false;
   if (Math.abs(Number(controls.pitch) - preset.pitch) > 0.15) return false;
   const expected = { ...makeDisabledEffects(), ...preset.effects };
   return Object.keys(expected).every((key) => {
@@ -749,6 +750,80 @@ class ErrorBoundary extends React.Component {
 }
 
 /* ============================================================
+   VIRTUAL CABLE WARNING MODAL
+   ============================================================ */
+
+function VirtualCableWarningModal({ onClose }) {
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  const handleConfirm = () => {
+    if (dontShowAgain) {
+      localStorage.setItem("micfudiddo.ignoreVirtualCableWarning", "true");
+    }
+    onClose();
+  };
+
+  return (
+    <div className="modalOverlay" onClick={handleConfirm}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--danger)", display: "flex", alignItems: "center", gap: 8 }}>
+            ⚠️ Cabo Virtual Não Detectado
+          </h3>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            O MicFudido Studio precisa de um driver de <strong>cabo virtual (VB-CABLE)</strong> para transmitir a sua voz modificada e os sons do soundboard para outros aplicativos (como o Discord ou jogos).
+          </p>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            Sem ele, você só conseguirá ouvir o monitoramento local no seu próprio fone.
+          </p>
+          
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <a 
+              href="https://vb-audio.com/Cable/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="btn btn-primary" 
+              style={{ 
+                padding: "8px 16px", 
+                fontSize: 12, 
+                background: "var(--danger)", 
+                textDecoration: "none", 
+                color: "#fff", 
+                display: "inline-flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                fontWeight: 600, 
+                borderRadius: "var(--radius-sm)",
+                flex: 1 
+              }}
+            >
+              📥 Baixar VB-CABLE
+            </a>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 11.5, color: "var(--text-muted)", cursor: "pointer", userSelect: "none" }}>
+            <input 
+              type="checkbox" 
+              checked={dontShowAgain} 
+              onChange={(e) => setDontShowAgain(e.target.checked)} 
+              style={{ cursor: "pointer" }}
+            />
+            Não avisar novamente
+          </label>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleConfirm}>
+            Ignorar por enquanto
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    CHOOSE MIC ON CLOSE MODAL
    ============================================================ */
 
@@ -835,6 +910,37 @@ function App() {
   const [bypassActive, setBypassActive] = useState(false);
   const [lastActivePresetId, setLastActivePresetId] = useState(null);
   const [savedCustomControls, setSavedCustomControls] = useState(null);
+
+  const [lastNonZeroGain, setLastNonZeroGain] = useState(() => {
+    try {
+      const g = parseFloat(localStorage.getItem("micfudiddo.lastNonZeroGain"));
+      return isNaN(g) ? 1.0 : g;
+    } catch {
+      return 1.0;
+    }
+  });
+
+  useEffect(() => {
+    if (state?.controls?.gain > 0) {
+      setLastNonZeroGain(state.controls.gain);
+      localStorage.setItem("micfudiddo.lastNonZeroGain", state.controls.gain.toString());
+    }
+  }, [state?.controls?.gain]);
+
+  const [showVirtualCableWarning, setShowVirtualCableWarning] = useState(false);
+  const [checkedVirtualCable, setCheckedVirtualCable] = useState(false);
+
+  useEffect(() => {
+    if (state && !checkedVirtualCable) {
+      setCheckedVirtualCable(true);
+      if (state.virtualCableDetected === false) {
+        const ignored = localStorage.getItem("micfudiddo.ignoreVirtualCableWarning") === "true";
+        if (!ignored) {
+          setShowVirtualCableWarning(true);
+        }
+      }
+    }
+  }, [state, checkedVirtualCable]);
 
   // Custom premium theme and account configurations
   const [accentColor, setAccentColor] = useState(() => {
@@ -1024,6 +1130,16 @@ function App() {
       controlsOptimisticRef.current = null;
       setToast(e.message);
     });
+  };
+
+  const toggleMute = () => {
+    if (!state) return;
+    const isCurrentlyMuted = state.controls?.gain === 0;
+    if (isCurrentlyMuted) {
+      updateControls({ gain: lastNonZeroGain || 1.0 });
+    } else {
+      updateControls({ gain: 0.0 });
+    }
   };
 
   const updateEffects = (patch) => {
@@ -1222,7 +1338,7 @@ function App() {
     if (!window.micfudiddo?.onHotkeyTriggered) return;
     return window.micfudiddo.onHotkeyTriggered((action) => {
       if (action === "mute_mic") {
-        updateControls({ gain: state?.controls?.gain === 0 ? 1.0 : 0.0 });
+        toggleMute();
       } else if (action === "toggle_bypass") {
         toggleBypass();
       } else if (action === "toggle_soundboard") {
@@ -1238,7 +1354,7 @@ function App() {
         call(state?.recording?.combo ? "/api/record/combo/stop" : "/api/record/combo/start", { indexes: selectedRecordDevices }).catch((e) => setToast(e.message));
       }
     });
-  }, [state, bypassActive, toggleBypass, updateControls, call, selectedRecordDevices]);
+  }, [state, bypassActive, toggleBypass, updateControls, toggleMute, call, selectedRecordDevices]);
 
   if (bootError && !state) {
     return (
@@ -1371,6 +1487,7 @@ function App() {
         state={state}
         call={call}
         updateControls={updateControls}
+        toggleMute={toggleMute}
         activePreset={activePreset}
         processingActive={processingActive}
         lastPlayedSound={lastPlayedSound}
@@ -1384,6 +1501,11 @@ function App() {
 
       {/* Modals */}
       <AnimatePresence>
+        {showVirtualCableWarning && (
+          <VirtualCableWarningModal
+            onClose={() => setShowVirtualCableWarning(false)}
+          />
+        )}
         {chooseMicOnCloseOpen && (
           <ChooseMicOnCloseModal
             state={state}
@@ -2069,7 +2191,7 @@ function ManageAccountModal({ onClose, profileName, setProfileName, profileSub, 
    GLOBAL FLOATING DOCK
    ============================================================ */
 
-function FloatingDock({ state, call, updateControls, activePreset, processingActive, lastPlayedSound, bypassActive, setBypassActive, toggleBypass, setPage, soundboardFavorites, dockMinimized, setDockMinimized, setSelectedSound }) {
+function FloatingDock({ state, call, updateControls, toggleMute, activePreset, processingActive, lastPlayedSound, bypassActive, setBypassActive, toggleBypass, setPage, soundboardFavorites, dockMinimized, setDockMinimized, setSelectedSound }) {
   const togglePath = processingActive || state.virtualMode ? "/api/stop" : "/api/virtual/start";
   const [showMenu, setShowMenu] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
@@ -2135,7 +2257,7 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button
               className={`bbBtn icon-only ${state.controls?.gain === 0 ? "on" : ""}`}
-              onClick={() => updateControls({ gain: state.controls?.gain === 0 ? 1 : 0 })}
+              onClick={toggleMute}
               title="Mute"
               style={{ width: 28, height: 28 }}
             >
@@ -2180,7 +2302,7 @@ function FloatingDock({ state, call, updateControls, activePreset, processingAct
 
           <button
             className={`bbBtn icon-only ${state.controls?.gain === 0 ? "on" : ""}`}
-            onClick={() => updateControls({ gain: state.controls?.gain === 0 ? 1 : 0 })}
+            onClick={toggleMute}
             title="Mute"
           >
             {state.controls?.gain === 0 ? <MicrophoneSlash size={16} color="var(--danger)" /> : <Microphone size={16} />}
@@ -4619,6 +4741,30 @@ function ConfigPage({ state, call, setToast, selectedRecordDevices, setSelectedR
                 <MicrophoneStage size={18} />
                 <span>Dispositivos de Entrada e Saída</span>
               </div>
+
+              {!state.virtualCableDetected && (
+                <div style={{
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--danger)", fontWeight: 700, fontSize: 13 }}>
+                    <span>⚠️ Cabo Virtual Não Detectado!</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                    O driver de cabo de áudio virtual (VB-CABLE) não foi encontrado no sistema. Para usar o voice changer e o soundboard no Discord, você precisa dele instalado.
+                  </p>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 11, background: "var(--danger)", textDecoration: "none", color: "#fff", display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
+                      📥 Baixar VB-CABLE
+                    </a>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <SelectField

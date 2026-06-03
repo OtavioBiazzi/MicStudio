@@ -59,7 +59,8 @@ import {
   WaveSine,
   Waveform,
   X,
-  XCircle
+  XCircle,
+  YoutubeLogo
 } from "@phosphor-icons/react";
 import "./styles.css";
 
@@ -1316,6 +1317,7 @@ function App() {
                     setCustomCategories={setCustomCategories}
                     promptState={promptState}
                     setPromptState={setPromptState}
+                    setMoveCategorySoundId={setMoveCategorySoundId}
                   />
                 </ErrorBoundary>
               )}
@@ -3185,7 +3187,7 @@ function VoiceLabPage({ state, call, updateControls, updateEffects, customVoices
    SOUNDBOARD PAGE
    ============================================================ */
 
-function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound, setToast, selectedRecordDevices, setSelectedRecordDevices, soundboardFavorites, toggleSoundboardFavorite, updateControls, customCategories, setCustomCategories, promptState, setPromptState }) {
+function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound, setToast, selectedRecordDevices, setSelectedRecordDevices, soundboardFavorites, toggleSoundboardFavorite, updateControls, customCategories, setCustomCategories, promptState, setPromptState, setMoveCategorySoundId }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todos");
   const [dragActive, setDragActive] = useState(false);
@@ -3324,17 +3326,21 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
           </button>
           {customCategories.includes(category) && (
             <button className="btn btn-ghost" onClick={() => {
-              if (confirm(`Deseja excluir a categoria "${category}"? Os sons não serão excluídos, apenas perderão a categoria.`)) {
-                setCustomCategories(customCategories.filter(c => c !== category));
-                setCategory("Todos");
-                setToast(`Categoria "${category}" excluída.`);
+              if (confirm(`Deseja excluir a categoria "${category}"? Os sons serão movidos para "Geral".`)) {
+                call("/api/sounds/delete-category", { category }).then(() => {
+                  setCustomCategories(customCategories.filter(c => c !== category));
+                  setCategory("Todos");
+                  setToast(`Categoria "${category}" excluída.`);
+                }).catch((e) => setToast(e.message));
               }
             }} title="Excluir Categoria" style={{ color: "var(--danger)" }}>
               <Trash size={14} /> Excluir Cat.
             </button>
           )}
-          <button className="btn btn-ghost" onClick={addSounds}><UploadSimple size={14} /> Importar</button>
-          <button className="btn btn-ghost" onClick={addFolders}><FolderOpen size={14} /> Pasta</button>
+          <div className="importButtonGroup">
+            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio individuais"><UploadSimple size={14} /> Importar Áudio</button>
+            <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
+          </div>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
           <button className="btn btn-ghost" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={14} /></button>
           <button className="btn btn-ghost" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={14} /></button>
@@ -3490,104 +3496,123 @@ function SoundboardPage({ state, call, selected, selectedSound, setSelectedSound
       )}
 
       {/* Context menu */}
-      {contextMenu && (
-        <div className="contextMenu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => { call("/api/sounds/play", { id: contextMenu.sound.id }).catch((e) => setToast(e.message)); setContextMenu(null); }}>
-            <Play size={14} /> Tocar
-          </button>
-          <button onClick={() => { setEditingSoundId(contextMenu.sound.id); setContextMenu(null); }}>
-            <FadersHorizontal size={14} /> Editar Som
-          </button>
-          <button onClick={async () => {
-            try {
-              const s = contextMenu.sound;
-              await call("/api/sounds/save-edited", {
-                id: s.id,
-                replace: false,
-                name: `${s.name} (Cópia)`,
-                category: s.category || "Geral",
-                color: s.color || "#8B5CF6",
-                volume: s.volume,
-                pitch_semitones: s.pitch_semitones,
-                pitch_mode: s.pitch_mode,
-                speed: s.speed,
-                normalize: s.normalize,
-                fade_in_ms: s.fade_in_ms,
-                fade_out_ms: s.fade_out_ms,
-                repeats: s.repeats,
-                shortcut: "",
-                block_voice: s.block_voice,
-                loop: s.loop,
-                playback_mode: s.playback_mode,
-                stop_other_sounds: s.stop_other_sounds,
-                mute_other_sounds: s.mute_other_sounds,
-                output_route: s.output_route,
-                start: s.start || 0,
-                end: s.end || null,
-                effects: s.effects || {}
-              });
-              setToast("Som duplicado com sucesso!");
-            } catch (e) {
-              setToast("Erro ao duplicar: " + e.message);
-            }
-            setContextMenu(null);
-          }}>
-            <Copy size={14} /> Duplicar
-          </button>
-          <button onClick={() => {
-            const currentSound = contextMenu.sound;
-            setContextMenu(null);
-            setPromptState({
-              title: "Renomear Som",
-              value: currentSound.name,
-              onConfirm: (newName) => {
-                if (newName && newName.trim()) {
-                  call("/api/sounds/update", { id: currentSound.id, name: newName.trim() })
-                    .then(() => setToast("Som renomeado!"))
-                    .catch((err) => setToast("Erro: " + err.message));
-                }
+      {/* Context menu */}
+      {contextMenu && (() => {
+        const estimatedW = 220;
+        const estimatedH = 360;
+        let x = contextMenu.x;
+        let y = contextMenu.y;
+        if (x + estimatedW > window.innerWidth) {
+          x = Math.max(10, window.innerWidth - estimatedW - 15);
+        }
+        if (y + estimatedH > window.innerHeight) {
+          y = Math.max(10, window.innerHeight - estimatedH - 15);
+        }
+        return (
+          <div className="contextMenu" style={{ left: x, top: y }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { call("/api/sounds/play", { id: contextMenu.sound.id }).catch((e) => setToast(e.message)); setContextMenu(null); }}>
+              <Play size={14} /> Tocar
+            </button>
+            <button onClick={() => { setEditingSoundId(contextMenu.sound.id); setContextMenu(null); }}>
+              <FadersHorizontal size={14} /> Editar Som
+            </button>
+            <button onClick={async () => {
+              try {
+                const s = contextMenu.sound;
+                await call("/api/sounds/save-edited", {
+                  id: s.id,
+                  replace: false,
+                  name: `${s.name} (Cópia)`,
+                  category: s.category || "Geral",
+                  color: s.color || "#8B5CF6",
+                  volume: s.volume,
+                  pitch_semitones: s.pitch_semitones,
+                  pitch_mode: s.pitch_mode,
+                  speed: s.speed,
+                  normalize: s.normalize,
+                  fade_in_ms: s.fade_in_ms,
+                  fade_out_ms: s.fade_out_ms,
+                  repeats: s.repeats,
+                  shortcut: "",
+                  block_voice: s.block_voice,
+                  loop: s.loop,
+                  playback_mode: s.playback_mode,
+                  stop_other_sounds: s.stop_other_sounds,
+                  mute_other_sounds: s.mute_other_sounds,
+                  output_route: s.output_route,
+                  start: s.start || 0,
+                  end: s.end || null,
+                  effects: s.effects || {}
+                });
+                setToast("Som duplicado com sucesso!");
+              } catch (e) {
+                setToast("Erro ao duplicar: " + e.message);
               }
-            });
-          }}>
-            <SlidersHorizontal size={14} /> Renomear
-          </button>
-          <button onClick={() => {
-            toggleSoundboardFavorite(contextMenu.sound.id);
-            setContextMenu(null);
-          }}>
-            <Star size={14} weight={soundboardFavorites.includes(contextMenu.sound.id) ? "fill" : "regular"} />
-            {soundboardFavorites.includes(contextMenu.sound.id) ? "Desfavoritar" : "Favoritar"}
-          </button>
-          <button onClick={() => {
-            const currentSound = contextMenu.sound;
-            setContextMenu(null);
-            setMoveCategorySoundId(currentSound.id);
-          }}>
-            <FolderOpen size={14} /> Mover para Pasta
-          </button>
-          <button onClick={() => {
-            const s = contextMenu.sound;
-            const a = document.createElement("a");
-            a.href = filePathToUrl(s.path);
-            a.download = s.name + (s.path.slice(s.path.lastIndexOf(".")) || ".wav");
-            a.click();
-            setToast("Exportando som...");
-            setContextMenu(null);
-          }}>
-            <Export size={14} /> Exportar
-          </button>
-          <button onClick={() => {
-            navigator.clipboard.writeText(contextMenu.sound.path);
-            setToast("Caminho do áudio copiado!");
-            setContextMenu(null);
-          }}>
-            <Sparkle size={14} /> Compartilhar (Copiar Path)
-          </button>
-          <button className="danger" onClick={() => { deleteSounds([contextMenu.sound.id]); setContextMenu(null); }}>
-            <Trash size={14} /> Excluir
-          </button>
-        </div>
-      )}
+              setContextMenu(null);
+            }}>
+              <Copy size={14} /> Duplicar
+            </button>
+            <button onClick={() => {
+              const currentSound = contextMenu.sound;
+              setContextMenu(null);
+              setPromptState({
+                title: "Renomear Som",
+                value: currentSound.name,
+                onConfirm: (newName) => {
+                  if (newName && newName.trim()) {
+                    call("/api/sounds/update", { id: currentSound.id, name: newName.trim() })
+                      .then(() => setToast("Som renomeado!"))
+                      .catch((err) => setToast("Erro: " + err.message));
+                  }
+                }
+              });
+            }}>
+              <SlidersHorizontal size={14} /> Renomear
+            </button>
+            <button onClick={() => {
+              toggleSoundboardFavorite(contextMenu.sound.id);
+              setContextMenu(null);
+            }}>
+              <Star size={14} weight={soundboardFavorites.includes(contextMenu.sound.id) ? "fill" : "regular"} />
+              {soundboardFavorites.includes(contextMenu.sound.id) ? "Desfavoritar" : "Favoritar"}
+            </button>
+            <button onClick={() => {
+              const currentSound = contextMenu.sound;
+              setContextMenu(null);
+              setMoveCategorySoundId(currentSound.id);
+            }}>
+              <FolderOpen size={14} /> Mover para Pasta
+            </button>
+            <button onClick={() => {
+              window.micfudiddo?.showItemInFolder?.(contextMenu.sound.path);
+              setContextMenu(null);
+            }}>
+              <FolderOpen size={14} /> Ver Som na Pasta
+            </button>
+            <button onClick={() => {
+              const s = contextMenu.sound;
+              const a = document.createElement("a");
+              a.href = filePathToUrl(s.path);
+              a.download = s.name + (s.path.slice(s.path.lastIndexOf(".")) || ".wav");
+              a.click();
+              setToast("Exportando som...");
+              setContextMenu(null);
+            }}>
+              <Export size={14} /> Exportar
+            </button>
+            <button onClick={() => {
+              navigator.clipboard.writeText(contextMenu.sound.path);
+              setToast("Caminho do áudio copiado!");
+              setContextMenu(null);
+            }}>
+              <Sparkle size={14} /> Compartilhar (Copiar Path)
+            </button>
+            <button className="danger" onClick={() => { deleteSounds([contextMenu.sound.id]); setContextMenu(null); }}>
+              <Trash size={14} /> Excluir
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -4085,7 +4110,7 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
               {/* Sliders Grid */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={100} step={0.1} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
+                <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
                 <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
                 <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
               </div>
@@ -4253,36 +4278,22 @@ function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSoundId, s
   if (players.length === 0) return null;
 
   return (
-    <div className={`audioPlayerSection ${isSticky ? "pinned" : ""}`} style={{
+    <div className="audioPlayerSection pinned" style={{
       width: "100%",
-      position: isSticky ? "sticky" : "relative",
-      top: isSticky ? 0 : "auto",
-      zIndex: isSticky ? 100 : 1,
-      background: isSticky ? "rgba(11, 17, 26, 0.98)" : "transparent",
-      boxShadow: isSticky ? "0 10px 30px rgba(0,0,0,0.4), 0 0 15px var(--purple-soft)" : "none",
-      border: isSticky ? "1px solid var(--purple-soft)" : "none",
+      position: "sticky",
+      top: 0,
+      zIndex: 100,
+      background: "rgba(11, 17, 26, 0.85)",
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(139, 92, 246, 0.25)",
+      border: "1px solid rgba(139, 92, 246, 0.3)",
       borderRadius: "var(--radius-md)",
-      padding: isSticky ? "12px 24px" : "0",
-      marginLeft: isSticky ? "-8px" : "0",
-      marginRight: isSticky ? "-8px" : "0",
+      padding: "12px 24px",
+      marginLeft: "-8px",
+      marginRight: "-8px",
       marginBottom: 16
     }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 4, paddingRight: 4 }}>
-        <button
-          onClick={toggleSticky}
-          title={isSticky ? "Desafixar Barra da Tela" : "Fixar Barra no Topo"}
-          style={{
-            background: "none",
-            border: "none",
-            color: isSticky ? "var(--purple)" : "var(--text-muted)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center"
-          }}
-        >
-          <PushPin size={16} weight={isSticky ? "fill" : "regular"} />
-        </button>
-      </div>
 
       <div className={`audioPlayersContainer ${players.length === 1 ? "single-player" : ""}`}>
         {players.map((p) => {
@@ -4964,19 +4975,22 @@ function ConfigPage({ state, call, setToast, selectedRecordDevices, setSelectedR
    SHARED COMPONENTS
    ============================================================ */
 
-function Slider({ label, value, min, max, suffix, onChange, enabled, onToggle }) {
-  const [localValue, setLocalValue] = useState(value);
+function Slider({ label, value, min, max, suffix, onChange, enabled, onToggle, quadratic }) {
+  const toSlider = (val) => quadratic ? Math.sqrt(val) : val;
+  const fromSlider = (val) => quadratic ? Math.pow(val, 2) : val;
+
+  const [localValue, setLocalValue] = useState(() => toSlider(value));
   const [isDragging, setIsDragging] = useState(false);
   const commitTimerRef = useRef(null);
   const draggingRef = useRef(false);
 
   useEffect(() => {
-    if (!draggingRef.current) setLocalValue(value);
+    if (!draggingRef.current) setLocalValue(toSlider(value));
   }, [value]);
 
   const commit = (v) => {
     clearTimeout(commitTimerRef.current);
-    commitTimerRef.current = setTimeout(() => onChange(v), 90);
+    commitTimerRef.current = setTimeout(() => onChange(fromSlider(v)), 90);
   };
 
   const handleChange = (e) => {
@@ -4984,6 +4998,11 @@ function Slider({ label, value, min, max, suffix, onChange, enabled, onToggle })
     setLocalValue(v);
     commit(v);
   };
+
+  const displayVal = fromSlider(localValue);
+  const formattedText = suffix === "x"
+    ? `${displayVal.toFixed(displayVal < 10 ? 1 : 0)}x`
+    : (suffix ? `${Math.round(displayVal)}${suffix}` : `${Math.round(displayVal)}`);
 
   return (
     <div className="sliderRow">
@@ -4996,7 +5015,7 @@ function Slider({ label, value, min, max, suffix, onChange, enabled, onToggle })
       <span className="sliderRowLabel">{label}</span>
       <div className="sliderTrack">
         <input
-          type="range" min={min} max={max} step={max - min > 50 ? 1 : 0.1}
+          type="range" min={min} max={max} step={quadratic ? 0.05 : (max - min > 50 ? 1 : 0.1)}
           value={localValue}
           onChange={handleChange}
           onMouseDown={() => { setIsDragging(true); draggingRef.current = true; }}
@@ -5005,7 +5024,7 @@ function Slider({ label, value, min, max, suffix, onChange, enabled, onToggle })
           onTouchEnd={() => { setIsDragging(false); draggingRef.current = false; }}
         />
       </div>
-      <span className="sliderRowValue">{formatValue(localValue, suffix)}</span>
+      <span className="sliderRowValue">{formattedText}</span>
     </div>
   );
 }
@@ -5410,6 +5429,9 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
   const [minDur, setMinDur] = useState(0);
   const [maxDur, setMaxDur] = useState(300);
   const [showFilters, setShowFilters] = useState(false);
+  const [showYoutubePanel, setShowYoutubePanel] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   const parseDuration = (durVal) => {
     if (durVal === null || durVal === undefined) return 3.0;
@@ -5628,7 +5650,10 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
             />
           </div>
           <button
-            onClick={() => setShowFilters(!showFilters)}
+            onClick={() => {
+              setShowFilters(!showFilters);
+              setShowYoutubePanel(false);
+            }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -5650,9 +5675,114 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
             <FadersHorizontal size={16} />
             <span>Filtros</span>
           </button>
+          <button
+            onClick={() => {
+              setShowYoutubePanel(!showYoutubePanel);
+              setShowFilters(false);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 16px",
+              background: showYoutubePanel ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
+              border: showYoutubePanel ? "1px solid var(--purple)" : "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              color: showYoutubePanel ? "var(--text)" : "var(--text-secondary)",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 12,
+              height: 38,
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={(e) => { if (!showYoutubePanel) e.currentTarget.style.borderColor = "var(--purple-soft)"; }}
+            onMouseLeave={(e) => { if (!showYoutubePanel) e.currentTarget.style.borderColor = "var(--border)"; }}
+          >
+            <YoutubeLogo size={16} color="#FF0000" />
+            <span>Adicionar Som do YouTube</span>
+          </button>
         </div>
 
         <AnimatePresence>
+          {showYoutubePanel && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, marginTop: 0 }}
+              animate={{ height: "auto", opacity: 1, marginTop: 4 }}
+              exit={{ height: 0, opacity: 0, marginTop: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="collapsible-youtube-panel" style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                background: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid var(--border)",
+                padding: "16px",
+                borderRadius: "var(--radius-md)",
+                width: "100%"
+              }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>Link do Vídeo do YouTube</span>
+                  <input
+                    type="text"
+                    placeholder="Cole a URL do YouTube (ex: https://www.youtube.com/watch?v=...)"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    disabled={youtubeLoading}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text)",
+                      fontSize: 12,
+                      outline: "none"
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!youtubeUrl || !youtubeUrl.trim()) {
+                      setToast("Cole uma URL válida do YouTube.");
+                      return;
+                    }
+                    setYoutubeLoading(true);
+                    setToast("Processando vídeo do YouTube...");
+                    try {
+                      const res = await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
+                      setToast("Áudio importado com sucesso!");
+                      setYoutubeUrl("");
+                      setShowYoutubePanel(false);
+                    } catch (err) {
+                      setToast("Erro: " + err.message);
+                    } finally {
+                      setYoutubeLoading(false);
+                    }
+                  }}
+                  disabled={youtubeLoading}
+                  className="btn btn-primary"
+                  style={{ height: 36, alignSelf: "flex-end", padding: "0 20px" }}
+                >
+                  {youtubeLoading ? (
+                    <div
+                      className="spinner"
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        border: "2px solid rgba(255,255,255,0.2)",
+                        borderTopColor: "#fff",
+                        animation: "spin 0.6s linear infinite",
+                      }}
+                    />
+                  ) : "Importar"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {showFilters && (
             <motion.div
               initial={{ height: 0, opacity: 0, marginTop: 0 }}

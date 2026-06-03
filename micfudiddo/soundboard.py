@@ -11,8 +11,23 @@ import time
 import uuid
 
 import numpy as np
+import re
+import unicodedata
 
 from .processing import DualDelayPitchShifter, EffectsSettings, VoiceEffectsProcessor
+
+
+def sanitize_sound_name(name: str) -> str:
+    name = str(name or "").lower()
+    sanitized = []
+    for c in name:
+        cat = unicodedata.category(c)
+        if cat.startswith("L") or cat.startswith("N") or c in " _-":
+            sanitized.append(c)
+    result = "".join(sanitized)
+    result = re.sub(r"\s+", " ", result).strip()
+    return result
+
 
 
 DIRECT_AUDIO_EXTENSIONS = {".wav", ".flac", ".ogg", ".aiff", ".aif"}
@@ -150,9 +165,14 @@ class SoundLibrary:
         target = self.sounds_dir / f"{safe_id}{self._target_suffix(suffix)}"
         self._copy_or_convert(source_path, target)
 
+        raw_name = name or source_path.stem
+        sanitized_name = sanitize_sound_name(raw_name)
+        if not sanitized_name:
+            sanitized_name = "som"
+
         item = SoundItem(
             id=safe_id,
-            name=(name or source_path.stem).strip() or source_path.stem,
+            name=sanitized_name,
             path=str(target),
             category=(category or self.defaults.category or "Geral").strip() or "Geral",
             color=color or self.defaults.color,
@@ -521,7 +541,9 @@ class SoundLibrary:
 
     def _sanitize_item(self, item: SoundItem) -> bool:
         before = asdict(item)
-        item.name = str(item.name or "Som").strip() or "Som"
+        item.name = sanitize_sound_name(str(item.name or "Som"))
+        if not item.name:
+            item.name = "som"
         item.category = str(item.category or "Geral").strip() or "Geral"
         item.color = _sanitize_color(item.color)
         item.volume = max(0.0, _finite_float(item.volume, 1.0))
@@ -676,6 +698,8 @@ def render_sound_for_playback(
         y = normalize_peak(y)
 
     y = y * np.float32(max(0.0, float(volume)))
+    from .processing import soft_clip
+    y = soft_clip(y, threshold=0.8)
     y = apply_fades(y, int(sample_rate), fade_in_ms, fade_out_ms)
     repeats = max(1, min(20, int(repeats)))
     if repeats > 1:

@@ -27,6 +27,24 @@ def apply_gain(samples: np.ndarray, gain: float) -> np.ndarray:
     )
 
 
+def soft_clip(samples: np.ndarray, threshold: float = 0.8) -> np.ndarray:
+    """Piecewise soft clipping to maintain perfect linearity below threshold."""
+    abs_samples = np.abs(samples)
+    mask = abs_samples > threshold
+    if not np.any(mask):
+        return samples
+
+    clipped = samples.copy()
+    scale = 1.0 - threshold
+    if scale > 0.0001:
+        val = (abs_samples[mask] - threshold) / scale
+        compressed = threshold + scale * np.tanh(val)
+        clipped[mask] = np.sign(samples[mask]) * compressed
+    else:
+        clipped = np.clip(samples, -1.0, 1.0)
+    return clipped
+
+
 def hard_clip_for_output(samples: np.ndarray, ceiling: float = 0.98) -> np.ndarray:
     """Flatten peaks after gain so downstream apps receive already-distorted audio."""
     if not math.isfinite(ceiling) or ceiling <= 0.0:
@@ -38,7 +56,8 @@ def hard_clip_for_output(samples: np.ndarray, ceiling: float = 0.98) -> np.ndarr
         posinf=ceiling,
         neginf=-ceiling,
     )
-    return np.clip(clean, -ceiling, ceiling).astype(np.float32, copy=False)
+    soft = soft_clip(clean, threshold=0.8 * ceiling)
+    return np.clip(soft, -ceiling, ceiling).astype(np.float32, copy=False)
 
 
 @dataclass(frozen=True)

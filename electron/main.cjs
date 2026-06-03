@@ -298,6 +298,12 @@ ipcMain.handle("shell:open-path", async (_event, targetPath) => {
   return shell.openPath(String(targetPath));
 });
 
+ipcMain.handle("shell:show-item-in-folder", async (_event, targetPath) => {
+  if (!targetPath) return false;
+  shell.showItemInFolder(String(targetPath));
+  return true;
+});
+
 ipcMain.handle("window:minimize", () => {
   mainWindow?.minimize();
 });

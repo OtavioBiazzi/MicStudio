@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   openAudioFolders: () => ipcRenderer.invoke("dialog:open-folder"),
   openImageFile: () => ipcRenderer.invoke("dialog:open-image"),
   openPath: (targetPath) => ipcRenderer.invoke("shell:open-path", targetPath),
+  showItemInFolder: (itemPath) => ipcRenderer.invoke("shell:show-item-in-folder", itemPath),
   minimize: () => ipcRenderer.invoke("window:minimize"),
   toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
   closeToTray: () => ipcRenderer.invoke("window:close-to-tray"),

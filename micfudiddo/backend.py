@@ -1088,7 +1088,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/sounds/save-edited",
                 "/api/sounds/trim",
                 "/api/sounds/trending",
-                "/api/sounds/search"
+                "/api/sounds/search",
+                "/api/sounds/import-youtube"
             }
             if path in slow_paths:
                 with com_initialized():
@@ -1206,6 +1207,64 @@ class Handler(BaseHTTPRequestHandler):
             threading.Thread(target=bg_add, daemon=True).start()
             STATE.status = "Importando sons..."
             return None
+        if path == "/api/sounds/import-youtube":
+            youtube_url = data.get("url")
+            if not youtube_url:
+                raise RuntimeError("URL do YouTube ausente.")
+            
+            import yt_dlp
+            import imageio_ffmpeg
+            import tempfile
+            from pathlib import Path
+            import uuid
+            from .soundboard import sanitize_sound_name
+            
+            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+            temp_dir = tempfile.gettempdir()
+            
+            temp_id = uuid.uuid4().hex
+            outtmpl = str(Path(temp_dir) / f"yt_{temp_id}.%(ext)s")
+            
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': outtmpl,
+                'ffmpeg_location': ffmpeg_path,
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'quiet': True,
+                'no_warnings': True,
+            }
+            
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(youtube_url, download=True)
+                    mp3_path = Path(temp_dir) / f"yt_{temp_id}.mp3"
+                    if not mp3_path.exists():
+                        raise RuntimeError("Falha ao extrair áudio do YouTube.")
+                    
+                    title = info.get("title", "Som do YouTube")
+                    sanitized_title = sanitize_sound_name(title)
+                    if not sanitized_title:
+                        sanitized_title = "som_youtube"
+                        
+                    with STATE.lock:
+                        item = STATE.library.add_file(str(mp3_path), category="Geral", name=sanitized_title)
+                        try:
+                            mp3_path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                        STATE.status = f"Som '{item.name}' importado do YouTube!"
+                        return {"soundId": item.id, **STATE.snapshot()}
+            except Exception as e:
+                try:
+                    Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise RuntimeError(f"Erro ao importar do YouTube: {str(e)}")
+
         if path == "/api/sounds/download":
             url = data.get("url")
             name = data.get("name")
@@ -1472,6 +1531,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/player/stop":
             STATE.engine.stop_sound(str(data.get("soundId") or ""), str(data.get("playbackId") or ""))
             return None
+        if path == "/api/sounds/delete-category":
+            category_to_delete = data.get("category")
+            if not category_to_delete:
+                raise RuntimeError("Categoria ausente.")
+            modified = 0
+            for item in STATE.library.items:
+                if item.category == category_to_delete:
+                    item.category = "Geral"
+                    STATE.library.update(item)
+                    modified += 1
+            if modified > 0:
+                STATE.library.save()
+            STATE.status = f"Categoria '{category_to_delete}' excluída, {modified} som(ns) movidos para Geral."
+            return STATE.snapshot()
+
         if path == "/api/sounds/delete":
             removed = STATE.library.detach(str(data["id"]))
             if removed:
@@ -1540,7 +1614,10 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 if key in data:
                     setattr(item, key, data[key])
-            item.name = str(item.name or "Som").strip() or "Som"
+            from .soundboard import sanitize_sound_name
+            item.name = sanitize_sound_name(str(item.name or "Som"))
+            if not item.name:
+                item.name = "som"
             item.category = str(item.category or "Geral").strip() or "Geral"
             item.color = _sanitize_color(item.color)
             item.volume = max(0.0, float(item.volume))

@@ -968,7 +968,7 @@ class AppState:
             "players": self.engine.player_states(),
             "totalPlayCount": sum(max(0, int(item.play_count or 0)) for item in self.library.items),
             "sounds": [
-                {**asdict(item), "plays": item.play_count, "duration": self.cached_audio_duration(item.path), "coverUrl": self.cached_cover_url(item.cover_path)}
+                {**asdict(item), "duration": self.cached_audio_duration(item.path), "coverUrl": self.cached_cover_url(item.cover_path)}
                 for item in self.library.items
             ],
             "soundCategories": self.library.categories(),

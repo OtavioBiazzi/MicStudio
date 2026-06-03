@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-import sys
 import threading
 import uuid
 
@@ -169,7 +168,7 @@ class AudioEngine:
         self._primary_output_device: AudioDevice | None = None
         self._input_device: AudioDevice | None = None
         self._sample_rate = 48000
-        self._block_size = 1024
+        self._block_size = 256
         self._last_level = 0.0
         self._last_error = ""
         self._last_callback_status = ""
@@ -542,7 +541,7 @@ class AudioEngine:
         
         if is_windows and is_different_device:
             for sample_rate in sample_rate_candidates(input_device, output_device):
-                for block_size in (1024, 512, 256):
+                for block_size in (256, 512, 1024):
                     candidates.append((sample_rate, block_size))
                     try:
                         return self._open_split_primary_stream(sd, input_device, output_device, sample_rate, block_size)
@@ -550,7 +549,7 @@ class AudioEngine:
                         errors.append(f"{sample_rate} Hz / bloco {block_size} separado: {exc}")
 
         for sample_rate in sample_rate_candidates(input_device, output_device):
-            for block_size in (1024, 512, 256):
+            for block_size in (256, 512, 1024):
                 if (sample_rate, block_size) not in candidates:
                     candidates.append((sample_rate, block_size))
                 try:
@@ -558,14 +557,13 @@ class AudioEngine:
                     self._block_size = block_size
                     self._pitch = DualDelayPitchShifter(sample_rate)
                     self._effects_processor = VoiceEffectsProcessor(sample_rate)
-                    latency_val = 0.05 if sys.platform.startswith("win") else "low"
                     return sd.Stream(
                         device=(input_device.index, output_device.index),
                         samplerate=sample_rate,
                         blocksize=block_size,
                         channels=(1, 1),
                         dtype="float32",
-                        latency=latency_val,
+                        latency="low",
                         callback=self._audio_callback,
                         clip_off=False,
                         dither_off=True,
@@ -592,14 +590,13 @@ class AudioEngine:
         input_stream = None
         output_stream = None
         try:
-            latency_val = 0.05 if sys.platform.startswith("win") else "low"
             output_stream = sd.OutputStream(
                 device=output_device.index,
                 samplerate=sample_rate,
                 blocksize=block_size,
                 channels=1,
                 dtype="float32",
-                latency=latency_val,
+                latency="low",
                 callback=self._split_output_callback,
                 clip_off=False,
                 dither_off=True,
@@ -610,7 +607,7 @@ class AudioEngine:
                 blocksize=block_size,
                 channels=1,
                 dtype="float32",
-                latency=latency_val,
+                latency="low",
                 callback=self._split_input_callback,
                 clip_off=False,
                 dither_off=True,
@@ -634,14 +631,13 @@ class AudioEngine:
         self._stop_monitor_stream()
         self._monitor_buffer = AudioRingBuffer(int(self._sample_rate * 0.4))
         try:
-            latency_val = 0.05 if sys.platform.startswith("win") else "low"
             self._monitor_stream = sd.OutputStream(
                 device=output_device.index,
                 samplerate=self._sample_rate,
                 blocksize=self._block_size,
                 channels=1,
                 dtype="float32",
-                latency=latency_val,
+                latency="low",
                 callback=self._monitor_callback,
                 clip_off=False,
                 dither_off=True,

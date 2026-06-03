@@ -1,0 +1,11 @@
+numpy>=2.1
+sounddevice>=0.5.1
+soundfile>=0.12.1
+pyaudiowpatch>=0.2.12.7
+customtkinter>=5.2.2
+keyboard>=0.13.5
+comtypes>=1.4.8
+pystray>=0.19.5
+pillow>=10.4
+pyinstaller>=6.11
+imageio-ffmpeg>=0.5.1

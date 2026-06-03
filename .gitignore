@@ -1,0 +1,19 @@
+.venv/
+node_modules/
+build/
+__pycache__/
+*.py[cod]
+
+# App build and releases
+dist/
+studio-dist/
+studio-release/
+backend-dist/
+pacotes/
+
+# Temporary run/log files
+.codex-temp/
+.codex-run/
+*.log
+scratch/
+

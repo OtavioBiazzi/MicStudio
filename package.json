@@ -1,0 +1,57 @@
+{
+  "name": "micfudiddo-studio",
+  "version": "0.4.0",
+  "private": true,
+  "description": "MicFudiddo Studio Electron UI",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:backend\" \"npm:vite\" \"npm:electron\"",
+    "backend": ".venv\\\\Scripts\\\\python.exe -m micfudiddo.backend --port 38717",
+    "vite": "vite --host 127.0.0.1 --port 5177",
+    "electron": "wait-on http://127.0.0.1:5177 http://127.0.0.1:38717/api/health && electron .",
+    "build:web": "vite build",
+    "build:backend": ".venv\\\\Scripts\\\\pyinstaller.exe --noconfirm --clean --onefile --windowed --name MicFudiddoBackend --distpath backend-dist --workpath build\\\\backend backend_run.py",
+    "build:studio": "npm run build:web && npm run build:backend && electron-builder --win portable && powershell -ExecutionPolicy Bypass -File install_studio_start_menu.ps1",
+    "start:electron": "electron ."
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "framer-motion": "^12.23.26",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.3.0",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.micfudiddo.studio",
+    "productName": "MicFudiddo Studio",
+    "directories": {
+      "output": "studio-release"
+    },
+    "files": [
+      "electron/**/*",
+      "studio-dist/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-dist/MicFudiddoBackend.exe",
+        "to": "backend/MicFudiddoBackend.exe"
+      }
+    ],
+    "win": {
+      "icon": "assets/micfudiddo.png",
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

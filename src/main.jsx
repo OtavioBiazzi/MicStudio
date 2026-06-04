@@ -4163,6 +4163,31 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
     setToast("Configurações originais restauradas localmente!");
   };
 
+  const handleRestoreOriginalFile = async () => {
+    if (!window.confirm("Deseja realmente restaurar este som para o arquivo original? Isso apagará todas as edições feitas no áudio.")) {
+      return;
+    }
+    try {
+      const res = await call("/api/sounds/restore-original", { id: selected.id });
+      setToast("Som restaurado para o arquivo original com sucesso!");
+      const restored = res.sounds?.find((s) => s.id === selected.id) || selected;
+      setDraft({ ...restored });
+      setStartSec(0);
+      setEndSec(restored.duration ? Number(restored.duration).toFixed(2) : "");
+      setDistEnabled(false);
+      setRobotEnabled(false);
+      setEchoEnabled(false);
+      setReverbEnabled(false);
+      setDelayEnabled(false);
+      setGateEnabled(false);
+      setEqEnabled(false);
+      setCompressorEnabled(false);
+      setReverseEnabled(false);
+    } catch (e) {
+      setToast("Erro ao restaurar arquivo original: " + e.message);
+    }
+  };
+
   const isFav = soundboardFavorites.includes(selected.id);
 
   return (
@@ -4286,6 +4311,18 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-danger" onClick={onDelete} style={{ background: "none", border: "1px solid var(--danger-soft)" }}><Trash size={14} /> Remover Som</button>
             <button className="btn btn-ghost" onClick={handleRestore}><ArrowClockwise size={14} /> Restaurar Padrões</button>
+            {selected.hasOriginal && (
+              <button
+                className="btn btn-ghost"
+                onClick={handleRestoreOriginalFile}
+                style={{
+                  border: "1px solid var(--danger-soft)",
+                  color: "var(--danger)"
+                }}
+              >
+                <ArrowCounterClockwise size={14} /> Restaurar Original
+              </button>
+            )}
             <button
               className="btn btn-danger"
               onClick={activateAllAtMax}
@@ -4865,6 +4902,20 @@ function ConfigPage({ state, call, setToast, selectedRecordDevices, setSelectedR
                     </select>
                   </div>
                 )}
+                
+                <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <Slider
+                    label="Volume máximo dos sons"
+                    value={Number(state.settings?.maxSoundVolume ?? 1.0) * 100}
+                    min={0}
+                    max={200}
+                    suffix="%"
+                    onChange={(v) => call("/api/settings", { maxSoundVolume: String(v / 100) })}
+                  />
+                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
+                    Define um limite máximo global para o volume de reprodução de todos os sons do soundboard.
+                  </small>
+                </div>
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
@@ -5559,9 +5610,26 @@ function SoundboardQuickPanel({ sound, state, call, setToast, onClose, toggleSou
    YOUTUBE IMPORT MODAL
    ============================================================ */
 
-function YoutubeImportModal({ onClose, call, setToast }) {
+function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeLoading, setYoutubeLoading] = useState(false);
+
+  useEffect(() => {
+    if (youtubeLoading && state?.status) {
+      if (state.status.includes("importado do YouTube!")) {
+        setYoutubeLoading(false);
+        setToast(state.status);
+        onClose();
+      } else if (state.status.includes("Erro na importação")) {
+        setYoutubeLoading(false);
+        setToast(state.status);
+      } else if (state.status.includes("cancelada")) {
+        setYoutubeLoading(false);
+        setToast("Importação cancelada!");
+        onClose();
+      }
+    }
+  }, [state?.status, youtubeLoading, setToast, onClose]);
 
   const handleImport = async () => {
     if (!youtubeUrl || !youtubeUrl.trim()) {
@@ -5569,27 +5637,38 @@ function YoutubeImportModal({ onClose, call, setToast }) {
       return;
     }
     setYoutubeLoading(true);
-    setToast("Processando vídeo do YouTube...");
+    setToast("Verificando vídeo do YouTube...");
     try {
       await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
-      setToast("Áudio importado com sucesso!");
-      onClose();
     } catch (err) {
       setToast("Erro: " + err.message);
-    } finally {
       setYoutubeLoading(false);
     }
   };
 
+  const handleCancel = async () => {
+    if (youtubeLoading) {
+      try {
+        await call("/api/sounds/import-youtube/cancel");
+      } catch (err) {
+        setToast("Erro ao cancelar: " + err.message);
+      } finally {
+        setYoutubeLoading(false);
+      }
+    } else {
+      onClose();
+    }
+  };
+
   return (
-    <div className="modalOverlay" onClick={onClose}>
+    <div className="modalOverlay" onClick={handleCancel}>
       <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
         <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
           <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
             <YoutubeLogo size={20} color="#FF0000" weight="fill" />
             <span>Adicionar Som do YouTube</span>
           </h3>
-          <button className="closeBtn" onClick={onClose} disabled={youtubeLoading} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+          <button className="closeBtn" onClick={handleCancel} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
             <X size={18} />
           </button>
         </div>
@@ -5622,13 +5701,20 @@ function YoutubeImportModal({ onClose, call, setToast }) {
             />
           </div>
           
+          {youtubeLoading && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--accent)", animation: "spin 0.6s linear infinite" }} />
+              <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 700 }}>{state?.status || "Baixando..."}</span>
+            </div>
+          )}
+          
           <small style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
             💡 O processo pode demorar alguns segundos dependendo do tamanho do vídeo.
           </small>
         </div>
         <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
-          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose} disabled={youtubeLoading}>
-            Cancelar
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleCancel}>
+            {youtubeLoading ? "Cancelar Download" : "Cancelar"}
           </button>
           <button
             className="btn btn-primary"
@@ -5649,7 +5735,7 @@ function YoutubeImportModal({ onClose, call, setToast }) {
                 }}
               />
             )}
-            {youtubeLoading ? "Convertendo..." : "Importar"}
+            {youtubeLoading ? "Baixando..." : "Importar"}
           </button>
         </div>
       </div>
@@ -6179,6 +6265,7 @@ function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSo
             onClose={() => setShowYoutubeModal(false)}
             call={call}
             setToast={setToast}
+            state={state}
           />
         )}
       </AnimatePresence>

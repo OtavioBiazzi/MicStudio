@@ -207,6 +207,7 @@ DEFAULT_APP_SETTINGS = {
     "confirmClose": True,
     "closeBehavior": "ask",
     "onlinePlaybackRoute": "both",
+    "maxSoundVolume": "1.0",
 }
 
 DEFAULT_PROFILE = {
@@ -239,6 +240,8 @@ class AppState:
         self.devices: list[AudioDevice] = []
         self.record_devices = []
         self.windows_capture_endpoints: list[dict[str, str]] = []
+        self.youtube_download_cancelled = False
+        self.youtube_download_thread = None
         self.selected_input: int | None = None
         self.selected_output: int | None = None
         self.selected_monitor: int | None = None
@@ -824,9 +827,11 @@ class AppState:
             self.engine.stop_sound(sound_id=item.id)
 
         source = self.load_sound_source(item)
+        max_vol = float(self.settings.get("maxSoundVolume", "1.0"))
+        effective_volume = min(float(item.volume), max_vol)
         rendered = render_sound_for_playback(
             source,
-            item.volume,
+            effective_volume,
             item.pitch_semitones,
             item.repeats,
             pitch_mode=item.pitch_mode,
@@ -850,6 +855,8 @@ class AppState:
             start_seconds=start_seconds,
             loop=loop,
             output_route=item.output_route,
+            initial_volume=effective_volume,
+            initial_speed=item.speed,
         )
         with self.lock:
             self.library.record_play(item.id)
@@ -969,7 +976,13 @@ class AppState:
             "players": self.engine.player_states(),
             "totalPlayCount": sum(max(0, int(item.play_count or 0)) for item in self.library.items),
             "sounds": [
-                {**asdict(item), "plays": item.play_count, "duration": self.cached_audio_duration(item.path), "coverUrl": self.cached_cover_url(item.cover_path)}
+                {
+                    **asdict(item),
+                    "plays": item.play_count,
+                    "duration": self.cached_audio_duration(item.path),
+                    "coverUrl": self.cached_cover_url(item.cover_path),
+                    "hasOriginal": (self.library.sounds_dir / f"{item.id}.original.wav").exists()
+                }
                 for item in self.library.items
             ],
             "soundCategories": self.library.categories(),
@@ -1231,37 +1244,62 @@ class Handler(BaseHTTPRequestHandler):
                 raise RuntimeError("URL do YouTube ausente.")
             
             import yt_dlp
-            import imageio_ffmpeg
-            import tempfile
-            from pathlib import Path
-            import uuid
-            from .soundboard import sanitize_sound_name
-            
-            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-            temp_dir = tempfile.gettempdir()
-            
-            temp_id = uuid.uuid4().hex
-            outtmpl = str(Path(temp_dir) / f"yt_{temp_id}.%(ext)s")
-            
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': outtmpl,
-                'ffmpeg_location': ffmpeg_path,
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
+            # 1. Quick verification: check if video exists
+            ydl_opts_verify = {
                 'quiet': True,
                 'no_warnings': True,
+                'simulate': True,
             }
-            
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(youtube_url, download=True)
+                with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
+                    ydl.extract_info(youtube_url, download=False)
+            except Exception as e:
+                # Video doesn't exist or URL is invalid
+                raise RuntimeError(f"Video do YouTube invalido ou nao encontrado: {str(e)}")
+            
+            STATE.youtube_download_cancelled = False
+            
+            def bg_download():
+                import yt_dlp
+                import imageio_ffmpeg
+                import tempfile
+                from pathlib import Path
+                import uuid
+                from .soundboard import sanitize_sound_name
+                
+                ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+                temp_dir = tempfile.gettempdir()
+                temp_id = uuid.uuid4().hex
+                outtmpl = str(Path(temp_dir) / f"yt_{temp_id}.%(ext)s")
+                
+                def hook(d):
+                    if STATE.youtube_download_cancelled:
+                        raise RuntimeError("CANCELLED")
+                    if d['status'] == 'downloading':
+                        percent = d.get('_percent_str', '').strip()
+                        with STATE.lock:
+                            STATE.status = f"Baixando do YouTube: {percent}"
+                            
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': outtmpl,
+                    'ffmpeg_location': ffmpeg_path,
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                    'quiet': True,
+                    'no_warnings': True,
+                    'progress_hooks': [hook],
+                }
+                
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(youtube_url, download=True)
                     mp3_path = Path(temp_dir) / f"yt_{temp_id}.mp3"
                     if not mp3_path.exists():
-                        raise RuntimeError("Falha ao extrair áudio do YouTube.")
+                        raise RuntimeError("Falha ao extrair audio do YouTube.")
                     
                     title = info.get("title", "Som do YouTube")
                     sanitized_title = sanitize_sound_name(title)
@@ -1275,13 +1313,26 @@ class Handler(BaseHTTPRequestHandler):
                         except OSError:
                             pass
                         STATE.status = f"Som '{item.name}' importado do YouTube!"
-                        return {"soundId": item.id, **STATE.snapshot()}
-            except Exception as e:
-                try:
-                    Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
-                except OSError:
-                    pass
-                raise RuntimeError(f"Erro ao importar do YouTube: {str(e)}")
+                except Exception as e:
+                    try:
+                        Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    with STATE.lock:
+                        if STATE.youtube_download_cancelled:
+                            STATE.status = "Importacao do YouTube cancelada."
+                        else:
+                            STATE.status = f"Erro na importacao do YouTube: {str(e)}"
+                            
+            STATE.youtube_download_thread = threading.Thread(target=bg_download, daemon=True)
+            STATE.youtube_download_thread.start()
+            STATE.status = "Iniciando download do YouTube..."
+            return {"status": STATE.status}
+
+        if path == "/api/sounds/import-youtube/cancel":
+            STATE.youtube_download_cancelled = True
+            STATE.status = "Cancelando download do YouTube..."
+            return STATE.snapshot()
 
         if path == "/api/sounds/download":
             url = data.get("url")
@@ -1606,6 +1657,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sounds/save-edited":
             item = STATE.save_sound_edit(data, replace=bool(data.get("replace", False)))
             return {"soundId": item.id, **STATE.snapshot()}
+        if path == "/api/sounds/restore-original":
+            item_id = str(data["id"])
+            item = STATE.library.restore_original(item_id)
+            STATE.status = f"Som restaurado para o original: {item.name}"
+            return STATE.snapshot()
         if path == "/api/sounds/update":
             item = STATE.library.by_id(str(data["id"]))
             if item is None:
@@ -1644,11 +1700,20 @@ class Handler(BaseHTTPRequestHandler):
             item.fade_out_ms = max(0.0, min(5000.0, float(item.fade_out_ms)))
             item.repeats = max(1, min(20, int(round(float(item.repeats)))))
             item.loop = bool(item.loop)
-            if "loop" in data:
+            if "loop" in data or "volume" in data or "speed" in data:
                 with STATE.engine._playback_lock:
                     for pb in STATE.engine._playbacks:
                         if pb.sound_id == item.id:
-                            pb.loop = bool(data["loop"])
+                            if "loop" in data:
+                                pb.loop = bool(data["loop"])
+                            if "volume" in data:
+                                max_vol = float(STATE.settings.get("maxSoundVolume", "1.0"))
+                                target_volume = min(float(data["volume"]), max_vol)
+                                init_vol = getattr(pb, "initial_volume", 1.0) or 1.0
+                                pb.volume_override = target_volume / init_vol
+                            if "speed" in data:
+                                init_speed = getattr(pb, "initial_speed", 1.0) or 1.0
+                                pb.speed_override = float(data["speed"]) / init_speed
             item.normalize = bool(item.normalize)
             item.block_voice = bool(item.block_voice)
             item.stop_other_sounds = bool(item.stop_other_sounds)

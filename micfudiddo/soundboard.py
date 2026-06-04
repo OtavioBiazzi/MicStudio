@@ -212,6 +212,10 @@ class SoundLibrary:
                     Path(item.path).unlink(missing_ok=True)
                 except OSError:
                     pass
+                try:
+                    (self.sounds_dir / f"{item.id}.original.wav").unlink(missing_ok=True)
+                except OSError:
+                    pass
                 if item.cover_path:
                     try:
                         Path(item.cover_path).unlink(missing_ok=True)
@@ -401,6 +405,13 @@ class SoundLibrary:
         clean_color = str(color or item.color or "#25a7f2")
 
         if replace:
+            original_backup = self.sounds_dir / f"{item.id}.original.wav"
+            if not original_backup.exists() and Path(item.path).exists():
+                try:
+                    shutil.copy2(item.path, original_backup)
+                except Exception as e:
+                    print("Erro ao fazer backup do som original:", e)
+
             target = self.sounds_dir / f"{item.id}.wav"
             temp_target = self.sounds_dir / f"{item.id}.edit.wav"
             sf.write(temp_target, rendered, sample_rate)
@@ -463,6 +474,33 @@ class SoundLibrary:
         self.items.append(copied)
         self.save()
         return copied
+
+    def restore_original(self, item_id: str) -> SoundItem:
+        item = self.by_id(item_id)
+        if item is None:
+            raise RuntimeError("Som nao encontrado.")
+        original_backup = self.sounds_dir / f"{item.id}.original.wav"
+        if not original_backup.exists():
+            raise RuntimeError("Nenhum backup original encontrado para este som.")
+        
+        shutil.copy2(original_backup, item.path)
+        try:
+            original_backup.unlink(missing_ok=True)
+        except OSError:
+            pass
+        
+        item.volume = 1.0
+        item.pitch_semitones = 0.0
+        item.pitch_mode = "preserve"
+        item.speed = 1.0
+        item.normalize = False
+        item.fade_in_ms = 0.0
+        item.fade_out_ms = 0.0
+        item.repeats = 1
+        item.effects = {}
+        
+        self.update(item)
+        return item
 
     def categories(self) -> list[str]:
         names = {

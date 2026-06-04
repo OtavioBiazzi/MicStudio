@@ -146,6 +146,8 @@ class _Playback:
     volume_override: float = 1.0
     speed_override: float = 1.0
     gain_override: float = 1.0
+    initial_volume: float = 1.0
+    initial_speed: float = 1.0
 
 
 class AudioEngine:
@@ -236,6 +238,8 @@ class AudioEngine:
         start_seconds: float = 0.0,
         loop: bool = False,
         output_route: str = "both",
+        initial_volume: float = 1.0,
+        initial_speed: float = 1.0,
     ) -> str:
         block = np.asarray(samples, dtype=np.float32).reshape(-1)
         if block.size == 0:
@@ -248,6 +252,8 @@ class AudioEngine:
             mute_others=bool(mute_others),
             output_route=_sanitize_output_route(output_route),
             loop=bool(loop),
+            initial_volume=float(initial_volume),
+            initial_speed=float(initial_speed),
         )
         start_frame = max(0.0, float(int(float(start_seconds or 0.0) * self._sample_rate)))
         playback.position = start_frame % playback.samples.size if playback.loop else min(start_frame, float(playback.samples.size))

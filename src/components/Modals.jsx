@@ -1,0 +1,1375 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { motion } from "framer-motion";
+import {
+  X, Play, Minus, Trash, Star, UploadSimple, FolderOpen, MagnifyingGlass,
+  Pencil, Waveform, MusicNotes, ArrowClockwise, ArrowCounterClockwise,
+  StopCircle, Sparkle, YoutubeLogo
+} from "@phosphor-icons/react";
+import {
+  filePathToUrl,
+  renderMarkdown,
+  formatTime,
+  formatValue,
+  Slider,
+  EffectSliderRow
+} from "../utils";
+
+const playbackModes = [
+  { value: "restart", label: "Reiniciar ao clicar" },
+  { value: "stop", label: "Parar ao clicar" },
+  { value: "overlap", label: "Sobrepor áudio" }
+];
+
+const soundOutputRoutes = [
+  { value: "both", label: "Microfone + Monitoramento" },
+  { value: "cable", label: "Apenas Microfone" },
+  { value: "monitor", label: "Apenas Monitoramento" }
+];
+
+// --- WaveformVisualizer ---
+export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, playingPosition }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [isDragging, setIsDragging] = useState(null);
+
+  // Generate a beautiful, deterministic wave shape from the sound ID
+  const peaks = useMemo(() => {
+    const list = [];
+    let seed = 0;
+    const key = String(soundId || "clean");
+    for (let i = 0; i < key.length; i++) {
+      seed += key.charCodeAt(i);
+    }
+    const nextRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    for (let i = 0; i < 300; i++) {
+      const envelope = Math.sin((i / 300) * Math.PI) * 0.4 + Math.sin((i / 300) * Math.PI * 4) * 0.3 + 0.3;
+      const noise = nextRandom() * 0.4;
+      list.push(Math.min(1.0, Math.max(0.05, (envelope + noise) * 0.85)));
+    }
+    return list;
+  }, [soundId]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const width = rect.width;
+    const height = rect.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw grid lanes
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+
+    const startPct = start / duration;
+    const endPct = (end === null || end === undefined || end === "") ? 1.0 : (end / duration);
+    const barWidth = (width / peaks.length) * zoom;
+
+    // Draw audio peaks
+    peaks.forEach((peak, i) => {
+      const x = i * barWidth - scrollLeft;
+      if (x + barWidth < 0 || x > width) return;
+
+      const barHeight = peak * height * 0.72;
+      const y = (height - barHeight) / 2;
+
+      const pct = i / peaks.length;
+      const isActive = pct >= startPct && pct <= endPct;
+
+      if (isActive) {
+        const grad = ctx.createLinearGradient(x, y, x, y + barHeight);
+        grad.addColorStop(0, "#00E5FF");
+        grad.addColorStop(1, "#8B5CF6");
+        ctx.fillStyle = grad;
+      } else {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      }
+
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, Math.max(1.5, barWidth - 2.0), barHeight, 2);
+      } else {
+        ctx.rect(x, y, Math.max(1.5, barWidth - 2.0), barHeight);
+      }
+      ctx.fill();
+    });
+
+    // Draw playing progress line if applicable
+    if (playingPosition != null && playingPosition >= 0) {
+      const playheadX = (playingPosition / duration) * width * zoom - scrollLeft;
+      if (playheadX >= 0 && playheadX <= width) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(playheadX, 0);
+        ctx.lineTo(playheadX, height);
+        ctx.stroke();
+      }
+    }
+  }, [peaks, start, end, duration, zoom, scrollLeft, playingPosition]);
+
+  const handleMouseDown = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+
+    const startPct = start / duration;
+    const endPct = (end === null || end === undefined || end === "") ? 1.0 : (end / duration);
+    const startX = startPct * width * zoom - scrollLeft;
+    const endX = endPct * width * zoom - scrollLeft;
+
+    if (Math.abs(clickX - startX) < 16) {
+      setIsDragging("start");
+    } else if (Math.abs(clickX - endX) < 16) {
+      setIsDragging("end");
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+
+    const absoluteX = (clickX + scrollLeft) / zoom;
+    let newPct = absoluteX / width;
+    newPct = Math.max(0, Math.min(1, newPct));
+
+    const newTime = newPct * duration;
+    const actualEnd = (end === null || end === undefined || end === "") ? duration : Number(end);
+
+    if (isDragging === "start") {
+      onUpdateTrim(Math.min(actualEnd - 0.05, newTime), actualEnd);
+    } else {
+      onUpdateTrim(start, Math.max(start + 0.05, newTime));
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(null);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, start, end, duration, zoom, scrollLeft]);
+
+  const handleScroll = (e) => {
+    if (zoom > 1) {
+      setScrollLeft((prev) => Math.max(0, prev + e.deltaX));
+    }
+  };
+
+  const startPct = start / duration;
+  const endPct = (end === null || end === undefined || end === "") ? 1.0 : (end / duration);
+  const startX = startPct * 100 * zoom - (scrollLeft / (canvasRef.current?.getBoundingClientRect().width || 1)) * 100;
+  const endX = endPct * 100 * zoom - (scrollLeft / (canvasRef.current?.getBoundingClientRect().width || 1)) * 100;
+
+  return (
+    <div className="waveform-editor-container" ref={containerRef}>
+      <div className="waveform-zoom-controls">
+        <span style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>✂️ EDITOR DE CORTE WAVEFORM</span>
+        <div className="waveform-zoom-buttons">
+          <button className={`btn btn-ghost ${zoom === 1 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => { setZoom(1); setScrollLeft(0); }}>1x</button>
+          <button className={`btn btn-ghost ${zoom === 1.5 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setZoom(1.5)}>1.5x</button>
+          <button className={`btn btn-ghost ${zoom === 2 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setZoom(2)}>2x</button>
+          <button className={`btn btn-ghost ${zoom === 3 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setZoom(3)}>3x</button>
+        </div>
+      </div>
+
+      <div className="waveform-canvas-wrapper" onMouseDown={handleMouseDown} onWheel={handleScroll}>
+        <canvas ref={canvasRef} />
+        <div className="waveform-marker waveform-marker-start" style={{ left: `${startX}%` }}>
+          <div className="waveform-marker-label">INÍCIO: {start.toFixed(2)}s</div>
+        </div>
+        <div className="waveform-marker waveform-marker-end" style={{ left: `${endX}%` }}>
+          <div className="waveform-marker-label">FIM: {end !== null ? Number(end).toFixed(2) : duration.toFixed(2)}s</div>
+        </div>
+      </div>
+
+      <div className="waveform-timeline">
+        <span>0:00</span>
+        <span>{(duration * 0.25).toFixed(1)}s</span>
+        <span>{(duration * 0.5).toFixed(1)}s</span>
+        <span>{(duration * 0.75).toFixed(1)}s</span>
+        <span>{duration.toFixed(2)}s</span>
+      </div>
+    </div>
+  );
+}
+
+// --- VirtualCableWarningModal ---
+export function VirtualCableWarningModal({ onClose }) {
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  const handleConfirm = () => {
+    if (dontShowAgain) {
+      localStorage.setItem("micfudiddo.ignoreVirtualCableWarning", "true");
+    }
+    onClose();
+  };
+
+  return (
+    <div className="modalOverlay" onClick={handleConfirm}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--danger)", display: "flex", alignItems: "center", gap: 8 }}>
+            ⚠️ Cabo Virtual Não Detectado
+          </h3>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            O MicFudido Studio precisa de um driver de <strong>cabo virtual (VB-CABLE)</strong> para transmitir a sua voz modificada e os sons do soundboard para outros aplicativos (como o Discord ou jogos).
+          </p>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            Sem ele, você só conseguirá ouvir o monitoramento local no seu próprio fone.
+          </p>
+          
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <a 
+              href="https://vb-audio.com/Cable/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="btn btn-primary" 
+              style={{ 
+                padding: "8px 16px", 
+                fontSize: 12, 
+                background: "var(--danger)", 
+                textDecoration: "none", 
+                color: "#fff", 
+                display: "inline-flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                fontWeight: 600, 
+                borderRadius: "var(--radius-sm)",
+                flex: 1 
+              }}
+            >
+              📥 Baixar VB-CABLE
+            </a>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 11.5, color: "var(--text-muted)", cursor: "pointer", userSelect: "none" }}>
+            <input 
+              type="checkbox" 
+              checked={dontShowAgain} 
+              onChange={(e) => setDontShowAgain(e.target.checked)} 
+              style={{ cursor: "pointer" }}
+            />
+            Não avisar novamente
+          </label>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleConfirm}>
+            Ignorar por enquanto
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- ChooseMicOnCloseModal ---
+export function ChooseMicOnCloseModal({ state, onConfirm, onCancel }) {
+  const endpoints = state.windowsCaptureEndpoints || [];
+  const [selectedMicId, setSelectedMicId] = useState(() => {
+    if (endpoints.length > 0) return endpoints[0].id;
+    return "";
+  });
+
+  return (
+    <div className="modalOverlay" onClick={onCancel}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>🎤 Escolha o Microfone Padrão</h3>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
+            Selecione qual dispositivo de gravação deve ser definido como o padrão do Windows ao fechar o aplicativo:
+          </p>
+          <select
+            value={selectedMicId}
+            onChange={(e) => setSelectedMicId(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              background: "var(--bg-input)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--text)",
+              outline: "none",
+              fontSize: 13,
+              fontFamily: "var(--font)",
+              boxSizing: "border-box"
+            }}
+          >
+            {endpoints.map((ep) => (
+              <option key={ep.id} value={ep.id}>{ep.name}</option>
+            ))}
+            {endpoints.length === 0 && (
+              <option value="">Nenhum dispositivo encontrado</option>
+            )}
+          </select>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onCancel}>Cancelar</button>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "8px 16px", fontSize: 12 }}
+            onClick={() => onConfirm(selectedMicId)}
+            disabled={!selectedMicId}
+          >
+            Confirmar e Sair
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- MoveCategoryModal ---
+export function MoveCategoryModal({ soundId, state, call, onClose, setToast, customCategories, setCustomCategories }) {
+  const [search, setSearch] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+
+  const sound = useMemo(() => {
+    return state?.sounds?.find((s) => s.id === soundId);
+  }, [state?.sounds, soundId]);
+
+  const categoriesWithCounts = useMemo(() => {
+    if (!state?.sounds) return [];
+    const counts = {};
+    state.sounds.forEach((s) => {
+      const cat = s.category || "Geral";
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    
+    customCategories.forEach((cat) => {
+      if (!counts[cat]) counts[cat] = 0;
+    });
+
+    return Object.keys(counts).map((cat) => ({
+      name: cat,
+      count: counts[cat],
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [state?.sounds, customCategories]);
+
+  const filteredCategories = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return categoriesWithCounts;
+    return categoriesWithCounts.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categoriesWithCounts, search]);
+
+  if (!sound) return null;
+
+  const handleSelectCategory = async (catName) => {
+    try {
+      await call("/api/sounds/update", { id: sound.id, category: catName });
+      setToast(`Som "${sound.name}" movido para "${catName}"!`);
+      onClose();
+    } catch (err) {
+      setToast("Erro ao mover som: " + err.message);
+    }
+  };
+
+  const handleCreateCategory = () => {
+    const trimmed = newCategory.trim();
+    if (!trimmed) return;
+    if (trimmed.toLowerCase() === "todos" || trimmed.toLowerCase() === "favoritos") {
+      setToast("Nome reservado!");
+      return;
+    }
+    
+    handleSelectCategory(trimmed);
+    
+    if (!customCategories.includes(trimmed)) {
+      setCustomCategories([...customCategories, trimmed]);
+    }
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent accountModal moveCategoryModal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 420, width: "90%", padding: 20 }}
+        initial={{ scale: 0.92, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.92, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="modalHeader" style={{ paddingBottom: 12, marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+            📁 Mover para Pasta / Categoria
+          </h3>
+          <button className="closeBtn" onClick={onClose}><X size={16} /></button>
+        </div>
+        
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+          Movendo som: <span style={{ color: "var(--purple)", fontWeight: 700 }}>{sound.name}</span>
+        </div>
+
+        <div className="searchBar" style={{ marginBottom: 12, padding: "6px 12px" }}>
+          <MagnifyingGlass size={14} className="searchIcon" />
+          <input
+            placeholder="Pesquisar pastas existentes..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ fontSize: 12 }}
+          />
+        </div>
+
+        <div style={{
+          maxHeight: "180px",
+          overflowY: "auto",
+          background: "var(--bg-card-secondary)",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid var(--border)",
+          padding: 4,
+          marginBottom: 16
+        }}>
+          {filteredCategories.length === 0 ? (
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: 16 }}>
+              Nenhuma pasta encontrada.
+            </div>
+          ) : (
+            filteredCategories.map((c) => (
+              <div
+                key={c.name}
+                onClick={() => handleSelectCategory(c.name)}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "8px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: sound.category === c.name ? 700 : 500,
+                  color: sound.category === c.name ? "var(--purple)" : "var(--text)",
+                  background: sound.category === c.name ? "rgba(139, 92, 246, 0.1)" : "transparent",
+                  transition: "var(--transition)"
+                }}
+                className="category-row-hover"
+              >
+                <span>{c.name}</span>
+                <span style={{
+                  fontSize: 10,
+                  color: "var(--text-muted)",
+                  background: "var(--bg-card)",
+                  padding: "2px 6px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)"
+                }}>{c.count} {c.count === 1 ? "som" : "sons"}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+            Criar Nova Pasta / Categoria
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Nome da nova pasta..."
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateCategory(); }}
+              style={{ flex: 1, padding: "6px 12px", fontSize: 12 }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={handleCreateCategory}
+              style={{ padding: "6px 12px", fontSize: 12, background: "linear-gradient(135deg, var(--purple), var(--purple-dim))" }}
+            >
+              Criar
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- UserProfileModal ---
+export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profilePlan, profileImage, profileImagePosition, profileBio, profileReadme }) {
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent profileViewModal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 540, width: "90%", padding: 24 }}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>👤 Perfil do Usuário</h3>
+          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+        </div>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 16, borderBottom: "1px solid var(--border)", paddingBottom: 16 }}>
+          <div className="profile-avatar" style={{ width: 72, height: 72, fontSize: 32, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", flexShrink: 0 }}>
+            {profileImage ? (
+              <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
+            ) : (
+              <Waveform size={32} weight="fill" color="#fff" />
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 18, margin: 0, fontWeight: 800, color: "var(--text)" }}>{profileName}</h2>
+              {profilePlan && <span className="pro-badge" style={{ display: "inline-block", padding: "1px 6px", fontSize: 9, fontWeight: 800, color: "var(--purple)", background: "var(--purple-soft)", borderRadius: "var(--radius-full)" }}>{profilePlan}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600, marginTop: 2 }}>{profileSub}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontStyle: "italic" }}>{profileBio}</div>
+          </div>
+          <button className="btn btn-ghost" onClick={onEdit} style={{ padding: "6px 12px", fontSize: 11, alignSelf: "flex-start", gap: 4 }}>
+            <Pencil size={12} /> Editar
+          </button>
+        </div>
+        <div className="readme-container" style={{ background: "rgba(0,0,0,0.2)", padding: 16, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", maxHeight: 300, overflowY: "auto", fontSize: 12, lineHeight: 1.6 }}>
+          {renderMarkdown(profileReadme)}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- EditProfileModal ---
+export function EditProfileModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profilePlan, setProfilePlan, profileImage, setProfileImage, profileImagePosition, setProfileImagePosition, profileBio, setProfileBio, profileReadme, setProfileReadme }) {
+  const fileInputRef = useRef(null);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setProfileImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent accountModal editProfileModal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480, width: "90%" }}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="modalHeader">
+          <h3>👤 Editar Perfil</h3>
+          <button className="closeBtn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modalBody" style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "60vh", overflowY: "auto", paddingRight: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, alignSelf: "center", flexDirection: "column", marginBottom: 4 }}>
+            <div className="profile-avatar" style={{ width: 72, height: 72, fontSize: 28, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
+              {profileImage ? (
+                <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
+              ) : (
+                <Waveform size={32} weight="fill" color="#fff" />
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="manage-btn" onClick={() => fileInputRef.current?.click()} style={{ width: "auto", padding: "4px 10px" }}>
+                Carregar Foto
+              </button>
+              {profileImage && (
+                <button className="manage-btn" onClick={() => setProfileImage("")} style={{ width: "auto", padding: "4px 10px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>
+                  Remover
+                </button>
+              )}
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleAvatarChange}
+            />
+            {profileImage && (
+              <div style={{ width: "100%", minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-muted)" }}>
+                  <span>Ajuste Vertical</span>
+                  <span>{profileImagePosition}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={profileImagePosition}
+                  onChange={(e) => setProfileImagePosition(e.target.value)}
+                  style={{ width: "100%", height: 3, cursor: "pointer" }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="labField">
+            <label>Nome do Perfil</label>
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Subtítulo / Descrição</label>
+            <input
+              type="text"
+              value={profileSub}
+              onChange={(e) => setProfileSub(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Nome do Plano (Deixe vazio para ocultar)</label>
+            <input
+              type="text"
+              placeholder="Ex: PRO, VIP, VIP PRO"
+              value={profilePlan}
+              onChange={(e) => setProfilePlan(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Biografia / Descrição Curta</label>
+            <input
+              type="text"
+              value={profileBio}
+              onChange={(e) => setProfileBio(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Página Pessoal README (Suporta Markdown)</label>
+            <textarea
+              rows={4}
+              value={profileReadme}
+              onChange={(e) => setProfileReadme(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontFamily: "monospace", fontSize: 11, resize: "vertical" }}
+            />
+          </div>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={onClose} style={{ padding: "6px 16px", fontSize: 12 }}>Salvar Alterações</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- ManageAccountModal ---
+export function ManageAccountModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profileImage, setProfileImage }) {
+  const fileInputRef = useRef(null);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setProfileImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent accountModal"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="modalHeader">
+          <h3>👤 Gerenciar Perfil</h3>
+          <button className="closeBtn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modalBody" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, alignSelf: "center", flexDirection: "column", marginBottom: 8 }}>
+            <div className="profile-avatar" style={{ width: 84, height: 84, fontSize: 32, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
+              {profileImage ? (
+                <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+              ) : (
+                <Waveform size={36} weight="fill" color="#fff" />
+              )}
+            </div>
+            <button className="manage-btn" onClick={() => fileInputRef.current?.click()} style={{ width: "auto", padding: "6px 14px" }}>
+              Carregar Foto
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleAvatarChange}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Nome do Perfil</label>
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              style={{ width: "100%", padding: "10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)" }}
+            />
+          </div>
+
+          <div className="labField">
+            <label>Subtítulo / Plano</label>
+            <input
+              type="text"
+              value={profileSub}
+              onChange={(e) => setProfileSub(e.target.value)}
+              style={{ width: "100%", padding: "10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)" }}
+            />
+          </div>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <button className="btn btn-primary" onClick={onClose} style={{ padding: "8px 20px" }}>Salvar Alterações</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- CloseChoiceModal ---
+export function CloseChoiceModal({ onCancel, onMinimize, onQuit }) {
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  return (
+    <motion.div className="modalOverlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div
+        className="modalContent"
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18 }}
+        style={{ maxWidth: 400 }}
+      >
+        <div className="modalIcon">
+          <X size={24} weight="bold" />
+        </div>
+        <div className="modalTitle">O que você quer fazer?</div>
+        <div className="modalDesc">
+          Minimize para a bandeja e continue com o áudio pronto, ou feche tudo e restaure a rota virtual.
+        </div>
+        
+        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14, marginBottom: 4, fontSize: 11, color: "var(--text-muted)", cursor: "pointer", userSelect: "none" }}>
+          <input type="checkbox" checked={dontShowAgain} onChange={(e) => setDontShowAgain(e.target.checked)} style={{ cursor: "pointer" }} />
+          Não mostrar esta mensagem novamente
+        </label>
+        
+        <div className="modalActions" style={{ marginTop: 16 }}>
+          <button className="btn-modal-primary" onClick={() => onMinimize(dontShowAgain)}>
+            <Minus size={16} /> Minimizar para a bandeja
+          </button>
+          <button className="btn-modal-danger" onClick={() => onQuit(dontShowAgain)}>
+            <X size={16} /> Fechar totalmente
+          </button>
+          <button className="btn-modal-ghost" onClick={onCancel}>
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// --- YoutubeImportModal ---
+export function YoutubeImportModal({ onClose, call, setToast, state }) {
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
+
+  useEffect(() => {
+    if (youtubeLoading && state?.status) {
+      const statusLower = state.status.toLowerCase();
+      if (statusLower.includes("importado do youtube")) {
+        setYoutubeLoading(false);
+        setToast(state.status);
+        onClose();
+      } else if (statusLower.includes("erro na importacao") || statusLower.includes("erro na importação")) {
+        setYoutubeLoading(false);
+        setToast(state.status);
+      } else if (statusLower.includes("cancelada") || statusLower.includes("cancelado")) {
+        setYoutubeLoading(false);
+        setToast("Importação cancelada!");
+        onClose();
+      }
+    }
+  }, [state?.status, youtubeLoading, setToast, onClose]);
+
+  const handleImport = async () => {
+    if (!youtubeUrl || !youtubeUrl.trim()) {
+      setToast("Cole uma URL válida do YouTube.");
+      return;
+    }
+    setYoutubeLoading(true);
+    setToast("Verificando vídeo do YouTube...");
+    try {
+      await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
+    } catch (err) {
+      setToast("Erro: " + err.message);
+      setYoutubeLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (youtubeLoading) {
+      try {
+        await call("/api/sounds/import-youtube/cancel");
+      } catch (err) {
+        setToast("Erro ao cancelar: " + err.message);
+      } finally {
+        setYoutubeLoading(false);
+      }
+    } else {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="modalOverlay" onClick={handleCancel}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
+            <YoutubeLogo size={20} color="#FF0000" weight="fill" />
+            <span>Adicionar Som do YouTube</span>
+          </h3>
+          <button className="closeBtn" onClick={handleCancel} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            Cole o link de um vídeo do YouTube abaixo para converter e importar o áudio diretamente para o seu Soundboard.
+          </p>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Link do Vídeo</span>
+            <input
+              type="text"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              disabled={youtubeLoading}
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font)",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+          
+          {youtubeLoading && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--accent)", animation: "spin 0.6s linear infinite" }} />
+              <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 700 }}>{state?.status || "Baixando..."}</span>
+            </div>
+          )}
+          
+          <small style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
+            💡 O processo pode demorar alguns segundos dependendo do tamanho do vídeo.
+          </small>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleCancel}>
+            {youtubeLoading ? "Cancelar Download" : "Cancelar"}
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "8px 20px", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}
+            onClick={handleImport}
+            disabled={youtubeLoading}
+          >
+            {youtubeLoading && (
+              <div
+                className="spinner"
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.2)",
+                  borderTopColor: "#fff",
+                  animation: "spin 0.6s linear infinite",
+                }}
+              />
+            )}
+            {youtubeLoading ? "Baixando..." : "Importar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- AdvancedSoundEditorModal ---
+export function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, onDelete, soundboardFavorites, toggleSoundboardFavorite }) {
+  const [draft, setDraft] = useState({});
+  const [startSec, setStartSec] = useState(0);
+  const [endSec, setEndSec] = useState("");
+
+  // States for audio-embedded effects
+  const [distEnabled, setDistEnabled] = useState(false);
+  const [distDrive, setDistDrive] = useState(4.0);
+  const [robotEnabled, setRobotEnabled] = useState(false);
+  const [robotRate, setRobotRate] = useState(35.0);
+  const [echoEnabled, setEchoEnabled] = useState(false);
+  const [echoMix, setEchoMix] = useState(0.25);
+  const [reverbEnabled, setReverbEnabled] = useState(false);
+  const [reverbMix, setReverbMix] = useState(0.28);
+  const [delayEnabled, setDelayEnabled] = useState(false);
+  const [delayMix, setDelayMix] = useState(0.3);
+  const [gateEnabled, setGateEnabled] = useState(false);
+  const [gateThreshold, setGateThreshold] = useState(0.08);
+  const [eqEnabled, setEqEnabled] = useState(false);
+  const [eqTone, setEqTone] = useState(0.55);
+  const [compressorEnabled, setCompressorEnabled] = useState(false);
+  const [compressorAmount, setCompressorAmount] = useState(0.45);
+  const [reverseEnabled, setReverseEnabled] = useState(false);
+  const [reverseMix, setReverseMix] = useState(0.65);
+
+  const activateAllAtMax = () => {
+    setDraft((prev) => ({
+      ...prev,
+      volume: 100.0,
+      pitch_semitones: 12.0,
+      speed: 4.0,
+      normalize: true,
+      loop: true
+    }));
+    setReverbEnabled(true);
+    setReverbMix(0.9);
+    setEchoEnabled(true);
+    setEchoMix(0.9);
+    setDelayEnabled(true);
+    setDelayMix(0.9);
+    setDistEnabled(true);
+    setDistDrive(100.0);
+    setGateEnabled(true);
+    setGateThreshold(0.4);
+    setReverseEnabled(true);
+    setReverseMix(1.0);
+    setToast("🔥 Efeitos e volumes estourados no máximo para este som!");
+  };
+
+  useEffect(() => {
+    if (selected) {
+      setDraft({ ...selected });
+      setStartSec(selected.start ?? 0);
+      setEndSec(selected.end ?? (selected.duration ? Number(selected.duration).toFixed(2) : ""));
+      
+      const fx = selected.effects || {};
+      setDistEnabled(!!fx.distortion_enabled);
+      setDistDrive(fx.distortion_drive ?? 4.0);
+      setRobotEnabled(!!fx.robot_enabled);
+      setRobotRate(fx.robot_rate_hz ?? 35.0);
+      setEchoEnabled(!!fx.echo_enabled);
+      setEchoMix(fx.echo_mix ?? 0.25);
+      setReverbEnabled(!!fx.reverb_enabled);
+      setReverbMix(fx.reverb_mix ?? 0.28);
+      setDelayEnabled(!!fx.delay_enabled);
+      setDelayMix(fx.delay_mix ?? 0.3);
+      setGateEnabled(!!fx.noise_gate_enabled);
+      setGateThreshold(fx.noise_gate_threshold ?? 0.08);
+      setEqEnabled(!!fx.equalizer_enabled);
+      setEqTone(fx.equalizer_tone ?? 0.55);
+      setCompressorEnabled(!!fx.compressor_enabled);
+      setCompressorAmount(fx.compressor_amount ?? 0.45);
+      setReverseEnabled(!!fx.reverse_enabled);
+      setReverseMix(fx.reverse_mix ?? 0.65);
+    }
+  }, [selected?.id]);
+
+  const chooseCover = async () => {
+    const path = await window.micfudiddo?.openImageFile?.();
+    if (path) {
+      call("/api/sounds/cover", { id: selected.id, path })
+        .then(() => {
+          setToast("Capa do som atualizada!");
+          setDraft((prev) => ({ ...prev, coverUrl: filePathToUrl(path) }));
+        })
+        .catch((e) => setToast(e.message));
+    }
+  };
+
+  const getEffectsPayload = () => {
+    return {
+      distortion_enabled: distEnabled,
+      distortion_drive: Number(distDrive),
+      robot_enabled: robotEnabled,
+      robot_rate_hz: Number(robotRate),
+      echo_enabled: echoEnabled,
+      echo_mix: Number(echoMix),
+      reverb_enabled: reverbEnabled,
+      reverb_mix: Number(reverbMix),
+      delay_enabled: delayEnabled,
+      delay_mix: Number(delayMix),
+      noise_gate_enabled: gateEnabled,
+      noise_gate_threshold: Number(gateThreshold),
+      equalizer_enabled: eqEnabled,
+      equalizer_tone: Number(eqTone),
+      compressor_enabled: compressorEnabled,
+      compressor_amount: Number(compressorAmount),
+      reverse_enabled: reverseEnabled,
+      reverse_mix: Number(reverseMix)
+    };
+  };
+
+  const handleSave = async (replace) => {
+    try {
+      const payload = {
+        id: selected.id,
+        replace,
+        name: draft.name || selected.name,
+        category: draft.category || "Geral",
+        color: draft.color || selected.color || "#8B5CF6",
+        volume: Number(draft.volume ?? 1.0),
+        pitch_semitones: Number(draft.pitch_semitones ?? 0.0),
+        pitch_mode: draft.pitch_mode ?? "preserve",
+        speed: Number(draft.speed ?? 1.0),
+        normalize: !!draft.normalize,
+        fade_in_ms: Number(draft.fade_in_ms ?? 0),
+        fade_out_ms: Number(draft.fade_out_ms ?? 0),
+        repeats: Number(draft.repeats ?? 1),
+        shortcut: draft.shortcut || "",
+        block_voice: !!draft.block_voice,
+        loop: !!draft.loop,
+        playback_mode: draft.playback_mode ?? "restart",
+        stop_other_sounds: !!draft.stop_other_sounds,
+        mute_other_sounds: !!draft.mute_other_sounds,
+        output_route: draft.output_route ?? "both",
+        start: Number(startSec) || 0.0,
+        end: endSec === "" ? null : Number(endSec),
+        effects: getEffectsPayload()
+      };
+      await call("/api/sounds/save-edited", payload);
+      setToast(replace ? "Som original substituído!" : "Cópia criada com sucesso!");
+      onClose();
+    } catch (e) {
+      setToast("Erro ao salvar: " + e.message);
+    }
+  };
+
+  const isCurrentlyPlaying = state?.player?.state === "playing" && state?.player?.name?.startsWith("Previa:");
+
+  const handleStopPreview = async () => {
+    try {
+      await call("/api/sounds/stop");
+      setToast("Prévia interrompida.");
+    } catch (e) {
+      setToast("Erro ao parar prévia: " + e.message);
+    }
+  };
+
+  const handlePreview = async () => {
+    try {
+      const payload = {
+        id: selected.id,
+        name: draft.name || selected.name,
+        volume: Number(draft.volume ?? 1.0),
+        pitch_semitones: Number(draft.pitch_semitones ?? 0.0),
+        pitch_mode: draft.pitch_mode ?? "preserve",
+        speed: Number(draft.speed ?? 1.0),
+        normalize: !!draft.normalize,
+        fade_in_ms: Number(draft.fade_in_ms ?? 0),
+        fade_out_ms: Number(draft.fade_out_ms ?? 0),
+        repeats: Number(draft.repeats ?? 1),
+        block_voice: !!draft.block_voice,
+        loop: !!draft.loop,
+        output_route: "monitor",
+        start: Number(startSec) || 0.0,
+        end: endSec === "" ? null : Number(endSec),
+        effects: getEffectsPayload()
+      };
+      await call("/api/sounds/preview", payload);
+      setToast("Tocando prévia editada...");
+    } catch (e) {
+      setToast("Erro na prévia: " + e.message);
+    }
+  };
+
+  const handleRestore = () => {
+    setDraft({
+      ...selected,
+      name: selected.name,
+      category: selected.category || "Geral",
+      shortcut: selected.shortcut || "",
+      volume: 1.0,
+      pitch_semitones: 0.0,
+      speed: 1.0,
+      normalize: false,
+      loop: false,
+      fade_in_ms: 0,
+      fade_out_ms: 0,
+      repeats: 1,
+      playback_mode: "restart",
+      output_route: "both"
+    });
+    setStartSec(0);
+    setEndSec(selected.duration ? Number(selected.duration).toFixed(2) : "");
+    setDistEnabled(false);
+    setRobotEnabled(false);
+    setEchoEnabled(false);
+    setReverbEnabled(false);
+    setDelayEnabled(false);
+    setGateEnabled(false);
+    setEqEnabled(false);
+    setCompressorEnabled(false);
+    setReverseEnabled(false);
+    setToast("Configurações originais restauradas localmente!");
+  };
+
+  const handleRestoreOriginalFile = async () => {
+    if (!window.confirm("Deseja realmente restaurar este som para o arquivo original? Isso apagará todas as edições feitas no áudio.")) {
+      return;
+    }
+    try {
+      const res = await call("/api/sounds/restore-original", { id: selected.id });
+      setToast("Som restaurado para o arquivo original com sucesso!");
+      const restored = res.sounds?.find((s) => s.id === selected.id) || selected;
+      setDraft({ ...restored });
+      setStartSec(0);
+      setEndSec(restored.duration ? Number(restored.duration).toFixed(2) : "");
+      setDistEnabled(false);
+      setRobotEnabled(false);
+      setEchoEnabled(false);
+      setReverbEnabled(false);
+      setDelayEnabled(false);
+      setGateEnabled(false);
+      setEqEnabled(false);
+      setCompressorEnabled(false);
+      setReverseEnabled(false);
+    } catch (e) {
+      setToast("Erro ao restaurar arquivo original: " + e.message);
+    }
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent advanced-sound-modal"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="sound-modal-header">
+          <h3>🎚️ Editor de Som Avançado: <span style={{ color: "var(--purple)" }}>{selected.name}</span></h3>
+          <button className="close-btn" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        <div className="sound-modal-body">
+          {/* Left panel: File Identity */}
+          <div className="sound-modal-left">
+            <div className="sound-modal-cover-box" style={{ background: `color-mix(in srgb, ${selected.color || "#8B5CF6"} 15%, var(--bg-card-secondary))` }}>
+              {draft.coverUrl || selected.coverUrl ? (
+                <img src={draft.coverUrl || selected.coverUrl} alt="" />
+              ) : (
+                <MusicNotes size={42} color={selected.color || "var(--purple)"} />
+              )}
+              <div className="sound-modal-cover-overlay" onClick={chooseCover}>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>ESCOLHER CAPA</span>
+              </div>
+            </div>
+
+            <div className="labField">
+              <label>Nome do Som</label>
+              <input type="text" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            </div>
+
+            <div className="labField">
+              <label>Categoria / Pasta</label>
+              <input type="text" value={draft.category || ""} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
+            </div>
+
+            <div className="labField">
+              <label>Atalho de Teclado</label>
+              <input type="text" value={draft.shortcut || ""} onChange={(e) => setDraft({ ...draft, shortcut: e.target.value })} placeholder="Ex: Ctrl+Alt+1" />
+            </div>
+
+            <div className="labField">
+              <label>Rota de Saída</label>
+              <select value={draft.output_route || "both"} onChange={(e) => setDraft({ ...draft, output_route: e.target.value })}>
+                {soundOutputRoutes.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Right panel: Sliders, Waveform, FX */}
+          <div className="sound-modal-right">
+            {/* Professional Waveform */}
+            <WaveformVisualizer
+              soundId={selected.id}
+              path={selected.path}
+              start={startSec}
+              end={endSec}
+              duration={selected.duration || 6.0}
+              onUpdateTrim={(s, e) => { setStartSec(s); setEndSec(e); }}
+            />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
+              {/* Sliders Grid */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
+                <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
+                <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
+              </div>
+
+              {/* Behavior & Options */}
+              <div style={{ background: "var(--bg-card-secondary)", padding: 12, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>Playback:</span>
+                  <select value={draft.playback_mode || "restart"} onChange={(e) => setDraft({ ...draft, playback_mode: e.target.value })} style={{ padding: "4px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11 }}>
+                    {playbackModes.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!draft.loop} onChange={(e) => setDraft({ ...draft, loop: e.target.checked })} /> Looping Contínuo
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!draft.normalize} onChange={(e) => setDraft({ ...draft, normalize: e.target.checked })} /> Normalizar Picos
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!draft.block_voice} onChange={(e) => setDraft({ ...draft, block_voice: e.target.checked })} /> Bloquear Minha Voz
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Premium FX Grid inside Modal */}
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 14, paddingTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <Sparkle size={14} color="var(--purple)" />
+                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text-secondary)" }}>EFEITOS EMBUTIDOS NO ÁUDIO</span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <EffectSliderRow label="Reverb" enabled={reverbEnabled} value={reverbMix * 100} min={0} max={90} suffix="%" onToggle={() => setReverbEnabled(!reverbEnabled)} onChange={(v) => setReverbMix(v / 100)} />
+                  <EffectSliderRow label="Eco Curto" enabled={echoEnabled} value={echoMix * 100} min={0} max={90} suffix="%" onToggle={() => setEchoEnabled(!echoEnabled)} onChange={(v) => setEchoMix(v / 100)} />
+                  <EffectSliderRow label="Delay" enabled={delayEnabled} value={delayMix * 100} min={0} max={90} suffix="%" onToggle={() => setDelayEnabled(!delayEnabled)} onChange={(v) => setDelayMix(v / 100)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <EffectSliderRow label="Distorção (Gain Boost)" enabled={distEnabled} value={distDrive} min={1} max={100} suffix="x" onToggle={() => setDistEnabled(!distEnabled)} onChange={(v) => setDistDrive(v)} />
+                  <EffectSliderRow label="Noise Reduction" enabled={gateEnabled} value={gateThreshold * 100} min={0} max={40} suffix="%" onToggle={() => setGateEnabled(!gateEnabled)} onChange={(v) => setGateThreshold(v / 100)} />
+                  <EffectSliderRow label="Reverse Audio" enabled={reverseEnabled} value={reverseMix * 100} min={0} max={100} suffix="%" onToggle={() => setReverseEnabled(!reverseEnabled)} onChange={(v) => setReverseMix(v / 100)} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="sound-modal-footer">
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-danger" onClick={onDelete} style={{ background: "none", border: "1px solid var(--danger-soft)" }}><Trash size={14} /> Remover Som</button>
+            <button className="btn btn-ghost" onClick={handleRestore}><ArrowClockwise size={14} /> Restaurar Padrões</button>
+            {selected.hasOriginal && (
+              <button
+                className="btn btn-ghost"
+                onClick={handleRestoreOriginalFile}
+                style={{
+                  border: "1px solid var(--danger-soft)",
+                  color: "var(--danger)"
+                }}
+              >
+                <ArrowCounterClockwise size={14} /> Restaurar Original
+              </button>
+            )}
+            <button
+              className="btn btn-danger"
+              onClick={activateAllAtMax}
+              style={{
+                background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+                border: "1px solid #f87171",
+                boxShadow: "0 0 10px rgba(239, 68, 68, 0.3)",
+                color: "#fff",
+                fontWeight: 700
+              }}
+            >
+              💥 ATIVAR NO MÁXIMO
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="btn btn-primary"
+              onClick={isCurrentlyPlaying ? handleStopPreview : handlePreview}
+              style={{
+                background: isCurrentlyPlaying
+                  ? "linear-gradient(135deg, var(--danger-glow), var(--danger-soft))"
+                  : "linear-gradient(135deg, var(--danger), var(--danger-dim))",
+                border: isCurrentlyPlaying ? "1px solid var(--danger)" : "1px solid var(--cyan)",
+                color: isCurrentlyPlaying ? "var(--danger)" : "var(--cyan)",
+                textShadow: isCurrentlyPlaying ? "0 0 4px var(--danger-glow)" : "0 0 4px var(--cyan-glow)"
+              }}
+            >
+              {isCurrentlyPlaying ? (
+                <>
+                  <StopCircle size={14} weight="fill" /> Parar Prévia
+                </>
+              ) : (
+                <>
+                  <Play size={14} weight="bold" /> Ouvir Prévia
+                </>
+              )}
+            </button>
+            <button className="btn btn-ghost" onClick={() => handleSave(false)}>Salvar como Cópia</button>
+            <button className="btn btn-primary" onClick={() => handleSave(true)} style={{ background: "linear-gradient(135deg, var(--purple), var(--purple-dim))" }}>Substituir Original</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}

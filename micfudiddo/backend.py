@@ -220,6 +220,10 @@ DEFAULT_PROFILE = {
     "effects": asdict(EffectsSettings()),
     "selected": {},
     "recordSelected": [],
+    "voiceFavorites": [],
+    "soundboardFavorites": [],
+    "voiceRecents": [],
+    "activeVoiceId": "clean",
 }
 
 
@@ -271,12 +275,108 @@ class AppState:
         self.virtual_mode_active = False
         self.monitor_only_active = False
         self.status = "Backend pronto"
+        
+        self.custom_voices_path = self.library.base_dir / "custom_voices.json"
+        self.custom_categories_path = self.library.base_dir / "custom_categories.json"
+        self.theme_settings_path = self.library.base_dir / "theme_settings.json"
+        self.trash_path = self.library.base_dir / "trash.json"
+        
+        self.custom_voices = self.load_custom_voices()
+        self.custom_categories = self.load_custom_categories()
+        self.theme_settings = self.load_theme_settings()
+        self.trash_bin = self.load_trash_bin()
+
         self.refresh_devices()
         self.refresh_record_devices()
         self.apply_profile()
         self.online_cache_dir = self.library.base_dir / "online_cache"
         self.clean_online_cache()
         self.refresh_windows_capture_endpoints()
+
+    def load_custom_voices(self) -> list:
+        if not self.custom_voices_path.exists():
+            return []
+        try:
+            raw = json.loads(self.custom_voices_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict) and "voices" in raw:
+                return raw["voices"]
+            if isinstance(raw, list):
+                return raw
+        except Exception:
+            pass
+        return []
+
+    def save_custom_voices(self) -> None:
+        data = {
+            "version": "1.0",
+            "voices": self.custom_voices
+        }
+        self.custom_voices_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_custom_categories(self) -> dict:
+        default_cats = {
+            "version": "1.0",
+            "soundboard": ["Geral", "Memes", "Anime", "Jogos", "Troll", "Notificações", "Customizados", "Gravações"],
+            "voices": ["Humanos", "Robôs", "Monstros", "Anime", "Jogos", "Sci-Fi", "Memes", "Customizadas"]
+        }
+        if not self.custom_categories_path.exists():
+            return default_cats
+        try:
+            raw = json.loads(self.custom_categories_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                for key in ["soundboard", "voices"]:
+                    if key not in raw or not isinstance(raw[key], list):
+                        raw[key] = default_cats[key]
+                return raw
+        except Exception:
+            pass
+        return default_cats
+
+    def save_custom_categories(self) -> None:
+        self.custom_categories_path.write_text(json.dumps(self.custom_categories, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_theme_settings(self) -> dict:
+        default_theme = {
+            "version": "1.0",
+            "accentColor": "purple",
+            "customPalette": None,
+            "glowIntensity": 1.0,
+            "animationSpeed": 1.0,
+            "layoutDensity": "comfort",
+            "cardStyle": "premium",
+            "gridSize": "normal",
+            "reduceEffects": False,
+            "darknessLevel": "normal",
+            "savedThemes": []
+        }
+        if not self.theme_settings_path.exists():
+            return default_theme
+        try:
+            raw = json.loads(self.theme_settings_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                theme = dict(default_theme)
+                theme.update(raw)
+                return theme
+        except Exception:
+            pass
+        return default_theme
+
+    def save_theme_settings(self) -> None:
+        self.theme_settings_path.write_text(json.dumps(self.theme_settings, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def load_trash_bin(self) -> list:
+        if not self.trash_path.exists():
+            return []
+        try:
+            raw = json.loads(self.trash_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                return raw
+        except Exception:
+            pass
+        return []
+
+    def save_trash_bin(self) -> None:
+        self.trash_path.write_text(json.dumps(self.trash_bin, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def clean_online_cache(self) -> None:
         try:
@@ -410,6 +510,11 @@ class AppState:
         if isinstance(effects, dict):
             self.effects = EffectsSettings(**{**asdict(EffectsSettings()), **effects})
 
+        self.voice_favorites = list(self.profile.get("voiceFavorites", []))
+        self.soundboard_favorites = list(self.profile.get("soundboardFavorites", []))
+        self.voice_recents = list(self.profile.get("voiceRecents", []))
+        self.active_voice_id = str(self.profile.get("activeVoiceId", "clean"))
+
         selected = self.profile.get("selected", {})
         selected_names = self.profile.get("selected_names", {})
         if isinstance(selected, dict):
@@ -460,6 +565,10 @@ class AppState:
                 "monitor_hostapi": self.selected_monitor_hostapi,
             },
             "recordSelected": sorted(self.record_selected_indexes),
+            "voiceFavorites": self.voice_favorites,
+            "soundboardFavorites": self.soundboard_favorites,
+            "voiceRecents": self.voice_recents,
+            "activeVoiceId": self.active_voice_id,
         }
         self.profile_path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1081,7 +1190,16 @@ class AppState:
                 "recordings": str(self.library.base_dir / "recordings"),
                 "pcRecordings": str(self.library.base_dir / "pc_recordings"),
             },
-            "windowsCaptureEndpoints": list(self.windows_capture_endpoints)
+            "windowsCaptureEndpoints": list(self.windows_capture_endpoints),
+            "customVoices": self.custom_voices,
+            "customVoiceCategories": self.custom_categories.get("voices", []),
+            "customSoundCategories": self.custom_categories.get("soundboard", []),
+            "themeSettings": self.theme_settings,
+            "trash": self.trash_bin,
+            "voiceFavorites": self.voice_favorites,
+            "soundboardFavorites": self.soundboard_favorites,
+            "voiceRecents": self.voice_recents,
+            "activeVoiceId": self.active_voice_id,
         }
 
 def _optional_int(value, fallback: int | None) -> int | None:
@@ -1738,17 +1856,26 @@ class Handler(BaseHTTPRequestHandler):
             removed = STATE.library.detach(str(data["id"]))
             if removed:
                 STATE.engine.stop_sound(sound_id=str(data["id"]))
-                STATE.status = "Som removido da biblioteca"
+                STATE.trash_bin.append(removed)
+                STATE.save_trash_bin()
+                STATE.status = "Som movido para a Lixeira"
             return {"removed": [removed] if removed else [], **STATE.snapshot()}
         if path == "/api/sounds/delete-batch":
             ids = [str(value) for value in data.get("ids", [])]
             removed = STATE.library.detach_many(ids)
             for item_id in ids:
                 STATE.engine.stop_sound(sound_id=item_id)
-            STATE.status = f"{len(removed)} som(ns) removido(s) da biblioteca"
+            if removed:
+                STATE.trash_bin.extend(removed)
+                STATE.save_trash_bin()
+                STATE.status = f"{len(removed)} som(ns) movido(s) para a Lixeira"
             return {"removed": removed, **STATE.snapshot()}
         if path == "/api/sounds/restore":
-            restored = STATE.library.restore_items(data.get("items", []))
+            items_to_restore = data.get("items", [])
+            restored = STATE.library.restore_items(items_to_restore)
+            restored_ids = {item.id for item in restored}
+            STATE.trash_bin = [t for t in STATE.trash_bin if t.get("id") not in restored_ids]
+            STATE.save_trash_bin()
             STATE.status = f"{len(restored)} som(ns) restaurado(s)"
             return {"restoredIds": [item.id for item in restored], **STATE.snapshot()}
         if path == "/api/sounds/cover":
@@ -1914,6 +2041,222 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/record/combo/stop":
             result = STATE.stop_combo_recording()
             return {**result, **STATE.snapshot()}
+        if path == "/api/custom-voices/save":
+            voice = data.get("voice")
+            if not voice or not isinstance(voice, dict):
+                raise RuntimeError("Dados de voz inválidos.")
+            voice_id = voice.get("id")
+            if not voice_id:
+                voice_id = f"custom_{int(time.time() * 1000)}"
+                voice["id"] = voice_id
+            
+            idx = -1
+            for i, v in enumerate(STATE.custom_voices):
+                if v.get("id") == voice_id:
+                    idx = i
+                    break
+            if idx != -1:
+                STATE.custom_voices[idx] = voice
+            else:
+                STATE.custom_voices.append(voice)
+            STATE.save_custom_voices()
+            STATE.status = f"Voz '{voice.get('label')}' salva com sucesso."
+            return STATE.snapshot()
+
+        if path == "/api/custom-voices/delete":
+            voice_id = data.get("id")
+            if not voice_id:
+                raise RuntimeError("ID da voz ausente.")
+            initial_len = len(STATE.custom_voices)
+            STATE.custom_voices = [v for v in STATE.custom_voices if v.get("id") != voice_id]
+            if len(STATE.custom_voices) < initial_len:
+                STATE.voice_favorites = [f for f in STATE.voice_favorites if f != voice_id]
+                STATE.voice_recents = [r for r in STATE.voice_recents if r != voice_id]
+                if STATE.active_voice_id == voice_id:
+                    STATE.active_voice_id = "clean"
+                STATE.save_custom_voices()
+                STATE.save_profile()
+                STATE.status = "Voz customizada removida."
+            else:
+                STATE.status = "Voz não encontrada."
+            return STATE.snapshot()
+
+        if path == "/api/custom-categories/save":
+            cat_type = data.get("type")
+            categories = data.get("categories")
+            if cat_type not in ("voices", "soundboard") or not isinstance(categories, list):
+                raise RuntimeError("Dados inválidos.")
+            STATE.custom_categories[cat_type] = [str(c).strip() for c in categories if str(c).strip()]
+            STATE.save_custom_categories()
+            STATE.status = "Categorias atualizadas."
+            return STATE.snapshot()
+
+        if path == "/api/custom-categories/delete":
+            cat_type = data.get("type")
+            category = data.get("category")
+            destination = data.get("destination", "Geral")
+            if cat_type not in ("voices", "soundboard") or not category:
+                raise RuntimeError("Dados inválidos.")
+            
+            if category in STATE.custom_categories.get(cat_type, []):
+                STATE.custom_categories[cat_type].remove(category)
+                STATE.save_custom_categories()
+            
+            if cat_type == "soundboard":
+                modified = 0
+                for item in STATE.library.items:
+                    if item.category == category:
+                        item.category = destination
+                        STATE.library.update(item)
+                        modified += 1
+                if modified:
+                    STATE.library.save()
+                STATE.status = f"Categoria '{category}' removida. {modified} som(ns) movido(s) para '{destination}'."
+            else:
+                modified = 0
+                for voice in STATE.custom_voices:
+                    if voice.get("category") == category:
+                        voice["category"] = "Customizadas"
+                        modified += 1
+                if modified:
+                    STATE.save_custom_voices()
+                STATE.status = f"Categoria de voz '{category}' removida. {modified} voz(es) movida(s) para 'Customizadas'."
+            return STATE.snapshot()
+
+        if path == "/api/theme-settings/save":
+            settings = data.get("settings")
+            if not isinstance(settings, dict):
+                raise RuntimeError("Configurações inválidas.")
+            STATE.theme_settings.update(settings)
+            STATE.save_theme_settings()
+            STATE.status = "Tema visual atualizado."
+            return STATE.snapshot()
+
+        if path == "/api/migration/import":
+            custom_v = data.get("customVoices")
+            voice_fav = data.get("voiceFavorites")
+            sound_fav = data.get("soundboardFavorites")
+            custom_cats = data.get("customCategories")
+            custom_v_cats = data.get("customVoiceCategories")
+            theme_s = data.get("themeSettings")
+            
+            if isinstance(custom_v, list):
+                existing_ids = {v.get("id") for v in STATE.custom_voices}
+                for cv in custom_v:
+                    if isinstance(cv, dict) and cv.get("id") and cv.get("id") not in existing_ids:
+                        STATE.custom_voices.append(cv)
+                STATE.save_custom_voices()
+                
+            if isinstance(custom_cats, list):
+                for c in custom_cats:
+                    if c not in STATE.custom_categories["soundboard"]:
+                        STATE.custom_categories["soundboard"].append(c)
+            if isinstance(custom_v_cats, list):
+                for c in custom_v_cats:
+                    if c not in STATE.custom_categories["voices"]:
+                        STATE.custom_categories["voices"].append(c)
+            STATE.save_custom_categories()
+            
+            if isinstance(theme_s, dict):
+                STATE.theme_settings.update(theme_s)
+                STATE.save_theme_settings()
+                
+            if isinstance(voice_fav, list):
+                STATE.voice_favorites = list(set(STATE.voice_favorites + voice_fav))
+            if isinstance(sound_fav, list):
+                STATE.soundboard_favorites = list(set(STATE.soundboard_favorites + sound_fav))
+            STATE.save_profile()
+            
+            STATE.status = "Migração de dados concluída!"
+            return STATE.snapshot()
+
+        if path == "/api/sounds/move-batch":
+            ids = data.get("ids", [])
+            category = data.get("category", "Geral")
+            if not isinstance(ids, list):
+                raise RuntimeError("IDs inválidos.")
+            modified = 0
+            for item_id in ids:
+                item = STATE.library.by_id(item_id)
+                if item:
+                    item.category = category
+                    STATE.library.update(item)
+                    modified += 1
+            if modified:
+                STATE.library.save()
+            STATE.status = f"{modified} som(ns) movidos para '{category}'."
+            return STATE.snapshot()
+
+        if path == "/api/sounds/deduplicate":
+            seen_paths = {}
+            to_remove = []
+            for item in STATE.library.items:
+                path_str = str(item.path)
+                if path_str in seen_paths:
+                    to_remove.append(item.id)
+                else:
+                    seen_paths[path_str] = item.id
+            if to_remove:
+                removed = STATE.library.detach_many(to_remove)
+                STATE.status = f"Removidos {len(removed)} sons duplicados."
+            else:
+                STATE.status = "Nenhum som duplicado encontrado."
+            return STATE.snapshot()
+
+        if path == "/api/sounds/empty-trash":
+            purged = 0
+            for item in STATE.trash_bin:
+                try:
+                    Path(item.get("path")).unlink(missing_ok=True)
+                    purged += 1
+                except Exception:
+                    pass
+                try:
+                    Path(item.get("cover_path")).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            STATE.trash_bin = []
+            STATE.save_trash_bin()
+            STATE.status = f"Lixeira esvaziada! {purged} arquivo(s) físicos apagados."
+            return STATE.snapshot()
+
+        if path == "/api/backup/export":
+            import zipfile
+            import tempfile
+            temp_zip = Path(tempfile.gettempdir()) / f"micfudiddo_backup_{int(time.time())}.zip"
+            files_to_zip = [
+                "profile.json", "app_settings.json", "soundboard.json", 
+                "settings.json", "custom_voices.json", "custom_categories.json", 
+                "theme_settings.json", "trash.json"
+            ]
+            with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for filename in files_to_zip:
+                    file_path = STATE.library.base_dir / filename
+                    if file_path.exists():
+                        zipf.write(file_path, arcname=filename)
+            STATE.status = f"Backup gerado em {temp_zip}."
+            return {"backupPath": str(temp_zip)}
+
+        if path == "/api/backup/import":
+            backup_path = data.get("backupPath")
+            if not backup_path or not Path(backup_path).exists():
+                raise RuntimeError("Caminho do backup inválido.")
+            import zipfile
+            STATE.stop()
+            with zipfile.ZipFile(backup_path, 'r') as zipf:
+                zipf.extractall(STATE.library.base_dir)
+            STATE.settings = STATE.load_app_settings()
+            STATE.profile = STATE.load_profile()
+            STATE.custom_voices = STATE.load_custom_voices()
+            STATE.custom_categories = STATE.load_custom_categories()
+            STATE.theme_settings = STATE.load_theme_settings()
+            STATE.trash_bin = STATE.load_trash_bin()
+            STATE.library.load_settings()
+            STATE.library.load()
+            STATE.apply_profile()
+            STATE.status = "Configurações restauradas com sucesso do backup!"
+            return STATE.snapshot()
+
         if path == "/api/shutdown":
             STATE.deactivate_virtual()
             threading.Thread(target=self.server.shutdown, daemon=True).start()

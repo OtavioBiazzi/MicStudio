@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   closeToTray: () => ipcRenderer.invoke("window:close-to-tray"),
   closeWithChoice: () => ipcRenderer.invoke("window:close-choice"),
   quitApp: () => ipcRenderer.invoke("window:quit-app"),
+  openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
+  openSoundSettings: () => ipcRenderer.invoke("system:open-sound-settings"),
+  openSoundControlPanel: () => ipcRenderer.invoke("system:open-mmsys"),
+  getShortcutConflicts: () => ipcRenderer.invoke("shortcuts:get-conflicts"),
   onCloseChoiceRequested: (callback) => {
     const listener = () => callback?.();
     ipcRenderer.on("window:close-choice-requested", listener);

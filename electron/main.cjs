@@ -15,6 +15,8 @@ let quitting = false;
 let shortcutTimer;
 let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
+let STATE_BACKEND_RUNNING_EXTERNALLY = false;
+let shortcutConflicts = new Map();
 
 function getIconPath() {
   if (isDev) {
@@ -44,13 +46,72 @@ function pythonPath() {
   return path.join(ROOT, ".venv", "Scripts", "python.exe");
 }
 
-function startBackend() {
+const net = require("net");
+const http = require("http");
+
+function checkPortOccupied(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+      .once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      })
+      .once('listening', () => {
+        server.close();
+        resolve(false);
+      })
+      .listen(port, "127.0.0.1");
+  });
+}
+
+function pingHealth(port) {
+  return new Promise((resolve) => {
+    const req = http.request({
+      host: "127.0.0.1",
+      port: port,
+      path: "/api/health",
+      method: "GET",
+      timeout: 1000
+    }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => body += chunk);
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(body);
+          resolve(parsed && parsed.ok === true);
+        } catch (_) {
+          resolve(false);
+        }
+      });
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
+async function startBackend() {
   if (backend) return;
-  try {
-    const { execSync } = require("child_process");
-    execSync("taskkill /f /im MicFudiddoBackend.exe", { stdio: "ignore" });
-  } catch (e) {
-    // Ignore error if process not found
+  
+  const port = 38717;
+  const occupied = await checkPortOccupied(port);
+  if (occupied) {
+    const healthy = await pingHealth(port);
+    if (healthy) {
+      console.log("Backend já está rodando e saudável na porta " + port + ". Reutilizando...");
+      STATE_BACKEND_RUNNING_EXTERNALLY = true;
+      return;
+    } else {
+      dialog.showErrorBox(
+        "Conflito de Porta",
+        `A porta do servidor de áudio (${port}) já está em uso por outro programa.\n\nPor favor, feche o outro programa e tente abrir o MicFudiddo Studio novamente.`
+      );
+      app.quit();
+      process.exit(0);
+    }
   }
 
   // Configurar logs do backend em arquivo
@@ -78,6 +139,22 @@ function startBackend() {
     backend.stderr.pipe(logStream);
     backend.on("error", (err) => {
       console.error("Erro ao iniciar o backend:", err);
+    });
+    backend.on("exit", (code) => {
+      if (code !== 0 && !quitting && !STATE_BACKEND_RUNNING_EXTERNALLY) {
+        let logExcerpt = "";
+        try {
+          if (fs.existsSync(logFile)) {
+            const lines = fs.readFileSync(logFile, "utf8").split("\n");
+            logExcerpt = lines.slice(-15).join("\n");
+          }
+        } catch (_) {}
+        
+        dialog.showErrorBox(
+          "Falha no Servidor de Áudio",
+          `O servidor de áudio (backend) fechou inesperadamente com o código ${code}.\n\nLogs de Erro:\n${logExcerpt || "Sem logs disponíveis."}\n\nSe o erro persistir, exporte o diagnóstico nas Configurações.`
+        );
+      }
     });
   }
 }
@@ -114,7 +191,10 @@ async function refreshSoundHotkeys() {
     }
 
     for (const [accelerator, soundId] of nextSounds.entries()) {
-      if (registeredSoundShortcuts.has(accelerator)) continue;
+      if (registeredSoundShortcuts.has(accelerator)) {
+        shortcutConflicts.delete(accelerator);
+        continue;
+      }
       try {
         const ok = globalShortcut.register(accelerator, () => {
           fetch(`${API}/api/sounds/play`, {
@@ -123,8 +203,16 @@ async function refreshSoundHotkeys() {
             body: JSON.stringify({ id: soundId })
           }).catch(() => {});
         });
-        if (ok) registeredSoundShortcuts.set(accelerator, soundId);
-      } catch (_) {}
+        if (ok) {
+          registeredSoundShortcuts.set(accelerator, soundId);
+          shortcutConflicts.delete(accelerator);
+        } else {
+          const sound = (data.sounds || []).find(s => s.id === soundId);
+          shortcutConflicts.set(accelerator, `Som: ${sound ? sound.name : 'Desconhecido'}`);
+        }
+      } catch (_) {
+        shortcutConflicts.set(accelerator, "Erro de Registro");
+      }
     }
 
     // 2. Refresh Global App Hotkeys
@@ -138,6 +226,16 @@ async function refreshSoundHotkeys() {
       shortcutRecordVoice: "record_voice",
       shortcutRecordPC: "record_pc",
       shortcutRecordCombo: "record_combo"
+    };
+
+    const GLOBAL_SHORTCUT_LABELS = {
+      shortcutMuteMic: "Mudar Mute Mic",
+      shortcutToggleBypass: "Modo Bypass",
+      shortcutToggleSoundboard: "Mute Soundboard",
+      shortcutToggleVoiceChanger: "Ativar Voice Changer",
+      shortcutRecordVoice: "Gravar Própria Voz",
+      shortcutRecordPC: "Gravar Áudio PC",
+      shortcutRecordCombo: "Gravar Combo"
     };
 
     for (const [settingsKey, actionName] of Object.entries(GLOBAL_SHORTCUT_MAP)) {
@@ -155,15 +253,26 @@ async function refreshSoundHotkeys() {
     }
 
     for (const [accelerator, actionName] of nextGlobals.entries()) {
-      if (registeredGlobalShortcuts.has(accelerator)) continue;
+      if (registeredGlobalShortcuts.has(accelerator)) {
+        shortcutConflicts.delete(accelerator);
+        continue;
+      }
       try {
         const ok = globalShortcut.register(accelerator, () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send("hotkey:trigger", actionName);
           }
         });
-        if (ok) registeredGlobalShortcuts.set(accelerator, actionName);
-      } catch (_) {}
+        if (ok) {
+          registeredGlobalShortcuts.set(accelerator, actionName);
+          shortcutConflicts.delete(accelerator);
+        } else {
+          const settingsKey = Object.keys(GLOBAL_SHORTCUT_MAP).find(k => GLOBAL_SHORTCUT_MAP[k] === actionName);
+          shortcutConflicts.set(accelerator, GLOBAL_SHORTCUT_LABELS[settingsKey] || actionName);
+        }
+      } catch (_) {
+        shortcutConflicts.set(accelerator, "Erro de Registro");
+      }
     }
   } catch (_) {}
 }
@@ -241,6 +350,10 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       webSecurity: false
     }
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
   });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
@@ -347,8 +460,40 @@ ipcMain.handle("window:quit-app", () => {
   return quitAppFully();
 });
 
-app.whenReady().then(() => {
-  startBackend();
+ipcMain.handle("shell:open-external", async (_event, url) => {
+  if (url) {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch (_) {}
+  }
+  return false;
+});
+
+ipcMain.handle("system:open-sound-settings", () => {
+  try {
+    require("child_process").exec("start ms-settings:sound");
+    return true;
+  } catch (_) {
+    return false;
+  }
+});
+
+ipcMain.handle("system:open-mmsys", () => {
+  try {
+    require("child_process").exec("control mmsys.cpl");
+    return true;
+  } catch (_) {
+    return false;
+  }
+});
+
+ipcMain.handle("shortcuts:get-conflicts", () => {
+  return Object.fromEntries(shortcutConflicts);
+});
+
+app.whenReady().then(async () => {
+  await startBackend();
   createWindow();
   createTray();
   startSoundHotkeys();

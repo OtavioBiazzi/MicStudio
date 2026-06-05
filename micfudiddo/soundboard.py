@@ -68,6 +68,7 @@ class SoundItem:
     cover_path: str = ""
     created_at: float = field(default_factory=time.time)
     effects: dict = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -86,6 +87,7 @@ class SoundDefaults:
     stop_other_sounds: bool = False
     mute_other_sounds: bool = False
     output_route: str = "both"
+    tags: list[str] = field(default_factory=list)
 
 
 class SoundLibrary:
@@ -600,6 +602,7 @@ class SoundLibrary:
         item.shortcut = str(item.shortcut or "").strip()
         item.block_voice = bool(item.block_voice)
         item.effects = dict(item.effects or {})
+        item.tags = [str(t).strip() for t in (item.tags or []) if str(t).strip()]
         return before != asdict(item)
 
     def _sanitize_defaults(self) -> None:
@@ -617,6 +620,7 @@ class SoundLibrary:
         self.defaults.stop_other_sounds = bool(self.defaults.stop_other_sounds)
         self.defaults.mute_other_sounds = bool(self.defaults.mute_other_sounds)
         self.defaults.output_route = _sanitize_output_route(self.defaults.output_route)
+        self.defaults.tags = [str(t).strip() for t in (self.defaults.tags or []) if str(t).strip()]
 
 
 def _bundled_ffmpeg() -> str | None:

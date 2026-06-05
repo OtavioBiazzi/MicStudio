@@ -1249,6 +1249,12 @@ class Handler(BaseHTTPRequestHandler):
                 'quiet': True,
                 'no_warnings': True,
                 'simulate': True,
+                'cookiesfrombrowser': ('chrome', 'edge', 'firefox', 'brave', 'opera', 'safari'),
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'web']
+                    }
+                }
             }
             try:
                 with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
@@ -1292,6 +1298,12 @@ class Handler(BaseHTTPRequestHandler):
                     'quiet': True,
                     'no_warnings': True,
                     'progress_hooks': [hook],
+                    'cookiesfrombrowser': ('chrome', 'edge', 'firefox', 'brave', 'opera', 'safari'),
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web']
+                        }
+                    }
                 }
                 
                 try:
@@ -1710,9 +1722,13 @@ class Handler(BaseHTTPRequestHandler):
                                 max_vol = float(STATE.settings.get("maxSoundVolume", "1.0"))
                                 target_volume = min(float(data["volume"]), max_vol)
                                 init_vol = getattr(pb, "initial_volume", 1.0) or 1.0
+                                if abs(init_vol) < 1e-4:
+                                    init_vol = 1.0
                                 pb.volume_override = target_volume / init_vol
                             if "speed" in data:
                                 init_speed = getattr(pb, "initial_speed", 1.0) or 1.0
+                                if abs(init_speed) < 1e-4:
+                                    init_speed = 1.0
                                 pb.speed_override = float(data["speed"]) / init_speed
             item.normalize = bool(item.normalize)
             item.block_voice = bool(item.block_voice)

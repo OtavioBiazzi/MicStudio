@@ -628,7 +628,6 @@ function controlsForPreset(controls, preset) {
       ...controls,
       gain: 1.0,
       pitch: 0.0,
-      monitorVolume: 1.0,
       effects: makeDisabledEffects()
     };
   }
@@ -1191,7 +1190,6 @@ function App() {
       updateControls({
         gain: 1.0,
         pitch: 0.0,
-        monitorVolume: 1.0,
         effects: {
           ...makeDisabledEffects(),
           output_volume: 1.0,

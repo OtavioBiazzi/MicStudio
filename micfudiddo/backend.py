@@ -243,8 +243,14 @@ class AppState:
         self.youtube_download_cancelled = False
         self.youtube_download_thread = None
         self.selected_input: int | None = None
+        self.selected_input_name: str | None = None
+        self.selected_input_hostapi: str | None = None
         self.selected_output: int | None = None
+        self.selected_output_name: str | None = None
+        self.selected_output_hostapi: str | None = None
         self.selected_monitor: int | None = None
+        self.selected_monitor_name: str | None = None
+        self.selected_monitor_hostapi: str | None = None
         self.gain = 1.0
         self.pitch = 0.0
         self.effects = EffectsSettings()
@@ -359,6 +365,40 @@ class AppState:
                     profile[key] = raw[key]
         return profile
 
+    def find_device_index(self, name: str | None, hostapi: str | None, direction: str) -> int | None:
+        if name is None:
+            return None
+        # Try to match both name and hostapi
+        for device in self.devices:
+            if direction == "input" and device.max_input_channels <= 0:
+                continue
+            if direction == "output" and device.max_output_channels <= 0:
+                continue
+            if device.name == name and (hostapi is None or device.hostapi == hostapi):
+                return device.index
+        # Fallback to name only
+        for device in self.devices:
+            if direction == "input" and device.max_input_channels <= 0:
+                continue
+            if direction == "output" and device.max_output_channels <= 0:
+                continue
+            if device.name == name:
+                return device.index
+        return None
+
+    def update_device_names(self) -> None:
+        input_dev = self.device_by_index(self.selected_input)
+        self.selected_input_name = input_dev.name if input_dev else None
+        self.selected_input_hostapi = input_dev.hostapi if input_dev else None
+
+        output_dev = self.device_by_index(self.selected_output)
+        self.selected_output_name = output_dev.name if output_dev else None
+        self.selected_output_hostapi = output_dev.hostapi if output_dev else None
+
+        monitor_dev = self.device_by_index(self.selected_monitor)
+        self.selected_monitor_name = monitor_dev.name if monitor_dev else None
+        self.selected_monitor_hostapi = monitor_dev.hostapi if monitor_dev else None
+
     def apply_profile(self) -> None:
         self.gain = max(0.0, float(self.profile.get("gain", 1.0)))
         self.pitch = float(self.profile.get("pitch", 0.0))
@@ -371,10 +411,25 @@ class AppState:
             self.effects = EffectsSettings(**{**asdict(EffectsSettings()), **effects})
 
         selected = self.profile.get("selected", {})
+        selected_names = self.profile.get("selected_names", {})
         if isinstance(selected, dict):
-            self.selected_input = _existing_device_index(self.devices, selected.get("input"), self.selected_input)
-            self.selected_output = _existing_device_index(self.devices, selected.get("output"), self.selected_output)
-            self.selected_monitor = _existing_device_index(self.devices, selected.get("monitor"), self.selected_monitor)
+            # Tenta resolver por nome primeiro
+            input_idx = self.find_device_index(selected_names.get("input"), selected_names.get("input_hostapi"), "input")
+            if input_idx is None:
+                input_idx = _existing_device_index(self.devices, selected.get("input"), self.selected_input)
+            self.selected_input = input_idx
+
+            output_idx = self.find_device_index(selected_names.get("output"), selected_names.get("output_hostapi"), "output")
+            if output_idx is None:
+                output_idx = _existing_device_index(self.devices, selected.get("output"), self.selected_output)
+            self.selected_output = output_idx
+
+            monitor_idx = self.find_device_index(selected_names.get("monitor"), selected_names.get("monitor_hostapi"), "output")
+            if monitor_idx is None:
+                monitor_idx = _existing_device_index(self.devices, selected.get("monitor"), self.selected_monitor)
+            self.selected_monitor = monitor_idx
+
+        self.update_device_names()
 
         selected_records = self.profile.get("recordSelected", [])
         try:
@@ -396,18 +451,44 @@ class AppState:
                 "output": self.selected_output,
                 "monitor": self.selected_monitor,
             },
+            "selected_names": {
+                "input": self.selected_input_name,
+                "input_hostapi": self.selected_input_hostapi,
+                "output": self.selected_output_name,
+                "output_hostapi": self.selected_output_hostapi,
+                "monitor": self.selected_monitor_name,
+                "monitor_hostapi": self.selected_monitor_hostapi,
+            },
             "recordSelected": sorted(self.record_selected_indexes),
         }
         self.profile_path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def refresh_devices(self) -> None:
         self.devices = query_audio_devices()
-        input_device = choose_input_device(self.devices)
-        output_device = choose_virtual_output_device(self.devices)
-        monitor_device = choose_monitor_output_device(self.devices, output_device.index if output_device else None)
-        self.selected_input = input_device.index if input_device else None
-        self.selected_output = output_device.index if output_device else None
-        self.selected_monitor = monitor_device.index if monitor_device else None
+        
+        # Tenta resolver pelos nomes salvos
+        input_idx = self.find_device_index(self.selected_input_name, self.selected_input_hostapi, "input")
+        if input_idx is not None:
+            self.selected_input = input_idx
+        elif not self.device_by_index(self.selected_input):
+            input_device = choose_input_device(self.devices)
+            self.selected_input = input_device.index if input_device else None
+
+        output_idx = self.find_device_index(self.selected_output_name, self.selected_output_hostapi, "output")
+        if output_idx is not None:
+            self.selected_output = output_idx
+        elif not self.device_by_index(self.selected_output):
+            output_device = choose_virtual_output_device(self.devices)
+            self.selected_output = output_device.index if output_device else None
+
+        monitor_idx = self.find_device_index(self.selected_monitor_name, self.selected_monitor_hostapi, "output")
+        if monitor_idx is not None:
+            self.selected_monitor = monitor_idx
+        elif not self.device_by_index(self.selected_monitor):
+            monitor_device = choose_monitor_output_device(self.devices, self.selected_output)
+            self.selected_monitor = monitor_device.index if monitor_device else None
+
+        self.update_device_names()
         self.refresh_windows_capture_endpoints()
 
     def refresh_record_devices(self) -> None:
@@ -1133,6 +1214,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.selected_output = _optional_int(selected.get("output"), STATE.selected_output)
             if "monitor" in selected:
                 STATE.selected_monitor = _optional_int(selected.get("monitor"), STATE.selected_monitor)
+            STATE.update_device_names()
             STATE.save_profile()
             if was_running:
                 try:
@@ -1245,23 +1327,31 @@ class Handler(BaseHTTPRequestHandler):
             
             import yt_dlp
             # 1. Quick verification: check if video exists
-            ydl_opts_verify = {
-                'quiet': True,
-                'no_warnings': True,
-                'simulate': True,
-                'cookiesfrombrowser': ('chrome', 'edge', 'firefox', 'brave', 'opera', 'safari'),
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'web']
+            browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'safari', None]
+            info = None
+            last_err = None
+            for browser in browsers:
+                ydl_opts_verify = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'simulate': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web']
+                        }
                     }
                 }
-            }
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
-                    ydl.extract_info(youtube_url, download=False)
-            except Exception as e:
-                # Video doesn't exist or URL is invalid
-                raise RuntimeError(f"Video do YouTube invalido ou nao encontrado: {str(e)}")
+                if browser:
+                    ydl_opts_verify['cookiesfrombrowser'] = (browser,)
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
+                        info = ydl.extract_info(youtube_url, download=False)
+                    break
+                except Exception as e:
+                    last_err = e
+            
+            if not info:
+                raise RuntimeError(f"Video do YouTube invalido ou nao encontrado: {str(last_err)}")
             
             STATE.youtube_download_cancelled = False
             
@@ -1286,29 +1376,46 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Baixando do YouTube: {percent}"
                             
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'outtmpl': outtmpl,
-                    'ffmpeg_location': ffmpeg_path,
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '192',
-                    }],
-                    'quiet': True,
-                    'no_warnings': True,
-                    'progress_hooks': [hook],
-                    'cookiesfrombrowser': ('chrome', 'edge', 'firefox', 'brave', 'opera', 'safari'),
-                    'extractor_args': {
-                        'youtube': {
-                            'player_client': ['android', 'web']
+                info = None
+                last_err = None
+                for browser in browsers:
+                    if STATE.youtube_download_cancelled:
+                        break
+                    ydl_opts = {
+                        'format': 'bestaudio/best',
+                        'outtmpl': outtmpl,
+                        'ffmpeg_location': ffmpeg_path,
+                        'postprocessors': [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': '192',
+                        }],
+                        'quiet': True,
+                        'no_warnings': True,
+                        'progress_hooks': [hook],
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['android', 'web']
+                            }
                         }
                     }
-                }
+                    if browser:
+                        ydl_opts['cookiesfrombrowser'] = (browser,)
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(youtube_url, download=True)
+                        break
+                    except Exception as e:
+                        if "CANCELLED" in str(e) or STATE.youtube_download_cancelled:
+                            break
+                        last_err = e
                 
                 try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(youtube_url, download=True)
+                    if STATE.youtube_download_cancelled:
+                        raise RuntimeError("CANCELLED")
+                    if not info:
+                        raise last_err or RuntimeError("Falha ao extrair audio do YouTube.")
+                    
                     mp3_path = Path(temp_dir) / f"yt_{temp_id}.mp3"
                     if not mp3_path.exists():
                         raise RuntimeError("Falha ao extrair audio do YouTube.")

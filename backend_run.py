@@ -1,4 +1,6 @@
 import sys
+import imageio_ffmpeg
+import yt_dlp
 
 if sys.stdout is None:
     class DummyWriter:

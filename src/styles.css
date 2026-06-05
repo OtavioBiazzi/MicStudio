@@ -649,7 +649,10 @@ html,body,#root {
   border-radius:var(--radius-lg);
   padding:0;
   overflow-y:auto;
-  position:relative
+  position:sticky;
+  top:10px;
+  max-height:calc(100vh - 180px);
+  z-index:10
 }
 
 .voiceSidePanel .panelClose {

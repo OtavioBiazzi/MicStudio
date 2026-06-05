@@ -909,6 +909,7 @@ function App() {
   const [bypassActive, setBypassActive] = useState(false);
   const [lastActivePresetId, setLastActivePresetId] = useState(null);
   const [savedCustomControls, setSavedCustomControls] = useState(null);
+  const [forcedPresetId, setForcedPresetId] = useState(null);
 
   const [lastNonZeroGain, setLastNonZeroGain] = useState(() => {
     try {
@@ -1125,6 +1126,15 @@ function App() {
       setBypassActive(false);
     }
 
+    // Salvar configurações de Voz Personalizada se ativo
+    if (forcedPresetId === "personalizado") {
+      localStorage.setItem("personalizado_settings", JSON.stringify({
+        gain: controls.gain,
+        pitch: controls.pitch,
+        effects: controls.effects
+      }));
+    }
+
     call("/api/controls", { controls }).catch((e) => {
       controlsOptimisticRef.current = null;
       setToast(e.message);
@@ -1147,6 +1157,7 @@ function App() {
 
   const applyVoicePreset = (voice) => {
     if (!state || !voice) return;
+    setForcedPresetId(voice.id);
     if (voice.id !== "clean") {
       setBypassActive(false);
       setLastActivePresetId(voice.id);
@@ -1154,7 +1165,30 @@ function App() {
     } else {
       setBypassActive(true);
     }
-    updateControls(controlsForPreset(state.controls, voice));
+
+    let targetControls;
+    if (voice.id === "personalizado") {
+      const saved = localStorage.getItem("personalizado_settings");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          targetControls = {
+            ...state.controls,
+            gain: parsed.gain,
+            pitch: parsed.pitch,
+            effects: { ...state.controls.effects, ...parsed.effects }
+          };
+        } catch (e) {
+          targetControls = controlsForPreset(state.controls, voice);
+        }
+      } else {
+        targetControls = controlsForPreset(state.controls, voice);
+      }
+    } else {
+      targetControls = controlsForPreset(state.controls, voice);
+    }
+
+    updateControls(targetControls);
   };
 
   const toggleFavorite = (voiceId) => {
@@ -1169,8 +1203,26 @@ function App() {
 
   const activePreset = useMemo(() => {
     const all = [...voicePresets, ...customVoices];
-    return all.find((p) => isVoicePresetActive(state?.controls, p)) || null;
-  }, [state?.controls, customVoices]);
+    if (forcedPresetId) {
+      const forced = all.find(p => p.id === forcedPresetId);
+      if (forced) {
+        // Se for o preset "personalizado" ou uma voz customizada, permanece ativo independentemente dos controles
+        if (forced.id === "personalizado" || customVoices.some(cv => cv.id === forced.id)) {
+          return forced;
+        }
+        // Para presets de fábrica, só permanece ativo se os controles coincidirem
+        if (isVoicePresetActive(state?.controls, forced)) {
+          return forced;
+        }
+      }
+    }
+    // Fallback: tenta encontrar qualquer preset de fábrica que coincida
+    const matched = all.find((p) => p.id !== "personalizado" && isVoicePresetActive(state?.controls, p));
+    if (matched) return matched;
+    
+    // Se nenhum preset de fábrica coincide, retorna o preset "personalizado"
+    return all.find(p => p.id === "personalizado") || null;
+  }, [state?.controls, customVoices, forcedPresetId]);
 
   function toggleBypass() {
     if (!state) return;
@@ -1415,6 +1467,7 @@ function App() {
                     customVoices={customVoices} setPage={setPage}
                     promptState={promptState} setPromptState={setPromptState}
                     customVoiceCategories={customVoiceCategories} setCustomVoiceCategories={setCustomVoiceCategories}
+                    activePreset={activePreset}
                   />
                 </ErrorBoundary>
               )}
@@ -1451,6 +1504,7 @@ function App() {
                     updateControls={updateControls} applyVoicePreset={applyVoicePreset}
                     selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice}
                     setSelectedSound={setSelectedSound} setPage={setPage} customVoices={customVoices}
+                    activePreset={activePreset}
                   />
                 </ErrorBoundary>
               )}
@@ -1495,6 +1549,7 @@ function App() {
         soundboardFavorites={soundboardFavorites}
         dockMinimized={dockMinimized}
         setDockMinimized={setDockMinimized}
+        forcedPresetId={forcedPresetId}
       />
 
       {/* Modals */}
@@ -2189,7 +2244,7 @@ function ManageAccountModal({ onClose, profileName, setProfileName, profileSub, 
    GLOBAL FLOATING DOCK
    ============================================================ */
 
-function FloatingDock({ state, call, updateControls, toggleMute, activePreset, processingActive, lastPlayedSound, bypassActive, setBypassActive, toggleBypass, setPage, soundboardFavorites, dockMinimized, setDockMinimized, setSelectedSound }) {
+function FloatingDock({ state, call, updateControls, toggleMute, activePreset, processingActive, lastPlayedSound, bypassActive, setBypassActive, toggleBypass, setPage, soundboardFavorites, dockMinimized, setDockMinimized, setSelectedSound, forcedPresetId }) {
   const togglePath = processingActive || state.virtualMode ? "/api/stop" : "/api/virtual/start";
   const [showMenu, setShowMenu] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
@@ -2330,7 +2385,10 @@ function FloatingDock({ state, call, updateControls, toggleMute, activePreset, p
             <input
               type="range" min={0} max={200} step={1}
               value={Math.round((state.controls?.monitorVolume ?? 1) * 100)}
-              onChange={(e) => updateControls({ monitorVolume: Number(e.target.value) / 100 })}
+              onChange={(e) => {
+                const vol = Number(e.target.value) / 100;
+                updateControls({ monitorVolume: vol, soundboardMonitorVolume: vol });
+              }}
               style={{ width: 80 }}
             />
             <span className="bbVolumeValue" style={{ fontSize: 10, width: 28 }}>{Math.round((state.controls?.monitorVolume ?? 1) * 100)}%</span>
@@ -2352,7 +2410,11 @@ function FloatingDock({ state, call, updateControls, toggleMute, activePreset, p
             )}
           </div>
           <span className="dock-active-label">
-            {bypassActive || activePreset?.id === "clean" ? "Voz Normal" : (activePreset?.label || "Normal")}
+            {bypassActive || activePreset?.id === "clean" 
+              ? "Voz Normal" 
+              : activePreset?.id === "personalizado"
+              ? "Voz Personalizada"
+              : (activePreset?.label || "Voz Personalizada")}
           </span>
         </div>
 
@@ -2570,7 +2632,7 @@ function FloatingDock({ state, call, updateControls, toggleMute, activePreset, p
    VOZES PAGE (Main Page)
    ============================================================ */
 
-function VozesPage({ state, call, updateControls, updateEffects, applyVoicePreset, selectedVoice, setSelectedVoice, favorites, toggleFavorite, customVoices, setPage, promptState, setPromptState, customVoiceCategories, setCustomVoiceCategories }) {
+function VozesPage({ state, call, updateControls, updateEffects, applyVoicePreset, selectedVoice, setSelectedVoice, favorites, toggleFavorite, customVoices, setPage, promptState, setPromptState, customVoiceCategories, setCustomVoiceCategories, activePreset }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas");
 
@@ -2641,7 +2703,7 @@ function VozesPage({ state, call, updateControls, updateEffects, applyVoicePrese
     return unique;
   }, [allVoices, category, query, favorites, customVoices, customVoiceCategories]);
 
-  const activeVoice = useMemo(() => allDetectableVoices.find((v) => isVoicePresetActive(state?.controls, v)), [state?.controls, allDetectableVoices]);
+
   const panelVoice = selectedVoice ? allVoices.find((v) => v.id === selectedVoice) : null;
 
   const selectVoice = (voice) => {
@@ -2715,7 +2777,7 @@ function VozesPage({ state, call, updateControls, updateEffects, applyVoicePrese
             <VoiceCard
               key={voice.id}
               voice={voice}
-              isActive={activeVoice?.id === voice.id}
+              isActive={activePreset?.id === voice.id}
               isFavorite={favorites.includes(voice.id)}
               onSelect={() => selectVoice(voice)}
               onEditOnly={() => setSelectedVoice(voice.id)}
@@ -4118,7 +4180,7 @@ function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, on
         repeats: Number(draft.repeats ?? 1),
         block_voice: !!draft.block_voice,
         loop: !!draft.loop,
-        output_route: draft.output_route ?? "both",
+        output_route: "monitor",  // Prévia é sempre local — não enviar para o microfone virtual
         start: Number(startSec) || 0.0,
         end: endSec === "" ? null : Number(endSec),
         effects: getEffectsPayload()
@@ -4567,7 +4629,7 @@ function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSoundId, s
    FAVORITOS PAGE
    ============================================================ */
 
-function FavoritosPage({ state, call, favorites, toggleFavorite, updateControls, applyVoicePreset, selectedVoice, setSelectedVoice, setSelectedSound, setPage, customVoices }) {
+function FavoritosPage({ state, call, favorites, toggleFavorite, updateControls, applyVoicePreset, selectedVoice, setSelectedVoice, setSelectedSound, setPage, customVoices, activePreset }) {
   const allVoices = [...visibleVoicePresets, ...customVoices];
   const favoriteVoices = allVoices.filter((v) => favorites.includes(v.id));
   const recentSounds = [...(state.sounds || [])].sort((a, b) => Number(b.last_played_at || 0) - Number(a.last_played_at || 0)).slice(0, 8);
@@ -4589,7 +4651,7 @@ function FavoritosPage({ state, call, favorites, toggleFavorite, updateControls,
               <VoiceCard
                 key={voice.id}
                 voice={voice}
-                isActive={isVoicePresetActive(state?.controls, voice)}
+                isActive={activePreset?.id === voice.id}
                 isFavorite={true}
                 onSelect={() => {
                   setSelectedVoice(voice.id);
@@ -5614,14 +5676,15 @@ function YoutubeImportModal({ onClose, call, setToast, state }) {
 
   useEffect(() => {
     if (youtubeLoading && state?.status) {
-      if (state.status.includes("importado do YouTube!")) {
+      const statusLower = state.status.toLowerCase();
+      if (statusLower.includes("importado do youtube")) {
         setYoutubeLoading(false);
         setToast(state.status);
         onClose();
-      } else if (state.status.includes("Erro na importação")) {
+      } else if (statusLower.includes("erro na importacao") || statusLower.includes("erro na importação")) {
         setYoutubeLoading(false);
         setToast(state.status);
-      } else if (state.status.includes("cancelada")) {
+      } else if (statusLower.includes("cancelada") || statusLower.includes("cancelado")) {
         setYoutubeLoading(false);
         setToast("Importação cancelada!");
         onClose();

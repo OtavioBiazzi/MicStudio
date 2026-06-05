@@ -7,7 +7,7 @@
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
   ; Check if VB-CABLE is already installed by looking for the driver
-  nsExec::ExecToStack 'powershell -NoProfile -Command "if (Get-WmiObject Win32_SoundDevice | Where-Object { $$_.Name -like ''*VB-Audio*'' -or $$_.Name -like ''*CABLE*'' }) { exit 0 } else { exit 1 }"'
+  nsExec::ExecToStack 'powershell -NoProfile -Command "if (Test-Path -LiteralPath ''C:\Windows\System32\drivers\vbcable_xp64.sys'') { exit 0 } else { exit 1 }"'
   Pop $0
   ${If} $0 != "0"
     ; VB-CABLE not found - ask user
@@ -22,7 +22,7 @@
       CreateDirectory "$PLUGINSDIR\vbcable"
       
       ; Use PowerShell to download
-      nsExec::ExecToStack 'powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri ''https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip'' -OutFile ''$PLUGINSDIR\vbcable\VBCable.zip'' -UseBasicParsing"'
+      nsExec::ExecToStack 'powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = ''Tls12, Tls13''; Invoke-WebRequest -Uri ''https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip'' -OutFile ''$PLUGINSDIR\vbcable\VBCable.zip'' -UseBasicParsing"'
       Pop $0
       Pop $1
       

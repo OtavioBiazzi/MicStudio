@@ -134,6 +134,15 @@ function App() {
   const [dockMinimized, setDockMinimized] = useState(() => {
     return localStorage.getItem("micfudiddo.dockMinimized") === "true";
   });
+  
+  // Opções de personalização visual
+  const [prefFontSize, setPrefFontSize] = useState(() => localStorage.getItem("micfudiddo.prefFontSize") || "normal");
+  const [prefGlow, setPrefGlow] = useState(() => localStorage.getItem("micfudiddo.prefGlow") || "medium");
+  const [prefRadius, setPrefRadius] = useState(() => localStorage.getItem("micfudiddo.prefRadius") || "rounded");
+  const [prefGlass, setPrefGlass] = useState(() => localStorage.getItem("micfudiddo.prefGlass") !== "false");
+  const [prefGamerMode, setPrefGamerMode] = useState(() => localStorage.getItem("micfudiddo.prefGamerMode") === "true");
+  const [prefDockOpacity, setPrefDockOpacity] = useState(() => Number(localStorage.getItem("micfudiddo.prefDockOpacity") || 0.95));
+
   const [customCategories, setCustomCategories] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("micfudiddo.customCategories") || "[]");
@@ -157,7 +166,7 @@ function App() {
     try { return JSON.parse(localStorage.getItem("micfudiddo.soundboardFavorites") || "[]"); } catch { return []; }
   });
 
-  const [appVersion, setAppVersion] = useState("v0.5.0");
+  const [appVersion, setAppVersion] = useState("v0.5.2");
   const [updateAvailable, setUpdateAvailable] = useState(null);
   const [showReleasesModal, setShowReleasesModal] = useState(false);
 
@@ -236,6 +245,66 @@ function App() {
     };
     applyAccentColor(accentColor);
   }, [accentColor]);
+
+  // Efeitos para aplicar as opções de personalização visual
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefFontSize", prefFontSize);
+    const szMap = { small: "12px", normal: "13px", large: "15px" };
+    document.documentElement.style.setProperty("--font-size-base", szMap[prefFontSize] || "13px");
+  }, [prefFontSize]);
+
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefGlow", prefGlow);
+    const glowMap = {
+      none: "none",
+      soft: "0 0 10px rgba(139, 92, 246, 0.15)",
+      medium: "0 0 20px rgba(139, 92, 246, 0.25)",
+      high: "0 0 35px rgba(139, 92, 246, 0.45)"
+    };
+    document.documentElement.style.setProperty("--shadow-glow-purple", glowMap[prefGlow] || glowMap.medium);
+    document.documentElement.style.setProperty("--shadow-glow-cyan", (glowMap[prefGlow] || glowMap.medium).replace(/139,\s*92,\s*246/g, "0, 229, 255"));
+    document.documentElement.style.setProperty("--shadow-glow-green", (glowMap[prefGlow] || glowMap.medium).replace(/139,\s*92,\s*246/g, "34, 197, 94"));
+  }, [prefGlow]);
+
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefRadius", prefRadius);
+    const radMap = {
+      sharp: { xs: "0px", sm: "0px", md: "0px", lg: "0px", xl: "0px" },
+      rounded: { xs: "6px", sm: "8px", md: "12px", lg: "16px", xl: "20px" },
+      soft: { xs: "10px", sm: "14px", md: "20px", lg: "26px", xl: "32px" }
+    };
+    const current = radMap[prefRadius] || radMap.rounded;
+    document.documentElement.style.setProperty("--radius-xs", current.xs);
+    document.documentElement.style.setProperty("--radius-sm", current.sm);
+    document.documentElement.style.setProperty("--radius-md", current.md);
+    document.documentElement.style.setProperty("--radius-lg", current.lg);
+    document.documentElement.style.setProperty("--radius-xl", current.xl);
+  }, [prefRadius]);
+
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefGlass", String(prefGlass));
+    document.documentElement.style.setProperty("--backdrop-filter-value", prefGlass ? "blur(12px)" : "none");
+  }, [prefGlass]);
+
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefGamerMode", String(prefGamerMode));
+    if (prefGamerMode) {
+      document.body.classList.add("gamer-mode-active");
+      document.documentElement.style.setProperty("--transition", "none");
+      document.documentElement.style.setProperty("--transition-fast", "none");
+      document.documentElement.style.setProperty("--transition-slow", "none");
+    } else {
+      document.body.classList.remove("gamer-mode-active");
+      document.documentElement.style.setProperty("--transition", ".18s ease");
+      document.documentElement.style.setProperty("--transition-fast", ".1s ease");
+      document.documentElement.style.setProperty("--transition-slow", ".3s ease");
+    }
+  }, [prefGamerMode]);
+
+  useEffect(() => {
+    localStorage.setItem("micfudiddo.prefDockOpacity", String(prefDockOpacity));
+    document.documentElement.style.setProperty("--dock-opacity", String(prefDockOpacity));
+  }, [prefDockOpacity]);
 
   // Persistence hooks
   useEffect(() => { localStorage.setItem("micfudiddo.page", page); }, [page]);
@@ -706,6 +775,8 @@ function App() {
                     favorites={favorites}
                     toggleFavorite={toggleFavorite}
                     customVoices={customVoices}
+                    setCustomVoices={setCustomVoices}
+                    setToast={setToast}
                     setPage={setPage}
                     promptState={promptState}
                     setPromptState={setPromptState}
@@ -793,6 +864,18 @@ function App() {
                     accentColor={accentColor}
                     setAccentColor={setAccentColor}
                     updateEffects={updateEffects}
+                    prefFontSize={prefFontSize}
+                    setPrefFontSize={setPrefFontSize}
+                    prefGlow={prefGlow}
+                    setPrefGlow={setPrefGlow}
+                    prefRadius={prefRadius}
+                    setPrefRadius={setPrefRadius}
+                    prefGlass={prefGlass}
+                    setPrefGlass={setPrefGlass}
+                    prefGamerMode={prefGamerMode}
+                    setPrefGamerMode={setPrefGamerMode}
+                    prefDockOpacity={prefDockOpacity}
+                    setPrefDockOpacity={setPrefDockOpacity}
                   />
                 </ErrorBoundary>
               )}

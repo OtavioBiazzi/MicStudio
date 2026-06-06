@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   MagnifyingGlass, Plus, Trash, Star, Copy, X, DotsThreeVertical,
-  CaretUp, CaretDown, ArrowClockwise, Microphone
+  CaretUp, CaretDown, ArrowClockwise, Microphone, PencilSimpleLine,
+  Export, DownloadSimple, SlidersHorizontal
 } from "@phosphor-icons/react";
 import {
   effectDefaults,
@@ -32,15 +33,28 @@ export function VozesPage({
   favorites,
   toggleFavorite,
   customVoices,
+  setCustomVoices,
   setPage,
   promptState,
   setPromptState,
   customVoiceCategories,
   setCustomVoiceCategories,
-  activePreset
+  activePreset,
+  setToast
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas");
+  const [contextMenu, setContextMenu] = useState(null);
+
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, []);
 
   const allVoices = useMemo(() => [...visibleVoicePresets, ...customVoices], [customVoices]);
 
@@ -179,6 +193,13 @@ export function VozesPage({
               onSelect={() => selectVoice(voice)}
               onEditOnly={() => setSelectedVoice(voice.id)}
               onToggleFavorite={() => toggleFavorite(voice.id)}
+              onContextMenu={(e) => {
+                setContextMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  voice
+                });
+              }}
             />
           ))}
           <div className="voiceCard createCard" onClick={() => setPage("voicelab")}>
@@ -202,22 +223,160 @@ export function VozesPage({
             isFavorite={favorites.includes(panelVoice.id)}
             onToggleFavorite={() => toggleFavorite(panelVoice.id)}
             onClose={() => setSelectedVoice(null)}
+            setToast={setToast}
           />
         )}
       </div>
+
+      {contextMenu && (
+        <div
+          className="contextMenu"
+          style={{
+            position: "fixed",
+            top: contextMenu.y,
+            left: contextMenu.x,
+            zIndex: 9999,
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            padding: 4,
+            boxShadow: "var(--shadow-lg)",
+            minWidth: 180
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button onClick={() => {
+            selectVoice(contextMenu.voice);
+            setContextMenu(null);
+          }}>
+            <Microphone size={14} /> Ativar Voz
+          </button>
+          <button onClick={() => {
+            setSelectedVoice(contextMenu.voice.id);
+            setContextMenu(null);
+          }}>
+            <SlidersHorizontal size={14} /> Editar Parâmetros
+          </button>
+          {contextMenu.voice.id.startsWith("custom_") && (
+            <button onClick={() => {
+              setPromptState({
+                title: "Renomear Voz Customizada",
+                value: contextMenu.voice.label,
+                onConfirm: (newName) => {
+                  if (newName && newName.trim()) {
+                    setCustomVoices(prev =>
+                      prev.map(v => v.id === contextMenu.voice.id ? { ...v, label: newName.trim() } : v)
+                    );
+                    setToast?.("Voz renomeada com sucesso!");
+                  }
+                }
+              });
+              setContextMenu(null);
+            }}>
+              <PencilSimpleLine size={14} /> Renomear
+            </button>
+          )}
+          <button onClick={() => {
+            const newVoice = {
+              ...contextMenu.voice,
+              id: `custom_${Date.now()}`,
+              label: `${contextMenu.voice.label || contextMenu.voice.id} (Cópia)`
+            };
+            setCustomVoices(prev => [...prev, newVoice]);
+            setToast?.("Voz duplicada com sucesso!");
+            setContextMenu(null);
+          }}>
+            <Copy size={14} /> Duplicar
+          </button>
+          <button onClick={() => {
+            const voiceData = {
+              label: contextMenu.voice.label || contextMenu.voice.id,
+              description: contextMenu.voice.description || "",
+              emoji: contextMenu.voice.emoji || "🎙️",
+              category: "Customizadas",
+              gain: contextMenu.voice.gain ?? 1.0,
+              pitch: contextMenu.voice.pitch ?? 0.0,
+              effects: contextMenu.voice.effects || {}
+            };
+            navigator.clipboard.writeText(JSON.stringify(voiceData, null, 2))
+              .then(() => setToast?.("Configuração da voz copiada para a área de transferência!"))
+              .catch(() => alert("Erro ao copiar para área de transferência."));
+            setContextMenu(null);
+          }}>
+            <Export size={14} /> Exportar (Clipboard)
+          </button>
+          <button onClick={async () => {
+            try {
+               const text = await navigator.clipboard.readText();
+               const imported = JSON.parse(text);
+               if (imported && typeof imported === "object") {
+                 const newVoice = {
+                   id: `custom_${Date.now()}`,
+                   label: imported.label || "Voz Importada",
+                   description: imported.description || "Voz importada da área de transferência",
+                   emoji: imported.emoji || "🎙️",
+                   category: imported.category || "Customizadas",
+                   gradient: "linear-gradient(135deg, #1e1b4b, #311042)",
+                   gain: imported.gain ?? 1.0,
+                   pitch: imported.pitch ?? 0.0,
+                   effects: imported.effects || {}
+                 };
+                 setCustomVoices(prev => [...prev, newVoice]);
+                 setToast?.("Voz importada com sucesso da área de transferência!");
+               } else {
+                 alert("Dados da área de transferência inválidos.");
+               }
+            } catch (err) {
+               alert("Erro ao importar da área de transferência: " + err.message);
+            }
+            setContextMenu(null);
+          }}>
+            <DownloadSimple size={14} /> Importar (Clipboard)
+          </button>
+          <button onClick={() => {
+            const defaults = voicePresets.find(p => p.id === contextMenu.voice.id);
+            updateControls({
+              gain: defaults?.gain ?? 1.0,
+              pitch: defaults?.pitch ?? 0.0,
+              effects: defaults?.effects || {}
+            });
+            setToast?.("Configurações da voz restauradas!");
+            setContextMenu(null);
+          }}>
+            <ArrowClockwise size={14} /> Restaurar Padrões
+          </button>
+          {contextMenu.voice.id.startsWith("custom_") && (
+            <button
+              className="danger"
+              onClick={() => {
+                if (confirm(`Deseja excluir a voz "${contextMenu.voice.label}"?`)) {
+                  setCustomVoices(prev => prev.filter(v => v.id !== contextMenu.voice.id));
+                  setToast?.("Voz personalizada removida.");
+                }
+                setContextMenu(null);
+              }}
+            >
+              <Trash size={14} /> Excluir
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }
 
 // --- VoiceCard ---
-export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, onToggleFavorite }) {
+export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, onToggleFavorite, onContextMenu }) {
   const image = getVoiceImage(voice.id);
   return (
     <motion.div
       className={`voiceCard ${isActive ? "active" : ""}`}
       onClick={onSelect}
       onContextMenu={(e) => {
-        if (onEditOnly) {
+        if (onContextMenu) {
+          e.preventDefault();
+          onContextMenu(e);
+        } else if (onEditOnly) {
           e.preventDefault();
           onEditOnly();
         }
@@ -252,7 +411,7 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
 }
 
 // --- VoiceSidePanel ---
-export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, isFavorite, onToggleFavorite, onClose }) {
+export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, isFavorite, onToggleFavorite, onClose, setToast }) {
   const [showMore, setShowMore] = useState(false);
   const image = getVoiceImage(voice.id);
   const controls = state.controls;
@@ -357,13 +516,48 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
           </div>
         )}
 
-        <div className="panelActions">
-          <button onClick={onApplyPreset}>
-            <ArrowClockwise size={14} /> Restaurar
-          </button>
-          <button className="primary" onClick={onApplyPreset}>
-            Aplicar
-          </button>
+        <div className="panelActions" style={{ flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, width: "100%" }}>
+            <button onClick={onApplyPreset} style={{ flex: 1 }}>
+              <ArrowClockwise size={14} /> Restaurar
+            </button>
+            <button className="primary" onClick={onApplyPreset} style={{ flex: 1 }}>
+              Aplicar
+            </button>
+          </div>
+          {voice.id === "personalizado" && (
+            <button
+              className="btn-danger"
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px dashed rgba(239, 68, 68, 0.3)",
+                color: "var(--danger)",
+                borderRadius: "var(--radius-sm)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer"
+              }}
+              onClick={() => {
+                if (confirm("Deseja redefinir o perfil da Voz Personalizada para os padrões de fábrica?")) {
+                  localStorage.removeItem("personalizado_settings");
+                  updateControls({
+                    gain: 1.0,
+                    pitch: 0.0,
+                    effects: {}
+                  });
+                  setToast?.("Configurações da Voz Personalizada redefinidas!");
+                }
+              }}
+            >
+              <ArrowClockwise size={14} /> Redefinir Voz Personalizada
+            </button>
+          )}
         </div>
       </div>
     </div>

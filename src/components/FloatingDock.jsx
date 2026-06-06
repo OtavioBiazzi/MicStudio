@@ -340,13 +340,57 @@ export function FloatingDock({
                 <input
                   type="range"
                   min={0}
-                  max={30}
+                  max={100}
                   step={0.5}
                   value={state.controls?.gain ?? 1}
                   onChange={(e) => updateControls({ gain: Number(e.target.value) })}
                   className="mixer-slider"
                 />
                 <span className="slider-value">{(state.controls?.gain ?? 1)}x</span>
+              </div>
+            </div>
+
+            <div className="mixer-row">
+              <div className="row-label">
+                <MicrophoneStage size={14} className="row-icon" />
+                <span className="label-text">Volume da Voz</span>
+              </div>
+              <div className="slider-wrapper">
+                <input
+                  type="range"
+                  min={0}
+                  max={10000}
+                  step={50}
+                  value={Math.round((state.controls?.effects?.output_volume ?? 1) * 100)}
+                  onChange={(e) => updateControls({
+                    effects: {
+                      ...state.controls?.effects,
+                      output_volume: Number(e.target.value) / 100,
+                      output_volume_enabled: true
+                    }
+                  })}
+                  className="mixer-slider"
+                />
+                <span className="slider-value">{(state.controls?.effects?.output_volume ?? 1.0).toFixed(1)}x</span>
+              </div>
+            </div>
+
+            <div className="mixer-row">
+              <div className="row-label">
+                <Waveform size={14} className="row-icon" />
+                <span className="label-text">Pitch</span>
+              </div>
+              <div className="slider-wrapper">
+                <input
+                  type="range"
+                  min={-36}
+                  max={36}
+                  step={1}
+                  value={state.controls?.pitch ?? 0}
+                  onChange={(e) => updateControls({ pitch: Number(e.target.value) })}
+                  className="mixer-slider"
+                />
+                <span className="slider-value">{(state.controls?.pitch ?? 0) > 0 ? `+${state.controls?.pitch}` : state.controls?.pitch}st</span>
               </div>
             </div>
 
@@ -385,50 +429,6 @@ export function FloatingDock({
                   className="mixer-slider"
                 />
                 <span className="slider-value">{Math.round((state.controls?.soundboardMonitorVolume ?? 0.65) * 100)}%</span>
-              </div>
-            </div>
-
-            <div className="mixer-row">
-              <div className="row-label">
-                <MicrophoneStage size={14} className="row-icon" />
-                <span className="label-text">Volume da Voz</span>
-              </div>
-              <div className="slider-wrapper">
-                <input
-                  type="range"
-                  min={0}
-                  max={3000}
-                  step={50}
-                  value={Math.round((state.controls?.effects?.output_volume ?? 1) * 100)}
-                  onChange={(e) => updateControls({
-                    effects: {
-                      ...state.controls?.effects,
-                      output_volume: Number(e.target.value) / 100,
-                      output_volume_enabled: true
-                    }
-                  })}
-                  className="mixer-slider"
-                />
-                <span className="slider-value">{(state.controls?.effects?.output_volume ?? 1.0).toFixed(1)}x</span>
-              </div>
-            </div>
-
-            <div className="mixer-row">
-              <div className="row-label">
-                <Waveform size={14} className="row-icon" />
-                <span className="label-text">Pitch</span>
-              </div>
-              <div className="slider-wrapper">
-                <input
-                  type="range"
-                  min={-36}
-                  max={36}
-                  step={1}
-                  value={state.controls?.pitch ?? 0}
-                  onChange={(e) => updateControls({ pitch: Number(e.target.value) })}
-                  className="mixer-slider"
-                />
-                <span className="slider-value">{(state.controls?.pitch ?? 0) > 0 ? `+${state.controls?.pitch}` : state.controls?.pitch}st</span>
               </div>
             </div>
           </div>

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import {
   MicrophoneStage, Palette, Keyboard, Lightning, MicrophoneSlash,
-  ArrowClockwise, FadersHorizontal, XCircle, MusicNotes, Record, ChartBar
+  ArrowClockwise, FadersHorizontal, XCircle, MusicNotes, Record, ChartBar,
+  SlidersHorizontal, DownloadSimple, UploadSimple, User
 } from "@phosphor-icons/react";
 import { Slider, deviceName } from "../utils";
 
@@ -83,7 +84,19 @@ export function ConfigPage({
   setPage,
   accentColor,
   setAccentColor,
-  updateEffects
+  updateEffects,
+  prefFontSize,
+  setPrefFontSize,
+  prefGlow,
+  setPrefGlow,
+  prefRadius,
+  setPrefRadius,
+  prefGlass,
+  setPrefGlass,
+  prefGamerMode,
+  setPrefGamerMode,
+  prefDockOpacity,
+  setPrefDockOpacity
 }) {
   const [tab, setTab] = useState("audio");
 
@@ -109,6 +122,13 @@ export function ConfigPage({
           >
             <Palette size={18} weight="duotone" />
             <span>Aparência</span>
+          </button>
+          <button
+            className={`config-sidebar-btn ${tab === "avancado" ? "active" : ""}`}
+            onClick={() => setTab("avancado")}
+          >
+            <SlidersHorizontal size={18} weight="duotone" />
+            <span>Avançado</span>
           </button>
           <button
             className={`config-sidebar-btn ${tab === "atalhos" ? "active" : ""}`}
@@ -339,6 +359,118 @@ export function ConfigPage({
                   O MicFudido Studio utiliza o tema premium Cyberpunk Escuro por padrão, otimizado para não forçar os olhos durante longas jogatinas e transmissões ao vivo.
                 </p>
               </div>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 10 }}>Configurações de Layout</span>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="selectField">
+                    <label>Tamanho da Fonte da Interface</label>
+                    <select value={prefFontSize} onChange={(e) => setPrefFontSize(e.target.value)}>
+                      <option value="small">Pequeno (12px)</option>
+                      <option value="normal">Normal (13px - Padrão)</option>
+                      <option value="large">Grande (15px)</option>
+                    </select>
+                  </div>
+
+                  <div className="selectField">
+                    <label>Intensidade do Efeito Neon (Glow)</label>
+                    <select value={prefGlow} onChange={(e) => setPrefGlow(e.target.value)}>
+                      <option value="none">Desativado</option>
+                      <option value="soft">Suave</option>
+                      <option value="medium">Médio (Padrão)</option>
+                      <option value="high">Intenso / Alto</option>
+                    </select>
+                  </div>
+
+                  <div className="selectField">
+                    <label>Estilo dos Cantos (Border Radius)</label>
+                    <select value={prefRadius} onChange={(e) => setPrefRadius(e.target.value)}>
+                      <option value="sharp">Reto (Cantos Pontudos)</option>
+                      <option value="rounded">Arredondado (Padrão)</option>
+                      <option value="soft">Suave (Bordas Arredondadas)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginTop: 4 }}>
+                    <Slider
+                      label="Opacidade do Painel Flutuante"
+                      value={prefDockOpacity * 100}
+                      min={50}
+                      max={100}
+                      suffix="%"
+                      onChange={(v) => setPrefDockOpacity(v / 100)}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: 4 }}>
+                    <ToggleSetting
+                      label="Efeito de Vidro (Glassmorphism)"
+                      description="Aplica desfoque (blur) no fundo do painel flutuante"
+                      checked={prefGlass}
+                      onChange={(v) => setPrefGlass(v)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === "avancado" && (
+            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="labCardTitle">
+                <FadersHorizontal size={18} />
+                <span>Parâmetros de Áudio e Desempenho</span>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                Ajuste os parâmetros avançados de processamento do servidor de áudio local e otimize o consumo de hardware.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 4 }}>
+                <div className="selectField">
+                  <label>Taxa de Amostragem Interna (Sample Rate)</label>
+                  <select
+                    value={state.sampleRate || 44100}
+                    onChange={(e) => call("/api/settings", { sampleRate: Number(e.target.value) }).then(() => setToast?.("Taxa de amostragem alterada!"))}
+                  >
+                    <option value={44100}>44100 Hz (CD - Padrão)</option>
+                    <option value={48000}>48000 Hz (Estúdio / Profissional)</option>
+                  </select>
+                </div>
+
+                <div className="selectField">
+                  <label>Tamanho do Buffer de Áudio (Latência)</label>
+                  <select
+                    value={state.settings?.bufferSize || 512}
+                    onChange={(e) => call("/api/settings", { bufferSize: String(e.target.value) }).then(() => setToast?.("Tamanho do buffer alterado!"))}
+                  >
+                    <option value="128">128 frames (Latência ultra baixa - Exige CPU rápida)</option>
+                    <option value="256">256 frames (Latência baixa - Recomendado)</option>
+                    <option value="512">512 frames (Balanceado - Padrão)</option>
+                    <option value="1024">1024 frames (Estável - Ideal para computadores lentos)</option>
+                  </select>
+                </div>
+
+                <div className="selectField">
+                  <label>Canais de Entrada do Microfone</label>
+                  <select
+                    value={state.settings?.inputChannels || "mono"}
+                    onChange={(e) => call("/api/settings", { inputChannels: e.target.value }).then(() => setToast?.("Canais de entrada configurados!"))}
+                  >
+                    <option value="mono">Forçar canal monofônico (Recomendado)</option>
+                    <option value="stereo">Estéreo nativo / Downmix</option>
+                  </select>
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 6 }}>
+                  <ToggleSetting
+                    label="Modo Gamer / Baixo Consumo CPU"
+                    description="Desativa sombras neon, desfoques e transições pesadas para maximizar o FPS nos jogos."
+                    checked={prefGamerMode}
+                    onChange={(v) => setPrefGamerMode(v)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -447,6 +579,73 @@ export function ConfigPage({
                 <button className="btn btn-danger" style={{ justifyContent: "center" }} onClick={() => { if(confirm("Deseja realmente apagar todas as configurações e presets?")) call("/api/reset").then(() => setToast("Reset completo efetuado!")); }}>
                   Reset de fábrica completo
                 </button>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
+                <div className="labCardTitle" style={{ marginBottom: 12 }}>
+                  <Lightning size={18} />
+                  <span>Backup de Perfis e Configurações</span>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
+                  Salve todas as suas predefinições de som, vozes customizadas, favoritos e configurações visuais em um único arquivo de backup, ou redefina o seu perfil.
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", fontSize: 11 }} onClick={() => {
+                    const backup = {};
+                    for (let i = 0; i < localStorage.length; i++) {
+                      const key = localStorage.key(i);
+                      if (key && (key.startsWith("micfudiddo.") || key === "personalizado_settings")) {
+                        backup[key] = localStorage.getItem(key);
+                      }
+                    }
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+                    const dlAnchorElem = document.createElement('a');
+                    dlAnchorElem.setAttribute("href", dataStr);
+                    dlAnchorElem.setAttribute("download", `micfudiddo_backup_${Date.now()}.json`);
+                    dlAnchorElem.click();
+                    setToast("Backup do perfil exportado!");
+                  }}>
+                    📥 Exportar Perfil de Configurações
+                  </button>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", fontSize: 11 }} onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".json";
+                    input.onchange = async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        Object.entries(data).forEach(([key, val]) => {
+                          localStorage.setItem(key, String(val));
+                        });
+                        setToast("Configurações importadas! Reiniciando...");
+                        setTimeout(() => window.location.reload(), 1500);
+                      } catch (err) {
+                        setToast("Erro ao importar backup: " + err.message);
+                      }
+                    };
+                    input.click();
+                  }}>
+                    📤 Importar Perfil de Configurações
+                  </button>
+                  <button className="btn btn-danger" style={{ fontSize: 11, background: "rgba(239,68,68,0.08)", border: "1px solid var(--danger)", color: "var(--danger)" }} onClick={() => {
+                    if (confirm("Deseja realmente redefinir o seu perfil de usuário (nome, avatar, bio, readme) para o padrão?")) {
+                      localStorage.removeItem("micfudiddo.profileName");
+                      localStorage.removeItem("micfudiddo.profileSub");
+                      localStorage.removeItem("micfudiddo.profileImage");
+                      localStorage.removeItem("micfudiddo.profilePlan");
+                      localStorage.removeItem("micfudiddo.profileBio");
+                      localStorage.removeItem("micfudiddo.profileReadme");
+                      localStorage.removeItem("micfudiddo.profileImagePosition");
+                      setToast("Perfil redefinido! Recarregando...");
+                      setTimeout(() => window.location.reload(), 1500);
+                    }
+                  }}>
+                    👤 Redefinir Perfil do Usuário
+                  </button>
+                </div>
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>

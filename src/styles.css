@@ -63,7 +63,7 @@ html,body,#root {
   background:var(--bg-base);
   color:var(--text);
   font-family:var(--font);
-  font-size:13px;
+  font-size:var(--font-size-base, 13px);
   line-height:1.5;
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale
@@ -2965,7 +2965,7 @@ html,body,#root {
   width:fit-content;
   max-width:min(760px,calc(100vw - 32px));
   min-height:74px;
-  background:rgba(15, 17, 23, 0.98);
+  background:rgba(15, 17, 23, var(--dock-opacity, 0.98));
   border:1px solid rgba(255,255,255,.08);
   border-radius:22px;
   display:flex;
@@ -2977,7 +2977,9 @@ html,body,#root {
   transition:all .3s cubic-bezier(.4,0,.2,1);
   position:relative;
   box-sizing:border-box;
-  pointer-events:auto
+  pointer-events:auto;
+  backdrop-filter: var(--backdrop-filter-value, blur(12px));
+  -webkit-backdrop-filter: var(--backdrop-filter-value, blur(12px));
 }
 
 .floating-dock-inner:hover {
@@ -3861,4 +3863,36 @@ html,body,#root {
     padding: 10px !important;
     min-height: 70px !important;
   }
+}
+
+/* Estilo para Renderização de Listas Markdown */
+.readme-container ul, .changelog-markdown ul, .readme-rendered ul {
+  list-style-type: disc !important;
+  margin-left: 20px !important;
+  margin-bottom: 12px !important;
+  padding-left: 4px !important;
+  list-style-position: outside !important;
+}
+
+.readme-container ol, .changelog-markdown ol, .readme-rendered ol {
+  list-style-type: decimal !important;
+  margin-left: 20px !important;
+  margin-bottom: 12px !important;
+  padding-left: 4px !important;
+  list-style-position: outside !important;
+}
+
+.readme-container li, .changelog-markdown li, .readme-rendered li {
+  margin-bottom: 6px !important;
+  padding-left: 4px !important;
+  line-height: 1.6 !important;
+  display: list-item !important;
+}
+
+/* Modo Gamer / Desempenho (Low CPU) */
+body.gamer-mode-active * {
+  transition: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
 }

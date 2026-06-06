@@ -1407,6 +1407,57 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
   );
 }
 
+// --- LOCAL_CHANGELOGS & FALLBACKS ---
+const LOCAL_CHANGELOGS = {
+  "v0.5.1": `### 🚀 Versão 0.5.1 (Versão Atual)
+* ✨ **Verificação de Updates Automática**: O app verifica se há novas atualizações no GitHub toda vez que é aberto e notifica o usuário se houver uma nova versão.
+* 🔄 **Histórico de Versões Detalhado**: Nova tela ao clicar na versão no painel lateral mostrando o histórico completo de atualizações e mudanças.
+* 🗂️ **Seletor de Categorias Avançado**: Substituição do campo de digitação manual de categorias na Soundboard por um dropdown seletor, permitindo escolher pastas existentes ou criar novas.
+* 🛠️ **Área de Voz Personalizada**: Módulo separado para o perfil personalizado, permitindo salvar configurações persistentemente e redefinir valores padrões.
+* 🖱️ **Menu de Contexto nas Vozes**: Clique direito nas predefinições de voz com opções avançadas: Renomear (apenas vozes customizadas), Duplicar, Editar parâmetros, Importar/Exportar e Restaurar.
+* 🎛️ **Ajustes na Barra Rápida**: Reorganização dos sliders de áudio (Ganho de Microfone, Volume da Voz, Pitch, Retorno de Voz, Retorno de Sons) e expansão do limite de Ganho de Microfone e Volume da Voz para 100x.
+* 🔗 **Sanitizador do YouTube**: Links de playlist/rádio agora são convertidos automaticamente para links de vídeos individuais no modal de importação.
+* 📄 **Margens de Listas Markdown**: Correção de recuo e alinhamento de marcadores (bullets) em janelas de visualização Markdown.`,
+  
+  "v0.5.0": `### 🎙️ Versão 0.5.0 (Lançamento do Voice Lab)
+* 🎨 **Modularização Completa e Refatoração**: Código do frontend dividido em componentes React limpos e organizados (\`Sidebar\`, \`Modals\`, \`SoundboardPage\`, etc.).
+* 🎛️ **Laboratório de Voz (Voice Lab)**: Adicionados efeitos de Pitch avançados, filtros Equalizer, Noise Gate, Reverberação e Compressor em tempo real.
+* 💾 **Perfis de Som Reestruturados**: Sincronização e controle aprimorado dos perfis de som de entrada/saída.`,
+  
+  "v0.4.6": `### 🐛 Versão 0.4.6
+* 🛠️ **Correções do Sistema**: Correção do ícone de fechar (\`X\`) ausente no painel de Soundboard.
+* ⚙️ **Estabilidade do Mixer**: Ajustes internos de concorrência e buffer do servidor de áudio Python.`,
+  
+  "v0.4.5": `### 🍪 Versão 0.4.5
+* 🍪 **Autenticação YouTube**: Suporte a envio de cookies do navegador para contornar a detecção de bot do YouTube ao baixar sons online.
+* 🔉 **Persistência de Monitoramento**: Mantém o volume de retorno/monitoramento intacto ao alternar entre diferentes efeitos de voz.`,
+  
+  "v0.4.4": `### 📦 Versão 0.4.4
+* 📦 **Instalador NSIS**: Geração automática de instalador profissional (.exe) com termos de aceitação de dependências.
+* 🚲 **Modo Portátil**: Distribuição opcional portátil (zip/exe auto-extraível).`,
+  
+  "v0.4.2": `### 🎥 Versão 0.4.2
+* 🎥 **Importador YouTube Modal**: Substituição do painel lateral antigo de importação do YouTube por um modal limpo, focado e amigável.`,
+  
+  "v0.4.1": `### 🔇 Versão 0.4.1
+* 🔇 **Correções Rápidas**: Ajuste no controle de Mute de áudio e no ganho padrão do microfone.
+* ⚠️ **Alerta de VB-Cable**: Aviso aprimorado sobre a ausência do driver de áudio virtual obrigatório VB-CABLE.`,
+  
+  "v0.4.0": `### 🚀 Versão 0.4.0
+* 🚀 **Primeiro Lançamento com Instalador**: Script completo de automação (\`instalar.ps1\` e \`instalar.bat\`) para configurar o ambiente Python de processamento e o frontend Electron.`
+};
+
+const FALLBACK_RELEASES = [
+  { id: "v0.5.1", tag_name: "v0.5.1", published_at: "2026-06-06T00:00:00Z", body: "" },
+  { id: "v0.5.0", tag_name: "v0.5.0", published_at: "2026-06-05T00:00:00Z", body: "" },
+  { id: "v0.4.6", tag_name: "v0.4.6", published_at: "2026-06-04T00:00:00Z", body: "" },
+  { id: "v0.4.5", tag_name: "v0.4.5", published_at: "2026-06-03T23:58:00Z", body: "" },
+  { id: "v0.4.4", tag_name: "v0.4.4", published_at: "2026-06-03T19:50:00Z", body: "" },
+  { id: "v0.4.2", tag_name: "v0.4.2", published_at: "2026-06-03T19:27:00Z", body: "" },
+  { id: "v0.4.1", tag_name: "v0.4.1", published_at: "2026-06-03T19:18:00Z", body: "" },
+  { id: "v0.4.0", tag_name: "v0.4.0", published_at: "2026-06-03T18:09:00Z", body: "" }
+];
+
 // --- ReleasesModal ---
 export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
   const [releases, setReleases] = useState([]);
@@ -1421,17 +1472,18 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
         return res.json();
       })
       .then((data) => {
-        setReleases(data || []);
+        setReleases(data && data.length ? data : FALLBACK_RELEASES);
         setLoading(false);
       })
       .catch((err) => {
-        setError(err.message);
+        console.warn("Falha ao buscar releases do GitHub, usando dados estáticos:", err);
+        setReleases(FALLBACK_RELEASES);
         setLoading(false);
       });
   }, []);
 
   const handleUpdate = async (release) => {
-    const asset = release.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || release.assets.find(a => a.name.endsWith(".exe"));
+    const asset = release.assets?.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || release.assets?.find(a => a.name.endsWith(".exe"));
     if (!asset) {
       alert("Nenhum executável de instalação encontrado para esta release.");
       return;
@@ -1509,14 +1561,14 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
                         {isCurrent && <span style={{ fontSize: 9, background: "var(--purple-soft)", color: "var(--purple)", padding: "2px 6px", borderRadius: 10, fontWeight: 800 }}>ATUAL</span>}
                         {isNew && <span style={{ fontSize: 9, background: "rgba(16,185,129,0.1)", color: "#10b981", padding: "2px 6px", borderRadius: 10, fontWeight: 800 }}>NOVO</span>}
                       </div>
-                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{new Date(release.published_at).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}</span>
+                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{release.published_at ? new Date(release.published_at).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" }) : ""}</span>
                     </div>
 
                     <div className="readme-container changelog-markdown" style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)", maxHeight: 150, overflowY: "auto", padding: "8px 10px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.02)" }}>
-                      {renderMarkdown(release.body || "*Nenhuma nota de versão fornecida.*")}
+                      {renderMarkdown(LOCAL_CHANGELOGS[release.tag_name] || release.body || "*Nenhuma nota de versão fornecida.*")}
                     </div>
 
-                    {isNew && (
+                    {isNew && release.assets && release.assets.length > 0 && (
                       <button 
                         className="btn btn-primary" 
                         onClick={() => handleUpdate(release)} 
@@ -1538,6 +1590,7 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
 
 // --- UpdateAlertModal ---
 export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm }) {
+  const displayChangelog = LOCAL_CHANGELOGS[latestVersion] || changelog;
   return (
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
@@ -1555,7 +1608,7 @@ export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm 
           <div style={{ fontSize: 11.5, maxHeight: 150, overflowY: "auto", padding: "10px 12px", background: "rgba(0,0,0,0.15)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
             <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--text)" }}>Novidades desta versão:</div>
             <div className="changelog-markdown" style={{ color: "var(--text-secondary)" }}>
-              {renderMarkdown(changelog || "*Nenhuma nota de versão fornecida.*")}
+              {renderMarkdown(displayChangelog || "*Nenhuma nota de versão fornecida.*")}
             </div>
           </div>
         </div>

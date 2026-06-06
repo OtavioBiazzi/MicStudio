@@ -292,6 +292,10 @@ export function SoundboardPage({
             toggleSoundboardFavorite={toggleSoundboardFavorite}
             isFavorite={soundboardFavorites.includes(selected.id)}
             setEditingSoundId={setEditingSoundId}
+            categories={categories}
+            customCategories={customCategories}
+            setCustomCategories={setCustomCategories}
+            setPromptState={setPromptState}
           />
         )}
       </div>
@@ -441,7 +445,20 @@ export function SoundboardPage({
 }
 
 // --- SoundboardQuickPanel ---
-export function SoundboardQuickPanel({ sound, state, call, setToast, onClose, toggleSoundboardFavorite, isFavorite, setEditingSoundId }) {
+export function SoundboardQuickPanel({
+  sound,
+  state,
+  call,
+  setToast,
+  onClose,
+  toggleSoundboardFavorite,
+  isFavorite,
+  setEditingSoundId,
+  categories,
+  customCategories,
+  setCustomCategories,
+  setPromptState
+}) {
   const [name, setName] = useState(sound.name);
   const [category, setCategory] = useState(sound.category || "Geral");
   const [shortcut, setShortcut] = useState(sound.shortcut || "");
@@ -584,13 +601,55 @@ export function SoundboardQuickPanel({ sound, state, call, setToast, onClose, to
 
           <div className="labField">
             <label>Mover para Pasta (Categoria)</label>
-            <input
-              type="text"
+            <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              onBlur={() => handleSaveField("category", category)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
-            />
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "++new") {
+                  setPromptState({
+                    title: "Nova Pasta / Categoria",
+                    value: "",
+                    onConfirm: (name) => {
+                      if (name && name.trim()) {
+                        const trimmed = name.trim();
+                        if (["Todos", "Favoritos"].includes(trimmed)) {
+                          setToast("Nome reservado!");
+                          return;
+                        }
+                        if (!customCategories.includes(trimmed)) {
+                          setCustomCategories([...customCategories, trimmed]);
+                        }
+                        setCategory(trimmed);
+                        call("/api/sounds/update", { id: sound.id, category: trimmed })
+                          .then(() => setToast(`Som movido para "${trimmed}"`))
+                          .catch((err) => setToast(err.message));
+                      }
+                    }
+                  });
+                } else {
+                  setCategory(val);
+                  call("/api/sounds/update", { id: sound.id, category: val })
+                    .then(() => setToast(`Som movido para "${val}"`))
+                    .catch((err) => setToast(err.message));
+                }
+              }}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: 12,
+                outline: "none"
+              }}
+            >
+              {(categories || []).filter(c => c !== "Todos" && c !== "Favoritos").map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+              {!categories?.includes("Geral") && <option value="Geral">Geral</option>}
+              <option value="++new" style={{ color: "var(--purple)", fontWeight: "bold" }}>+ Criar Nova Pasta...</option>
+            </select>
           </div>
 
           <div className="labField">

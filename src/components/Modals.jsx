@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.7": `### 🛠️ Versão 0.5.7 (Versão Atual)
+  "v0.5.8": `### 🛠️ Versão 0.5.8 (Versão Atual)
+* 🔄 **Reconstrução e Correção de Atalhos**: Adicionada rotina robusta para garantir a presença e a integridade do atalho "MicFudiddo Studio.lnk" na Área de Trabalho e no Menu Iniciar sempre que o aplicativo for aberto.
+* 🗑️ **Limpeza Completa de Legados**: Remoção completa do diretório antigo do Python (\`AppData\\Local\\MicFudiddo\`), da antiga pasta no Menu Iniciar (\`MicFudiddo\`) e dos atalhos obsoletos (\`MicFudiddo.lnk\`, \`Mic Fudido.lnk\`), evitando qualquer inicialização acidental de versões antigas.`,
+
+  "v0.5.7": `### 🛠️ Versão 0.5.7
 * 🗑️ **Limpeza Dupla de Versões Antigas**: Adicionada rotina de exclusão completa do diretório antigo de instalação (\`AppData\\Local\\MicFudiddoStudio\`) e dos atalhos obsoletos no Menu Iniciar e Desktop, tanto na inicialização do instalador quanto na abertura do aplicativo. Isso evita conflitos e impede que atalhos antigos continuem executando a versão anterior.`,
 
   "v0.5.6": `### 🛠️ Versão 0.5.6
@@ -1477,6 +1481,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.8", tag_name: "v0.5.8", published_at: "2026-06-06T02:05:00Z", body: "" },
   { id: "v0.5.7", tag_name: "v0.5.7", published_at: "2026-06-06T02:00:00Z", body: "" },
   { id: "v0.5.6", tag_name: "v0.5.6", published_at: "2026-06-06T01:35:00Z", body: "" },
   { id: "v0.5.5", tag_name: "v0.5.5", published_at: "2026-06-06T01:30:00Z", body: "" },

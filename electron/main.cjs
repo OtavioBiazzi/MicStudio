@@ -574,49 +574,94 @@ ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
 function cleanOldVersion() {
   const fs = require("fs");
   const path = require("path");
+  const os = require("os");
   const localAppData = process.env.LOCALAPPDATA;
   const appData = process.env.APPDATA;
   if (!localAppData) return;
 
-  const oldDir = path.resolve(path.join(localAppData, "MicFudiddoStudio"));
   const currentDir = path.resolve(path.dirname(app.getPath("exe")));
-  
-  // Se o app atual estiver rodando de dentro da pasta antiga, nao deleta a si mesmo!
-  if (currentDir.toLowerCase().startsWith(oldDir.toLowerCase())) {
-    return;
-  }
 
-  if (fs.existsSync(oldDir)) {
-    try {
-      fs.rmSync(oldDir, { recursive: true, force: true });
-    } catch (e) {
-      console.error("Erro ao deletar pasta antiga:", e);
+  // 1. Limpar pastas antigas de instalação local
+  const oldDirsToClean = [
+    path.resolve(path.join(localAppData, "MicFudiddo")),
+    path.resolve(path.join(localAppData, "MicFudiddoStudio"))
+  ];
+
+  for (const oldDir of oldDirsToClean) {
+    // Se o app atual estiver rodando de dentro da pasta antiga, nao deleta a si mesmo!
+    if (currentDir.toLowerCase().startsWith(oldDir.toLowerCase())) {
+      continue;
+    }
+    if (fs.existsSync(oldDir)) {
+      try {
+        fs.rmSync(oldDir, { recursive: true, force: true });
+      } catch (e) {
+        console.error(`Erro ao deletar pasta antiga ${oldDir}:`, e);
+      }
     }
   }
 
+  // 2. Limpar pastas antigas do Menu Iniciar
   if (appData) {
-    const oldStartMenu1 = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo");
-    if (fs.existsSync(oldStartMenu1)) {
-      try { fs.rmSync(oldStartMenu1, { recursive: true, force: true }); } catch (_) {}
-    }
-    const oldStartMenu2 = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo Studio");
-    if (fs.existsSync(oldStartMenu2)) {
-      try { fs.rmSync(oldStartMenu2, { recursive: true, force: true }); } catch (_) {}
+    const oldStartMenuFolder = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo");
+    if (fs.existsSync(oldStartMenuFolder)) {
+      try {
+        fs.rmSync(oldStartMenuFolder, { recursive: true, force: true });
+      } catch (_) {}
     }
   }
 
-  // Deletar atalhos alternativos antigos da área de trabalho
+  // 3. Limpar atalhos antigos específicos (Desktop e Start Menu)
   try {
-    const os = require("os");
     const desktopDir = path.join(os.homedir(), "Desktop");
-    const altShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
-    altShortcuts.forEach((lnk) => {
+    const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
+    oldDesktopShortcuts.forEach((lnk) => {
       const lnkPath = path.join(desktopDir, lnk);
       if (fs.existsSync(lnkPath)) {
-        fs.unlinkSync(lnkPath);
+        try { fs.unlinkSync(lnkPath); } catch (_) {}
       }
     });
+
+    if (appData) {
+      const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
+      const oldStartMenuShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
+      oldStartMenuShortcuts.forEach((lnk) => {
+        const lnkPath = path.join(startMenuProgramsDir, lnk);
+        if (fs.existsSync(lnkPath)) {
+          try { fs.unlinkSync(lnkPath); } catch (_) {}
+        }
+      });
+    }
   } catch (_) {}
+
+  // 4. Recriar/Garantir atalhos válidos da versão atual
+  try {
+    // Não criar atalhos se estiver rodando em ambiente de desenvolvimento (isDev)
+    if (!isDev) {
+      const desktopDir = path.join(os.homedir(), "Desktop");
+      const newDesktopShortcut = path.join(desktopDir, "MicFudiddo Studio.lnk");
+      
+      const shortcutOptions = {
+        target: app.getPath("exe"),
+        workingDirectory: path.dirname(app.getPath("exe")),
+        description: "MicFudiddo Studio - modificador de voz e soundboard",
+        icon: getIconPath(),
+        iconIndex: 0
+      };
+
+      // Gravar atalho na Área de Trabalho
+      shell.writeShortcutLink(newDesktopShortcut, "create", shortcutOptions);
+
+      // Gravar atalho no Menu Iniciar
+      if (appData) {
+        const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
+        const newStartMenuShortcut = path.join(startMenuProgramsDir, "MicFudiddo Studio.lnk");
+        shell.writeShortcutLink(newStartMenuShortcut, "create", shortcutOptions);
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao criar/atualizar atalhos:", err);
+  }
 }
 
 app.whenReady().then(async () => {

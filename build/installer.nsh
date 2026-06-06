@@ -14,17 +14,20 @@
   Sleep 1000
 
   DetailPrint "Limpando diretórios e atalhos antigos do MicFudiddo..."
-  ; Deletar pasta antiga do app local
+  ; Deletar pastas antigas do app local
+  RMDir /r "$LOCALAPPDATA\MicFudiddo"
   RMDir /r "$LOCALAPPDATA\MicFudiddoStudio"
   
   ; Deletar pastas antigas do Menu Iniciar
   RMDir /r "$SMPROGRAMS\MicFudiddo"
-  RMDir /r "$SMPROGRAMS\MicFudiddo Studio"
   
   ; Deletar atalhos antigos do Desktop
-  Delete "$DESKTOP\MicFudiddo Studio.lnk"
   Delete "$DESKTOP\Mic Fudido.lnk"
   Delete "$DESKTOP\MicFudiddo.lnk"
+  
+  ; Deletar atalhos antigos do Menu Iniciar
+  Delete "$SMPROGRAMS\Mic Fudido.lnk"
+  Delete "$SMPROGRAMS\MicFudiddo.lnk"
 !macroend
 
 ; ─── VB-CABLE detection ────────────────────────────────────────

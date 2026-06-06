@@ -1411,7 +1411,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.16": `### 🌟 Versão 0.5.16 (Versão Atual)
+  "v0.5.17": `### 🌟 Versão 0.5.17 (Versão Atual)
+* 🩹 **Hotfix**: Correção no bloqueio de segurança do navegador que impedia a cópia do Link Mágico de Compartilhamento na Nuvem para a área de transferência.`,
+
+  "v0.5.16": `### 🌟 Versão 0.5.16
 * ☁️ **Compartilhamento em Nuvem**: Agora você pode gerar "Links Mágicos" dos seus áudios ou importar pacotes de amigos apenas colando a URL! Chega de mandar arquivos pesados pelo Discord.
 * ✂️ **Cortador de Áudio Embutido Melhorado**: O editor visual de cortes agora carrega as ondas sonoras REAIS do seu arquivo de áudio para cortes precisos e milimétricos (antes era apenas uma onda visual decorativa).`,
 
@@ -1518,6 +1521,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.17", tag_name: "v0.5.17", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.16", tag_name: "v0.5.16", published_at: "2026-06-06T19:45:00Z", body: "" },
   { id: "v0.5.15", tag_name: "v0.5.15", published_at: "2026-06-06T19:20:00Z", body: "" },
   { id: "v0.5.14", tag_name: "v0.5.14", published_at: "2026-06-06T18:45:00Z", body: "" },

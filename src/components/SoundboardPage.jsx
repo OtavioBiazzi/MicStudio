@@ -503,7 +503,8 @@ export function SoundboardPage({
               setToast("Gerando link mágico, aguarde...");
               call("/api/sounds/share-cloud", { id: s.id }).then(res => {
                 if (res.link) {
-                  navigator.clipboard.writeText(res.link);
+                  if (window.micfudiddo?.copyText) window.micfudiddo.copyText(res.link);
+                  else navigator.clipboard.writeText(res.link);
                   setToast("Link copiado para a área de transferência!");
                 }
               }).catch(e => setToast("Erro ao fazer upload: " + e.message));

@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.9": `### 🛠️ Versão 0.5.9 (Versão Atual)
+  "v0.5.10": `### 🛠️ Versão 0.5.10 (Versão Atual)
+* ☁️ **Suporte ao OneDrive**: Correção na resolução da pasta da Área de Trabalho para usuários com redirecionamento ativo do OneDrive (como \`OneDrive\\Área de Trabalho\`), garantindo que o atalho seja atualizado corretamente.
+* 🗑️ **Limpeza de Pastas Duplicadas**: Exclusão definitiva de resquícios da instalação antiga na pasta \`AppData\\Local\\Programs\\MicFudiddo Studio\` (com espaço), garantindo que cliques no atalho não executem versões antigas.`,
+
+  "v0.5.9": `### 🛠️ Versão 0.5.9
 * ⚡ **Sincronização de Atalhos Aprimorada**: Correção definitiva na criação de atalhos apontando o ícone diretamente para o executável principal, evitando falhas silenciosas na API do Windows.
 * 🌐 **Changelogs Online Dinâmicos**: A interface agora prioriza e exibe as notas de atualização diretamente do corpo da release no GitHub em tempo real, permitindo ver as novidades online sem necessidade de atualização imediata.
 * 🗑️ **Limpeza Avançada de Resquícios**: Adicionada detecção e remoção automática de diretórios obsoletos deixados por antigas instalações do Squirrel.Windows.`,
@@ -1486,6 +1490,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.10", tag_name: "v0.5.10", published_at: "2026-06-06T17:30:00Z", body: "" },
   { id: "v0.5.9", tag_name: "v0.5.9", published_at: "2026-06-06T14:20:00Z", body: "" },
   { id: "v0.5.8", tag_name: "v0.5.8", published_at: "2026-06-06T02:05:00Z", body: "" },
   { id: "v0.5.7", tag_name: "v0.5.7", published_at: "2026-06-06T02:00:00Z", body: "" },

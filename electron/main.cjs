@@ -574,9 +574,7 @@ ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
 function cleanOldVersion() {
   const fs = require("fs");
   const path = require("path");
-  const os = require("os");
   const localAppData = process.env.LOCALAPPDATA;
-  const appData = process.env.APPDATA;
   if (!localAppData) return;
 
   const currentDir = path.resolve(path.dirname(app.getPath("exe")));
@@ -586,7 +584,9 @@ function cleanOldVersion() {
     path.resolve(path.join(localAppData, "MicFudiddo")),
     path.resolve(path.join(localAppData, "MicFudiddoStudio")),
     path.resolve(path.join(localAppData, "micfudiddo-studio")),
-    path.resolve(path.join(localAppData, "MicFudiddo Studio"))
+    path.resolve(path.join(localAppData, "MicFudiddo Studio")),
+    path.resolve(path.join(localAppData, "Programs", "MicFudiddo Studio")),
+    path.resolve(path.join(localAppData, "Programs", "micfudiddo-studio"))
   ];
 
   for (const oldDir of oldDirsToClean) {
@@ -603,6 +603,8 @@ function cleanOldVersion() {
     }
   }
 
+  const appData = app.getPath("appData");
+
   // 2. Limpar pastas antigas do Menu Iniciar
   if (appData) {
     const oldStartMenuFolder = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo");
@@ -615,7 +617,7 @@ function cleanOldVersion() {
 
   // 3. Limpar atalhos antigos específicos (Desktop e Start Menu)
   try {
-    const desktopDir = path.join(os.homedir(), "Desktop");
+    const desktopDir = app.getPath("desktop");
     const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
     oldDesktopShortcuts.forEach((lnk) => {
       const lnkPath = path.join(desktopDir, lnk);
@@ -640,7 +642,7 @@ function cleanOldVersion() {
   try {
     // Não criar atalhos se estiver rodando em ambiente de desenvolvimento (isDev)
     if (!isDev) {
-      const desktopDir = path.join(os.homedir(), "Desktop");
+      const desktopDir = app.getPath("desktop");
       const newDesktopShortcut = path.join(desktopDir, "MicFudiddo Studio.lnk");
       
       const shortcutOptions = {

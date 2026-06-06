@@ -419,10 +419,10 @@ ipcMain.handle("dialog:open-mfsound", async () => {
 
 ipcMain.handle("dialog:open-audio", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Adicionar sons",
+    title: "Importar Sons ou Pacotes",
     properties: ["openFile", "multiSelections"],
     filters: [
-      { name: "Audio e video curto", extensions: ["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a", "aac", "opus", "wma", "mp4", "mov", "mkv", "webm"] },
+      { name: "Mídia e Pacotes", extensions: ["mfsound", "wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a", "aac", "opus", "wma", "mp4", "mov", "mkv", "webm"] },
       { name: "Todos os arquivos", extensions: ["*"] }
     ]
   });

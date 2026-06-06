@@ -1411,7 +1411,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.13": `### 🌟 Versão 0.5.13 (Versão Atual)
+  "v0.5.14": `### 🌟 Versão 0.5.14 (Versão Atual)
+* 🚀 **Instalador Inteligente e Silencioso**: A instalação agora é automática (OneClick) e só exibe mensagens caso haja problemas com dependências (como o driver de áudio).
+* 🎧 **Correção Crítica no VB-CABLE**: O instalador agora detecta o Cabo Virtual ativamente no Windows (via \`Get-PnpDevice\`), encerrando os alertas falsos onde o instalador achava que ele não estava instalado.
+* 🧹 **Importação Simplificada**: Botões de Importar Áudio e Importar Pacotes na Soundboard foram fundidos em um só para deixar a interface mais enxuta e bonita.
+* 🐛 **Bugfix de Tema Visual**: Corrigido um problema onde selecionar o tema "Synthwave" impedia a deseleção posterior.`,
+
+  "v0.5.13": `### 🌟 Versão 0.5.13
 * 🌆 **Novo Tema Synthwave Retrowave**: Adicionado um novo tema escuro inspirado nos anos 80, com neon rosa e ciano, selecionável nas Configurações.
 * 🔔 **Notificações Flutuantes (HUD)**: Agora, sempre que você usar um atalho global (Mutar Mic, Bypass, Gravar, etc.), uma notificação visual bonita aparecerá na tela avisando o status, dando uma sensação muito mais interativa ao aplicativo.`,
 
@@ -1503,6 +1509,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.14", tag_name: "v0.5.14", published_at: "2026-06-06T18:45:00Z", body: "" },
   { id: "v0.5.13", tag_name: "v0.5.13", published_at: "2026-06-06T18:30:00Z", body: "" },
   { id: "v0.5.12", tag_name: "v0.5.12", published_at: "2026-06-06T18:05:00Z", body: "" },
   { id: "v0.5.11", tag_name: "v0.5.11", published_at: "2026-06-06T17:42:00Z", body: "" },

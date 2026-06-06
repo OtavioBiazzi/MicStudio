@@ -64,30 +64,32 @@ export function SoundboardPage({
 
   const addSounds = async () => {
     const paths = await window.micfudiddo?.openAudioFiles?.();
-    if (paths?.length) { await call("/api/sounds/add", { paths }); }
+    if (paths?.length) {
+      const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
+      const normalAudios = paths.filter(p => !p.toLowerCase().endsWith(".mfsound"));
+      
+      let importedCount = 0;
+      if (mfsounds.length) {
+        for (const mfs of mfsounds) {
+          try {
+            await call("/api/sounds/import-mfsound", { path: mfs });
+            importedCount++;
+          } catch (err) {
+            console.error("Erro ao importar mfsound:", err);
+          }
+        }
+        if (importedCount > 0) setToast?.(`${importedCount} pacote(s) importado(s)!`);
+      }
+      
+      if (normalAudios.length) {
+        await call("/api/sounds/add", { paths: normalAudios });
+      }
+    }
   };
 
   const addFolders = async () => {
     const folder = await window.micfudiddo?.openAudioFolders?.();
     if (folder && folder.length) { await call("/api/sounds/add-folder", { paths: folder }); }
-  };
-
-  const importMfsound = async () => {
-    const paths = await window.micfudiddo?.openMfsoundFile?.();
-    if (paths?.length) {
-      let importedCount = 0;
-      for (const p of paths) {
-        try {
-          await call("/api/sounds/import-mfsound", { path: p });
-          importedCount++;
-        } catch (err) {
-          console.error("Erro ao importar mfsound:", err);
-        }
-      }
-      if (importedCount > 0) {
-        setToast?.(`${importedCount} pacote(s) .mfsound importado(s) com sucesso!`);
-      }
-    }
   };
 
   const importDropped = async (e) => {
@@ -211,8 +213,7 @@ export function SoundboardPage({
             </button>
           )}
           <div className="importButtonGroup">
-            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio individuais"><UploadSimple size={14} /> Importar Áudio</button>
-            <button className="btn btn-ghost" onClick={importMfsound} title="Importar pacote .mfsound contendo áudio e metadados"><UploadSimple size={14} /> Importar .mfsound</button>
+            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio ou pacotes .mfsound"><UploadSimple size={14} /> Importar Sons / Pacotes</button>
             <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
           </div>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>

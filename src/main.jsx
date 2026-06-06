@@ -268,7 +268,7 @@ function App() {
   // Apply theme class
   useEffect(() => {
     const r = document.documentElement;
-    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon");
+    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon", "theme-synthwave");
     r.classList.add(appTheme);
   }, [appTheme]);
 

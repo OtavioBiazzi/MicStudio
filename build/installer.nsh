@@ -18,7 +18,6 @@
   RMDir /r "$LOCALAPPDATA\MicFudiddoStudio"
   RMDir /r "$LOCALAPPDATA\micfudiddo-studio"
   RMDir /r "$LOCALAPPDATA\MicFudiddo Studio"
-  RMDir /r "$LOCALAPPDATA\Programs\MicFudiddo Studio"
   
   ; Deletar pastas antigas do Menu Iniciar
   RMDir /r "$SMPROGRAMS\MicFudiddo"

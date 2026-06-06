@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.10": `### 🛠️ Versão 0.5.10 (Versão Atual)
+  "v0.5.11": `### 🛠️ Versão 0.5.11 (Versão Atual)
+* 🛡️ **Correção Crítica de Remoção do Executável**: Removidas exclusões automáticas das pastas de instalação sob \`AppData\\Local\\Programs\\...\` que causavam a remoção acidental de \`MicFudiddo Studio.exe\` e quebravam o atalho.
+* ☁️ **Suporte ao OneDrive**: Correção na resolução da pasta da Área de Trabalho para usuários com redirecionamento ativo do OneDrive (como \`OneDrive\\Área de Trabalho\`), garantindo que o atalho seja atualizado corretamente.`,
+
+  "v0.5.10": `### 🛠️ Versão 0.5.10
 * ☁️ **Suporte ao OneDrive**: Correção na resolução da pasta da Área de Trabalho para usuários com redirecionamento ativo do OneDrive (como \`OneDrive\\Área de Trabalho\`), garantindo que o atalho seja atualizado corretamente.
 * 🗑️ **Limpeza de Pastas Duplicadas**: Exclusão definitiva de resquícios da instalação antiga na pasta \`AppData\\Local\\Programs\\MicFudiddo Studio\` (com espaço), garantindo que cliques no atalho não executem versões antigas.`,
 
@@ -1490,6 +1494,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.11", tag_name: "v0.5.11", published_at: "2026-06-06T17:42:00Z", body: "" },
   { id: "v0.5.10", tag_name: "v0.5.10", published_at: "2026-06-06T17:30:00Z", body: "" },
   { id: "v0.5.9", tag_name: "v0.5.9", published_at: "2026-06-06T14:20:00Z", body: "" },
   { id: "v0.5.8", tag_name: "v0.5.8", published_at: "2026-06-06T02:05:00Z", body: "" },

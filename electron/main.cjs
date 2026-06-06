@@ -584,9 +584,7 @@ function cleanOldVersion() {
     path.resolve(path.join(localAppData, "MicFudiddo")),
     path.resolve(path.join(localAppData, "MicFudiddoStudio")),
     path.resolve(path.join(localAppData, "micfudiddo-studio")),
-    path.resolve(path.join(localAppData, "MicFudiddo Studio")),
-    path.resolve(path.join(localAppData, "Programs", "MicFudiddo Studio")),
-    path.resolve(path.join(localAppData, "Programs", "micfudiddo-studio"))
+    path.resolve(path.join(localAppData, "MicFudiddo Studio"))
   ];
 
   for (const oldDir of oldDirsToClean) {

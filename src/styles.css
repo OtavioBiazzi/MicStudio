@@ -3365,6 +3365,43 @@ html,body,#root {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
+.floating-yt-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--purple);
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), 0 0 10px rgba(139, 92, 246, 0.3);
+  z-index: 9999;
+  animation: slideUpFade 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.yt-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: ytSpin 0.8s linear infinite;
+}
+
+@keyframes ytSpin {
+  to { transform: rotate(360deg); }
+}
+
 .status-dot-pulse.on {
   animation: statusDotPulse 1.5s infinite ease-in-out;
 }

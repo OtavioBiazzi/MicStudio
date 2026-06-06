@@ -1066,12 +1066,18 @@ function App() {
                     boxSizing: "border-box"
                   }}
                   value={promptState.value}
-                  onChange={(e) => setPromptState({ ...promptState, value: e.target.value })}
+                  onChange={(e) => {
+                    if (!promptState.readOnly) setPromptState({ ...promptState, value: e.target.value });
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       promptState.onConfirm(promptState.value);
                       setPromptState(null);
                     }
+                  }}
+                  readOnly={!!promptState.readOnly}
+                  onClick={(e) => {
+                    if (promptState.readOnly) e.target.select();
                   }}
                   autoFocus
                 />
@@ -1080,8 +1086,8 @@ function App() {
                 <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={() => setPromptState(null)}>Cancelar</button>
                 <button className="btn btn-primary" style={{ padding: "8px 16px", fontSize: 12 }} onClick={() => {
                   promptState.onConfirm(promptState.value);
-                  setPromptState(null);
-                }}>Confirmar</button>
+                  if (promptState.closeOnConfirm !== false) setPromptState(null);
+                }}>{promptState.confirmText || "Confirmar"}</button>
               </div>
             </div>
           </div>
@@ -1103,6 +1109,12 @@ function App() {
               setUpdateAvailable(null);
             }}
           />
+        )}
+        {state?.youtubeStatus && state.youtubeStatus !== "" && !state.youtubeStatus.startsWith("Concluido") && !state.youtubeStatus.startsWith("Erro") && !state.youtubeStatus.startsWith("Importacao cancelada") && (
+          <div className="floating-yt-status">
+            <span className="yt-spinner"></span>
+            <span>{state.youtubeStatus}</span>
+          </div>
         )}
       </AnimatePresence>
     </div>

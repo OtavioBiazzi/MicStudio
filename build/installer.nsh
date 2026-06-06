@@ -4,6 +4,14 @@
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 
+; ─── Process termination on init ───────────────────────────────
+!macro customInit
+  DetailPrint "Fechando instâncias ativas do MicFudiddo..."
+  nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe"'
+  Pop $0
+  Pop $1
+!macroend
+
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
   ; Check if VB-CABLE is already installed by looking for the driver

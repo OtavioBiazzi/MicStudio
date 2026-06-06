@@ -14,8 +14,13 @@ if sys.stderr is None:
         def flush(self, *args, **kwargs): pass
     sys.stderr = DummyWriter()
 
-from micfudiddo.backend import main
+try:
+    from micfudiddo.backend import main
+    if __name__ == "__main__":
+        main()
+except Exception as e:
+    import traceback
+    with open("backend_crash.log", "w") as f:
+        traceback.print_exc(file=f)
+    sys.exit(1)
 
-
-if __name__ == "__main__":
-    main()

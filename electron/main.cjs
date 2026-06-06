@@ -161,13 +161,17 @@ async function startBackend() {
 async function stopBackend() {
   stopSoundHotkeys();
   try {
-    await fetch(`${API}/api/shutdown`, { method: "POST" });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
+    await fetch(`${API}/api/shutdown`, { method: "POST", signal: controller.signal }).catch(() => {});
+    clearTimeout(timeoutId);
   } catch (_) {}
   if (backend) {
     backend.kill();
     backend = null;
   }
 }
+
 
 async function refreshSoundHotkeys() {
   try {
@@ -542,14 +546,15 @@ ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
         file.on("finish", () => {
           file.close(async () => {
             try {
+              quitting = true;
+              await stopBackend();
+              
               const child = spawn(installerPath, [], {
                 detached: true,
                 stdio: "ignore"
               });
               child.unref();
               
-              quitting = true;
-              await stopBackend();
               app.quit();
               resolve(true);
             } catch (e) {

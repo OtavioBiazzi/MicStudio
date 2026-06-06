@@ -60,7 +60,7 @@ if (-not $hasVbCable) {
 Write-Host ""
 
 # 3. Localizar e Instalar o MicFudiddo Studio
-$installDir = Join-Path $env:LOCALAPPDATA "MicFudiddoStudio"
+$installDir = Join-Path $env:LOCALAPPDATA "Programs\micfudiddo-studio"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 $targetExe = Join-Path $installDir "MicFudiddo Studio.exe"
 

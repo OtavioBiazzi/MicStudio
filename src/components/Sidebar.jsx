@@ -75,8 +75,6 @@ export function Sidebar({
         })}
       </nav>
 
-      <AudioVisualizer running={!!(state?.running || state?.monitorOnly)} />
-
       <div className="sidebar-bottom">
         <div className="sidebar-profile" onClick={onOpenProfile} style={{ cursor: "pointer" }}>
           <div className="profile-avatar" style={{ overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -115,107 +113,5 @@ export function Sidebar({
         </div>
       </div>
     </aside>
-  );
-}
-
-function AudioVisualizer({ running }) {
-  const canvasRef = React.useRef(null);
-  const [level, setLevel] = React.useState(0);
-
-  React.useEffect(() => {
-    if (!running) {
-      setLevel(0);
-      return;
-    }
-    let active = true;
-    const pollLevel = async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:38717/api/level");
-        const data = await res.json();
-        if (active) {
-          setLevel(data.level || 0);
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    const interval = setInterval(pollLevel, 100);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [running]);
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let animationFrameId;
-    
-    let currentLevel = 0;
-    const numBars = 16;
-    const barHeights = Array(numBars).fill(0);
-    const styles = getComputedStyle(document.documentElement);
-    const purpleDim = styles.getPropertyValue("--purple-dim").trim() || "#6D42D9";
-    const purple = styles.getPropertyValue("--purple").trim() || "#8B5CF6";
-
-    const render = () => {
-      currentLevel += (level - currentLevel) * 0.15;
-      if (currentLevel < 0.01) currentLevel = 0;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      const width = canvas.width;
-      const height = canvas.height;
-      const spacing = 3;
-      const barWidth = (width - (spacing * (numBars - 1))) / numBars;
-
-      for (let i = 0; i < numBars; i++) {
-        const sinVal = Math.sin(Date.now() * 0.003 + i * 0.5) * 0.5 + 0.5;
-        const noiseVal = Math.random() * 0.3;
-        const baseHeight = running ? 3 : 1;
-        let targetHeight = baseHeight + (sinVal * 0.6 + noiseVal * 0.4) * currentLevel * (height - 6);
-        if (targetHeight < 2) targetHeight = 2;
-
-        barHeights[i] += (targetHeight - barHeights[i]) * 0.2;
-
-        const x = i * (barWidth + spacing);
-        const y = height - barHeights[i];
-        
-        const gradient = ctx.createLinearGradient(0, height, 0, 0);
-        gradient.addColorStop(0, purpleDim);
-        gradient.addColorStop(1, purple);
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(x, y, barWidth, barHeights[i], 1.5);
-        } else {
-          ctx.rect(x, y, barWidth, barHeights[i]);
-        }
-        ctx.fill();
-      }
-
-      animationFrameId = requestAnimationFrame(render);
-    };
-
-    render();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [level, running]);
-
-  return (
-    <div className="audio-visualizer-container" style={{ padding: "0 14px", marginTop: "16px", marginBottom: "16px", height: "42px", display: "flex", flexDirection: "column", justifyContent: "center", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "12px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px", fontSize: "9px", color: "var(--text-muted)", fontWeight: "bold", letterSpacing: "0.5px" }}>
-        <span>VOZ STATUS:</span>
-        <span style={{ color: running ? "var(--purple)" : "var(--text-muted)", transition: "color 0.2s" }}>
-          {running ? "PROCESSANDO" : "DESATIVADA"}
-        </span>
-      </div>
-      <canvas ref={canvasRef} width="188" height="24" style={{ width: "100%", height: "24px", display: "block" }} />
-    </div>
   );
 }

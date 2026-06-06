@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.5": `### 🛠️ Versão 0.5.5 (Versão Atual)
+  "v0.5.6": `### 🛠️ Versão 0.5.6 (Versão Atual)
+* 🔄 **Unificação de Diretórios de Instalação**: Alinhamento do diretório de instalação dos scripts automatizados (\`instalar.ps1\` e \`install_studio_start_menu.ps1\`) com o diretório padrão do instalador oficial do Electron Builder (\`AppData\\Local\\Programs\\micfudiddo-studio\`). Isso impede que o aplicativo retorne a versões antigas após a atualização ao ser executado por atalhos existentes.
+* 🗑️ **Remoção do Indicador de Voz**: Removido o widget visualizador de status de processamento da voz ("VOZ STATUS: PROCESSANDO") do painel lateral (Sidebar) conforme solicitado.`,
+
+  "v0.5.5": `### 🛠️ Versão 0.5.5
 * 🐛 **Correção de Crash no Canvas**: Correção de um erro na barra lateral (Sidebar) causado por falha no Canvas ao renderizar variáveis CSS de cores no gradiente do visualizador de voz.
 * 🛡️ **Tratamento de Erros de Interface**: Adicionada proteção de tela ('ErrorBoundary') ao redor do menu lateral e do painel de atalhos inferior (Floating Dock) para impedir que problemas isolados travem todo o aplicativo.`,
 
@@ -1470,6 +1474,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.6", tag_name: "v0.5.6", published_at: "2026-06-06T01:35:00Z", body: "" },
   { id: "v0.5.5", tag_name: "v0.5.5", published_at: "2026-06-06T01:30:00Z", body: "" },
   { id: "v0.5.4", tag_name: "v0.5.4", published_at: "2026-06-06T00:30:00Z", body: "" },
   { id: "v0.5.3", tag_name: "v0.5.3", published_at: "2026-06-06T00:00:00Z", body: "" },

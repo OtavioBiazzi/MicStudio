@@ -1411,8 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.17": `### 🌟 Versão 0.5.17 (Versão Atual)
-* 🩹 **Hotfix**: Correção no bloqueio de segurança do navegador que impedia a cópia do Link Mágico de Compartilhamento na Nuvem para a área de transferência.`,
+  "v0.5.18": `### 🌟 Versão 0.5.18 (Versão Atual)
+* 🎨 **Melhorias Visuais (UX)**: A cópia do Link Mágico agora abre uma janelinha para você visualizar o link antes de copiar.
+* ⬇️ **Download do YouTube Invisível**: A barra de status de download do YouTube agora fica flutuando na tela principal caso você feche a janela enquanto ele baixa em segundo plano!`,
+
+  "v0.5.17": `### 🌟 Versão 0.5.17
 
   "v0.5.16": `### 🌟 Versão 0.5.16
 * ☁️ **Compartilhamento em Nuvem**: Agora você pode gerar "Links Mágicos" dos seus áudios ou importar pacotes de amigos apenas colando a URL! Chega de mandar arquivos pesados pelo Discord.
@@ -1521,6 +1524,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.18", tag_name: "v0.5.18", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.17", tag_name: "v0.5.17", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.16", tag_name: "v0.5.16", published_at: "2026-06-06T19:45:00Z", body: "" },
   { id: "v0.5.15", tag_name: "v0.5.15", published_at: "2026-06-06T19:20:00Z", body: "" },

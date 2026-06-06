@@ -72,13 +72,53 @@ export function SoundboardPage({
     if (folder && folder.length) { await call("/api/sounds/add-folder", { paths: folder }); }
   };
 
+  const importMfsound = async () => {
+    const paths = await window.micfudiddo?.openMfsoundFile?.();
+    if (paths?.length) {
+      let importedCount = 0;
+      for (const p of paths) {
+        try {
+          await call("/api/sounds/import-mfsound", { path: p });
+          importedCount++;
+        } catch (err) {
+          console.error("Erro ao importar mfsound:", err);
+        }
+      }
+      if (importedCount > 0) {
+        setToast?.(`${importedCount} pacote(s) .mfsound importado(s) com sucesso!`);
+      }
+    }
+  };
+
   const importDropped = async (e) => {
     e.preventDefault();
     setDragActive(false);
     const files = e.dataTransfer?.files;
     if (!files?.length) return;
-    const paths = window.micfudiddo?.audioPathsFromDrop?.(files);
-    if (paths?.length) { await call("/api/sounds/add", { paths }); }
+    const paths = window.micfudiddo?.audioPathsFromDrop?.(files) || [];
+    
+    const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
+    const normalAudios = paths.filter(p => !p.toLowerCase().endsWith(".mfsound"));
+    
+    let importedCount = 0;
+    if (mfsounds.length) {
+      for (const mfs of mfsounds) {
+        try {
+          await call("/api/sounds/import-mfsound", { path: mfs });
+          importedCount++;
+        } catch (err) {
+          console.error("Erro ao importar mfsound:", err);
+        }
+      }
+    }
+    
+    if (normalAudios.length) {
+      await call("/api/sounds/add", { paths: normalAudios });
+    }
+    
+    if (importedCount > 0) {
+      setToast?.(`${importedCount} pacote(s) .mfsound importado(s) com sucesso!`);
+    }
   };
 
   const deleteSounds = async (ids) => {
@@ -172,6 +212,7 @@ export function SoundboardPage({
           )}
           <div className="importButtonGroup">
             <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio individuais"><UploadSimple size={14} /> Importar Áudio</button>
+            <button className="btn btn-ghost" onClick={importMfsound} title="Importar pacote .mfsound contendo áudio e metadados"><UploadSimple size={14} /> Importar .mfsound</button>
             <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
           </div>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
@@ -426,6 +467,23 @@ export function SoundboardPage({
               setContextMenu(null);
             }}>
               <Export size={14} /> Exportar
+            </button>
+            <button onClick={async () => {
+              const s = contextMenu.sound;
+              setContextMenu(null);
+              const defaultName = `${s.name}.mfsound`;
+              const filePath = await window.micfudiddo?.saveMfsoundPath?.(defaultName);
+              if (filePath) {
+                try {
+                  setToast("Exportando pacote .mfsound...");
+                  await call("/api/sounds/export-mfsound", { id: s.id, exportPath: filePath });
+                  setToast("Pacote .mfsound exportado com sucesso!");
+                } catch (e) {
+                  setToast("Erro ao exportar pacote: " + e.message);
+                }
+              }
+            }}>
+              <Export size={14} /> Exportar Pacote (.mfsound)
             </button>
             <button onClick={() => {
               navigator.clipboard.writeText(contextMenu.sound.path);

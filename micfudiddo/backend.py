@@ -1251,6 +1251,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/health":
                 self._json({"ok": True, "time": time.time()})
                 return
+            if path == "/api/level":
+                self._json({"level": STATE.engine.last_level if STATE.engine else 0.0})
+                return
             if path == "/api/sounds/trending":
                 from urllib.parse import parse_qs
                 query_params = parse_qs(urlparse(self.path).query)
@@ -1273,7 +1276,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         try:
             path = urlparse(self.path).path
-            if path in ("/api/state", "/api/health", "/api/sounds/trending", "/api/sounds/search"):
+            if path in ("/api/state", "/api/health", "/api/sounds/trending", "/api/sounds/search", "/api/level"):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self._cors()
@@ -1302,7 +1305,9 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/sounds/trim",
                 "/api/sounds/trending",
                 "/api/sounds/search",
-                "/api/sounds/import-youtube"
+                "/api/sounds/import-youtube",
+                "/api/sounds/export-mfsound",
+                "/api/sounds/import-mfsound"
             }
             if path in slow_paths:
                 with com_initialized():
@@ -1423,6 +1428,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             STATE.update_settings(data.get("settings", data))
             return None
+        if path == "/api/sounds/export-mfsound":
+            sound_id = str(data["id"])
+            export_path = str(data["exportPath"])
+            result_path = STATE.library.export_mfsound(sound_id, export_path)
+            with STATE.lock:
+                STATE.status = f"Som exportado: {Path(result_path).name}"
+            return {"ok": True, "path": result_path}
+        if path == "/api/sounds/import-mfsound":
+            archive_path = str(data["path"])
+            item = STATE.library.import_mfsound(archive_path)
+            with STATE.lock:
+                STATE.status = f"Som importado: {item.name}"
+            return {"ok": True, "soundId": item.id}
         if path == "/api/sounds/add":
             paths = data.get("paths", [])
             def bg_add():

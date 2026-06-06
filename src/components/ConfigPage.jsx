@@ -84,6 +84,10 @@ export function ConfigPage({
   setPage,
   accentColor,
   setAccentColor,
+  customAccentColor,
+  setCustomAccentColor,
+  appTheme,
+  setAppTheme,
   updateEffects,
   prefFontSize,
   setPrefFontSize,
@@ -99,6 +103,19 @@ export function ConfigPage({
   setPrefDockOpacity
 }) {
   const [tab, setTab] = useState("audio");
+  const [selectedTheme, setSelectedTheme] = useState(appTheme);
+  const [selectedColor, setSelectedColor] = useState(accentColor);
+  const [tempCustomColor, setTempCustomColor] = useState(customAccentColor);
+
+  const handleSaveVisualSettings = () => {
+    setAppTheme(selectedTheme);
+    setAccentColor(selectedColor);
+    setCustomAccentColor(tempCustomColor);
+    localStorage.setItem("micfudiddo.theme", selectedTheme);
+    localStorage.setItem("micfudiddo.accentColor", selectedColor);
+    localStorage.setItem("micfudiddo.customAccentColor", tempCustomColor);
+    setToast?.("Configurações visuais salvas com sucesso!");
+  };
 
   return (
     <div>
@@ -343,21 +360,48 @@ export function ConfigPage({
                 {Object.entries(colorPalettes).map(([key, item]) => (
                   <button
                     key={key}
-                    className={`palette-btn ${accentColor === key ? "active" : ""}`}
+                    className={`palette-btn ${selectedColor === key ? "active" : ""}`}
                     style={{ "--palette-color": item.primary }}
-                    onClick={() => setAccentColor(key)}
+                    onClick={() => setSelectedColor(key)}
                   >
                     <span className="palette-color-dot" style={{ backgroundColor: item.primary }} />
                     <span style={{ fontSize: 12, fontWeight: 700 }}>{item.label}</span>
                   </button>
                 ))}
+                <button
+                  className={`palette-btn ${selectedColor === "custom" ? "active" : ""}`}
+                  style={{ "--palette-color": tempCustomColor }}
+                  onClick={() => setSelectedColor("custom")}
+                >
+                  <span className="palette-color-dot" style={{ backgroundColor: tempCustomColor }} />
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>Personalizada</span>
+                </button>
               </div>
 
+              {selectedColor === "custom" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, background: "var(--bg-input)", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                  <label style={{ fontSize: 12, fontWeight: "bold", color: "var(--text-secondary)" }}>Escolha a cor personalizada:</label>
+                  <input
+                    type="color"
+                    value={tempCustomColor}
+                    onChange={(e) => setTempCustomColor(e.target.value)}
+                    style={{ width: "42px", height: "26px", border: "none", borderRadius: "4px", background: "none", cursor: "pointer" }}
+                  />
+                  <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text)" }}>{tempCustomColor.toUpperCase()}</span>
+                </div>
+              )}
+
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Tema Integrado</span>
-                <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
-                  O MicFudido Studio utiliza o tema premium Cyberpunk Escuro por padrão, otimizado para não forçar os olhos durante longas jogatinas e transmissões ao vivo.
-                </p>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Tema da Interface</span>
+                <div className="selectField" style={{ marginTop: 8 }}>
+                  <label>Selecione o tema geral do aplicativo:</label>
+                  <select value={selectedTheme} onChange={(e) => setSelectedTheme(e.target.value)}>
+                    <option value="theme-cyberpunk">Cyberpunk Escuro (Padrão)</option>
+                    <option value="theme-dracula">Dracula Vamp</option>
+                    <option value="theme-vampire">Vampire Red</option>
+                    <option value="theme-neon">Neon Green</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12 }}>
@@ -412,6 +456,12 @@ export function ConfigPage({
                     />
                   </div>
                 </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn btn-primary" onClick={handleSaveVisualSettings} style={{ padding: "8px 24px" }}>
+                  Salvar
+                </button>
               </div>
             </div>
           )}

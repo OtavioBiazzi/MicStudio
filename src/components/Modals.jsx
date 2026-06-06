@@ -1298,6 +1298,8 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                 <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
                 <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
                 <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
+                <Slider label="Fade In" value={draft.fade_in_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_in_ms: v }))} />
+                <Slider label="Fade Out" value={draft.fade_out_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_out_ms: v }))} />
               </div>
 
               {/* Behavior & Options */}
@@ -1409,7 +1411,18 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.1": `### 🚀 Versão 0.5.1 (Versão Atual)
+  "v0.5.3": `### 🚀 Versão 0.5.3 (Versão Atual)
+* ✨ **Compartilhamento de Vozes**: Nova opção no menu de contexto das vozes para copiar código de compartilhamento (Base64 compacto com prefixo \`MFVOICE-\`) e botão "Importar por Código" na barra de ferramentas.
+* 📦 **Compartilhamento de Sons (.mfsound)**: Nova funcionalidade para exportar/importar sons contendo o áudio original e todas as configurações da soundboard (volume, tom, loop, atalho, cor, fade, etc.) em pacotes zip \`.mfsound\`. Suporte completo a arrastar e soltar (Drag & Drop) pacotes na soundboard.
+* 🎨 **Temas Visuais & Cor Customizada**: Criação dos novos temas estéticos \`Cyberpunk\`, \`Dracula\`, \`Vampire\` e \`Neon\` selecionáveis nas Configurações, além de um Color Picker para escolher cores de destaque personalizadas com botão **Salvar** definitivo.
+* 📊 **Visualizador de Frequências (Sidebar)**: Adicionado visualizador Canvas espectral animado a 60fps na barra lateral que reage em tempo real ao volume e atividade da voz.
+* 🎚️ **Controles de Fade In & Fade Out**: Adicionados controles deslizantes (0 a 5000ms) no editor avançado de som para transições de volume graduais ao iniciar e terminar a reprodução dos sons.`,
+
+  "v0.5.2": `### 🛠️ Versão 0.5.2
+* 🐛 **Correção na Soundboard**: Resolução do erro crítico "X is not defined" e otimização da indexação de categorias de som.
+* ⚡ **Melhorias de Estabilidade**: Ajustes no loop de inicialização e tratamento de exceções no servidor de processamento de áudio.`,
+
+  "v0.5.1": `### 🚀 Versão 0.5.1
 * ✨ **Verificação de Updates Automática**: O app verifica se há novas atualizações no GitHub toda vez que é aberto e notifica o usuário se houver uma nova versão.
 * 🔄 **Histórico de Versões Detalhado**: Nova tela ao clicar na versão no painel lateral mostrando o histórico completo de atualizações e mudanças.
 * 🗂️ **Seletor de Categorias Avançado**: Substituição do campo de digitação manual de categorias na Soundboard por um dropdown seletor, permitindo escolher pastas existentes ou criar novas.
@@ -1448,6 +1461,8 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.3", tag_name: "v0.5.3", published_at: "2026-06-06T23:59:00Z", body: "" },
+  { id: "v0.5.2", tag_name: "v0.5.2", published_at: "2026-06-06T02:00:00Z", body: "" },
   { id: "v0.5.1", tag_name: "v0.5.1", published_at: "2026-06-06T00:00:00Z", body: "" },
   { id: "v0.5.0", tag_name: "v0.5.0", published_at: "2026-06-05T00:00:00Z", body: "" },
   { id: "v0.4.6", tag_name: "v0.4.6", published_at: "2026-06-04T00:00:00Z", body: "" },

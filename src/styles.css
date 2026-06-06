@@ -3896,3 +3896,60 @@ body.gamer-mode-active * {
   box-shadow: none !important;
   text-shadow: none !important;
 }
+
+/* Temas personalizados */
+:root.theme-cyberpunk {
+  --bg-base: #0F1117;
+  --bg-sidebar: #0B0E15;
+  --bg-card: #161A23;
+  --bg-card-hover: #1C2030;
+  --bg-card-secondary: #202532;
+  --bg-bottom-bar: #0D1019;
+  --bg-input: #111420;
+  --text: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --border: rgba(255, 255, 255, .06);
+}
+
+:root.theme-dracula {
+  --bg-base: #282a36;
+  --bg-sidebar: #21222c;
+  --bg-card: #1e1f29;
+  --bg-card-hover: #44475a;
+  --bg-card-secondary: #2d3748;
+  --bg-bottom-bar: #1d1f27;
+  --bg-input: #191a21;
+  --text: #f8f8f2;
+  --text-secondary: #6272a4;
+  --text-muted: #8be9fd;
+  --border: rgba(189, 147, 249, 0.15);
+}
+
+:root.theme-vampire {
+  --bg-base: #140404;
+  --bg-sidebar: #0c0202;
+  --bg-card: #200808;
+  --bg-card-hover: #2d0b0b;
+  --bg-card-secondary: #3b0e0e;
+  --bg-bottom-bar: #090202;
+  --bg-input: #1b0707;
+  --text: #f5c2c2;
+  --text-secondary: #ea6b6b;
+  --text-muted: #ff3333;
+  --border: rgba(239, 68, 68, 0.12);
+}
+
+:root.theme-neon {
+  --bg-base: #03030b;
+  --bg-sidebar: #010105;
+  --bg-card: #08081a;
+  --bg-card-hover: #0c0c2a;
+  --bg-card-secondary: #101035;
+  --bg-bottom-bar: #020208;
+  --bg-input: #060615;
+  --text: #ffffff;
+  --text-secondary: #bcfe00;
+  --text-muted: #00ffcc;
+  --border: rgba(0, 229, 255, 0.12);
+}

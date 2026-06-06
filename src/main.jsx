@@ -44,6 +44,35 @@ import {
   UpdateAlertModal
 } from "./components/Modals";
 
+function hexToRgba(hex, alpha) {
+  let r = 0, g = 0, b = 0;
+  hex = (hex || "").replace("#", "");
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else if (hex.length === 6) {
+    r = parseInt(hex.substring(0, 2), 16);
+    g = parseInt(hex.substring(2, 4), 16);
+    b = parseInt(hex.substring(4, 6), 16);
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function adjustColor(hex, percent) {
+  hex = (hex || "").replace("#", "");
+  if (isNaN(parseInt(hex, 16))) return "#8b5cf6";
+  let num = parseInt(hex, 16);
+  let amt = Math.round(2.55 * percent);
+  let R = (num >> 16) + amt;
+  let G = (num >> 8 & 0x00FF) + amt;
+  let B = (num & 0x0000FF) + amt;
+  R = Math.max(0, Math.min(255, R));
+  G = Math.max(0, Math.min(255, G));
+  B = Math.max(0, Math.min(255, B));
+  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+}
+
 function App() {
   const [state, setState] = useState(null);
   const [page, setPage] = useState(() => {
@@ -104,9 +133,14 @@ function App() {
     }
   }, [state, checkedVirtualCable]);
 
-  // Custom premium theme and account configurations
   const [accentColor, setAccentColor] = useState(() => {
     return localStorage.getItem("micfudiddo.accentColor") || "purple";
+  });
+  const [customAccentColor, setCustomAccentColor] = useState(() => {
+    return localStorage.getItem("micfudiddo.customAccentColor") || "#8B5CF6";
+  });
+  const [appTheme, setAppTheme] = useState(() => {
+    return localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
   });
   const [profileName, setProfileName] = useState(() => {
     return localStorage.getItem("micfudiddo.profileName") || "MicFudido";
@@ -229,10 +263,32 @@ function App() {
     }
   };
 
+  // Apply theme class
+  useEffect(() => {
+    const r = document.documentElement;
+    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon");
+    r.classList.add(appTheme);
+  }, [appTheme]);
+
   // Apply accent color
   useEffect(() => {
     const applyAccentColor = (key) => {
-      const p = colorPalettes[key] || colorPalettes.purple;
+      let p;
+      if (key === "custom") {
+        const hex = customAccentColor;
+        p = {
+          primary: hex,
+          hover: adjustColor(hex, 15),
+          dim: adjustColor(hex, -15),
+          glow: hexToRgba(hex, 0.35),
+          soft: hexToRgba(hex, 0.12),
+          bg: hexToRgba(hex, 0.08),
+          borderHover: hexToRgba(hex, 0.25),
+          borderActive: hexToRgba(hex, 0.5)
+        };
+      } else {
+        p = colorPalettes[key] || colorPalettes.purple;
+      }
       const r = document.documentElement;
       r.style.setProperty("--purple", p.primary);
       r.style.setProperty("--purple-hover", p.hover);
@@ -244,7 +300,7 @@ function App() {
       r.style.setProperty("--border-active", p.borderActive);
     };
     applyAccentColor(accentColor);
-  }, [accentColor]);
+  }, [accentColor, customAccentColor]);
 
   // Efeitos para aplicar as opções de personalização visual
   useEffect(() => {
@@ -863,6 +919,10 @@ function App() {
                     setPage={setPage}
                     accentColor={accentColor}
                     setAccentColor={setAccentColor}
+                    customAccentColor={customAccentColor}
+                    setCustomAccentColor={setCustomAccentColor}
+                    appTheme={appTheme}
+                    setAppTheme={setAppTheme}
                     updateEffects={updateEffects}
                     prefFontSize={prefFontSize}
                     setPrefFontSize={setPrefFontSize}

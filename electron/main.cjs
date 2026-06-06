@@ -391,6 +391,28 @@ function createTray() {
   tray.on("double-click", () => mainWindow?.show());
 }
 
+ipcMain.handle("dialog:save-mfsound", async (_event, defaultName) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Exportar pacote de som (.mfsound)",
+    defaultPath: defaultName || "som.mfsound",
+    filters: [
+      { name: "MicFudiddo Sound Package", extensions: ["mfsound"] }
+    ]
+  });
+  return result.canceled ? "" : result.filePath;
+});
+
+ipcMain.handle("dialog:open-mfsound", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Importar pacote .mfsound",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      { name: "MicFudiddo Sound Package", extensions: ["mfsound"] }
+    ]
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+
 ipcMain.handle("dialog:open-audio", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Adicionar sons",

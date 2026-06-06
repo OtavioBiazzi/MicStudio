@@ -504,6 +504,110 @@ class SoundLibrary:
         self.update(item)
         return item
 
+    def export_mfsound(self, item_id: str, export_path: str) -> str:
+        import zipfile
+        item = self.by_id(item_id)
+        if not item:
+            raise RuntimeError("Som nao encontrado.")
+        
+        audio_path = Path(item.path)
+        original_backup = self.sounds_dir / f"{item.id}.original.wav"
+        if original_backup.exists():
+            audio_path = original_backup
+            
+        if not audio_path.exists():
+            raise RuntimeError(f"Arquivo de audio nao encontrado em: {audio_path}")
+            
+        metadata = {
+            "name": item.name,
+            "category": item.category,
+            "color": item.color,
+            "volume": item.volume,
+            "pitch_semitones": item.pitch_semitones,
+            "pitch_mode": item.pitch_mode,
+            "speed": item.speed,
+            "normalize": item.normalize,
+            "fade_in_ms": item.fade_in_ms,
+            "fade_out_ms": item.fade_out_ms,
+            "loop": item.loop,
+            "playback_mode": item.playback_mode,
+            "stop_other_sounds": item.stop_other_sounds,
+            "mute_other_sounds": item.mute_other_sounds,
+            "output_route": item.output_route,
+            "shortcut": item.shortcut,
+            "block_voice": item.block_voice,
+            "effects": item.effects,
+            "tags": item.tags,
+            "audio_filename": audio_path.name
+        }
+        
+        with zipfile.ZipFile(export_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr("metadata.json", json.dumps(metadata, ensure_ascii=False, indent=2))
+            zipf.write(audio_path, arcname=audio_path.name)
+            
+        return export_path
+
+    def import_mfsound(self, archive_path: str) -> SoundItem:
+        import zipfile
+        import tempfile
+        archive_path = Path(archive_path)
+        if not archive_path.is_file():
+            raise RuntimeError(f"Arquivo .mfsound nao encontrado: {archive_path}")
+            
+        with zipfile.ZipFile(archive_path, "r") as zipf:
+            namelist = zipf.namelist()
+            if "metadata.json" not in namelist:
+                raise RuntimeError("Arquivo .mfsound invalido: metadata.json nao encontrado.")
+                
+            metadata = json.loads(zipf.read("metadata.json").decode("utf-8"))
+            audio_filename = metadata.get("audio_filename")
+            
+            if not audio_filename or audio_filename not in namelist:
+                for name in namelist:
+                    if name != "metadata.json" and Path(name).suffix.lower() in SUPPORTED_FILE_EXTENSIONS:
+                        audio_filename = name
+                        break
+                        
+            if not audio_filename:
+                raise RuntimeError("Nenhum arquivo de audio suportado encontrado no pacote.")
+                
+            safe_id = uuid.uuid4().hex
+            audio_suffix = Path(audio_filename).suffix.lower()
+            target = self.sounds_dir / f"{safe_id}{self._target_suffix(audio_suffix)}"
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                extracted_path = zipf.extract(audio_filename, tmpdir)
+                self._copy_or_convert(Path(extracted_path), target)
+                
+            item = SoundItem(
+                id=safe_id,
+                name=metadata.get("name", "Som Importado"),
+                path=str(target),
+                category=metadata.get("category", "Geral"),
+                color=metadata.get("color", "#25a7f2"),
+                volume=metadata.get("volume", 1.0),
+                pitch_semitones=metadata.get("pitch_semitones", 0.0),
+                pitch_mode=metadata.get("pitch_mode", "preserve"),
+                speed=metadata.get("speed", 1.0),
+                normalize=metadata.get("normalize", False),
+                fade_in_ms=metadata.get("fade_in_ms", 0.0),
+                fade_out_ms=metadata.get("fade_out_ms", 0.0),
+                repeats=metadata.get("repeats", 1),
+                loop=metadata.get("loop", False),
+                playback_mode=metadata.get("playback_mode", "restart"),
+                stop_other_sounds=metadata.get("stop_other_sounds", False),
+                mute_other_sounds=metadata.get("mute_other_sounds", False),
+                output_route=metadata.get("output_route", "both"),
+                shortcut=metadata.get("shortcut", ""),
+                block_voice=metadata.get("block_voice", False),
+                effects=metadata.get("effects", {}),
+                tags=metadata.get("tags", []),
+            )
+            self.items.append(item)
+            self.save()
+            return item
+
+
     def categories(self) -> list[str]:
         names = {
             (item.category or "Geral").strip() or "Geral"

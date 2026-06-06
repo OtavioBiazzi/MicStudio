@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("micfudiddo", {
   openAudioFiles: () => ipcRenderer.invoke("dialog:open-audio"),
+  openMfsoundFile: () => ipcRenderer.invoke("dialog:open-mfsound"),
+  saveMfsoundPath: (defaultName) => ipcRenderer.invoke("dialog:save-mfsound", defaultName),
   openAudioFolders: () => ipcRenderer.invoke("dialog:open-folder"),
   openImageFile: () => ipcRenderer.invoke("dialog:open-image"),
   openPath: (targetPath) => ipcRenderer.invoke("shell:open-path", targetPath),

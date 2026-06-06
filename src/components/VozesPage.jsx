@@ -159,6 +159,48 @@ export function VozesPage({
           }} title="Nova Categoria de Voz">
             <Plus size={14} /> Adicionar Categoria
           </button>
+          <button className="btn btn-ghost" onClick={async () => {
+            try {
+              const text = (await navigator.clipboard.readText() || "").trim();
+              if (!text) {
+                alert("A área de transferência está vazia!");
+                return;
+              }
+              if (!text.startsWith("MFVOICE-")) {
+                alert("Código de compartilhamento inválido no clipboard (deve começar com 'MFVOICE-').");
+                return;
+              }
+              const base64Part = text.substring("MFVOICE-".length);
+              const base64Regex = /^[A-Za-z0-9+/=]+$/;
+              if (!base64Regex.test(base64Part)) {
+                alert("Código Base64 inválido.");
+                return;
+              }
+              const jsonStr = decodeURIComponent(escape(atob(base64Part)));
+              const imported = JSON.parse(jsonStr);
+              if (imported && typeof imported === "object") {
+                const newVoice = {
+                  id: `custom_${Date.now()}`,
+                  label: imported.label || "Voz Importada",
+                  description: imported.description || "Voz importada por código",
+                  emoji: imported.emoji || "🎙️",
+                  category: imported.category || "Customizadas",
+                  gradient: "linear-gradient(135deg, #1e1b4b, #311042)",
+                  gain: imported.gain ?? 1.0,
+                  pitch: imported.pitch ?? 0.0,
+                  effects: imported.effects || {}
+                };
+                setCustomVoices(prev => [...prev, newVoice]);
+                setToast?.("Voz importada com sucesso!");
+              } else {
+                alert("Dados inválidos dentro do código.");
+              }
+            } catch (err) {
+              alert("Erro ao importar do clipboard: " + err.message);
+            }
+          }} title="Importar Voz por Código da Área de Transferência">
+            <DownloadSimple size={14} /> Importar por Código
+          </button>
           {customVoiceCategories.includes(category) && (
             <button className="btn btn-ghost" onClick={() => {
               if (confirm(`Deseja excluir a categoria de voz "${category}"? As vozes não serão excluídas, apenas perderão a categoria.`)) {
@@ -298,40 +340,64 @@ export function VozesPage({
               pitch: contextMenu.voice.pitch ?? 0.0,
               effects: contextMenu.voice.effects || {}
             };
-            navigator.clipboard.writeText(JSON.stringify(voiceData, null, 2))
-              .then(() => setToast?.("Configuração da voz copiada para a área de transferência!"))
-              .catch(() => alert("Erro ao copiar para área de transferência."));
-            setContextMenu(null);
-          }}>
-            <Export size={14} /> Exportar (Clipboard)
-          </button>
-          <button onClick={async () => {
             try {
-               const text = await navigator.clipboard.readText();
-               const imported = JSON.parse(text);
-               if (imported && typeof imported === "object") {
-                 const newVoice = {
-                   id: `custom_${Date.now()}`,
-                   label: imported.label || "Voz Importada",
-                   description: imported.description || "Voz importada da área de transferência",
-                   emoji: imported.emoji || "🎙️",
-                   category: imported.category || "Customizadas",
-                   gradient: "linear-gradient(135deg, #1e1b4b, #311042)",
-                   gain: imported.gain ?? 1.0,
-                   pitch: imported.pitch ?? 0.0,
-                   effects: imported.effects || {}
-                 };
-                 setCustomVoices(prev => [...prev, newVoice]);
-                 setToast?.("Voz importada com sucesso da área de transferência!");
-               } else {
-                 alert("Dados da área de transferência inválidos.");
-               }
+              const jsonStr = JSON.stringify(voiceData);
+              const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+              const shareCode = `MFVOICE-${base64}`;
+              navigator.clipboard.writeText(shareCode)
+                .then(() => setToast?.("Código de compartilhamento copiado!"));
             } catch (err) {
-               alert("Erro ao importar da área de transferência: " + err.message);
+              alert("Erro ao gerar código de compartilhamento: " + err.message);
             }
             setContextMenu(null);
           }}>
-            <DownloadSimple size={14} /> Importar (Clipboard)
+            <Export size={14} /> Copiar Código de Compartilhamento
+          </button>
+          <button onClick={async () => {
+            try {
+              const text = (await navigator.clipboard.readText() || "").trim();
+              if (!text) {
+                alert("A área de transferência está vazia!");
+                setContextMenu(null);
+                return;
+              }
+              if (!text.startsWith("MFVOICE-")) {
+                alert("Código inválido! Deve começar com 'MFVOICE-'.");
+                setContextMenu(null);
+                return;
+              }
+              const base64Part = text.substring("MFVOICE-".length);
+              const base64Regex = /^[A-Za-z0-9+/=]+$/;
+              if (!base64Regex.test(base64Part)) {
+                alert("Código Base64 inválido.");
+                setContextMenu(null);
+                return;
+              }
+              const jsonStr = decodeURIComponent(escape(atob(base64Part)));
+              const imported = JSON.parse(jsonStr);
+              if (imported && typeof imported === "object") {
+                const newVoice = {
+                  id: `custom_${Date.now()}`,
+                  label: imported.label || "Voz Importada",
+                  description: imported.description || "Voz importada por código",
+                  emoji: imported.emoji || "🎙️",
+                  category: imported.category || "Customizadas",
+                  gradient: "linear-gradient(135deg, #1e1b4b, #311042)",
+                  gain: imported.gain ?? 1.0,
+                  pitch: imported.pitch ?? 0.0,
+                  effects: imported.effects || {}
+                };
+                setCustomVoices(prev => [...prev, newVoice]);
+                setToast?.("Voz importada com sucesso!");
+              } else {
+                alert("Dados inválidos dentro do código.");
+              }
+            } catch (err) {
+              alert("Erro ao importar: " + err.message);
+            }
+            setContextMenu(null);
+          }}>
+            <DownloadSimple size={14} /> Importar por Código
           </button>
           <button onClick={() => {
             const defaults = voicePresets.find(p => p.id === contextMenu.voice.id);

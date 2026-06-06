@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   closeWithChoice: () => ipcRenderer.invoke("window:close-choice"),
   quitApp: () => ipcRenderer.invoke("window:quit-app"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
+  getVersion: () => ipcRenderer.invoke("app:get-version"),
+  updateApp: (downloadUrl) => ipcRenderer.invoke("app:update-app", downloadUrl),
   openSoundSettings: () => ipcRenderer.invoke("system:open-sound-settings"),
   openSoundControlPanel: () => ipcRenderer.invoke("system:open-mmsys"),
   getShortcutConflicts: () => ipcRenderer.invoke("shortcuts:get-conflicts"),

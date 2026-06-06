@@ -492,6 +492,58 @@ ipcMain.handle("shortcuts:get-conflicts", () => {
   return Object.fromEntries(shortcutConflicts);
 });
 
+ipcMain.handle("app:get-version", () => {
+  return app.getVersion();
+});
+
+ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
+  const fs = require("fs");
+  const https = require("https");
+  const { spawn } = require("child_process");
+  
+  return new Promise((resolve, reject) => {
+    const tempDir = app.getPath("temp");
+    const installerPath = path.join(tempDir, "MicFudiddoStudioSetup.exe");
+    const file = fs.createWriteStream(installerPath);
+    
+    const download = (url) => {
+      https.get(url, (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          download(response.headers.location);
+          return;
+        }
+        if (response.statusCode !== 200) {
+          reject(new Error(`Falha no download: ${response.statusCode}`));
+          return;
+        }
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close(async () => {
+            try {
+              const child = spawn(installerPath, [], {
+                detached: true,
+                stdio: "ignore"
+              });
+              child.unref();
+              
+              quitting = true;
+              await stopBackend();
+              app.quit();
+              resolve(true);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+      }).on("error", (err) => {
+        fs.unlink(installerPath, () => reject(err));
+      });
+    };
+    
+    download(downloadUrl);
+  });
+});
+
 app.whenReady().then(async () => {
   await startBackend();
   createWindow();

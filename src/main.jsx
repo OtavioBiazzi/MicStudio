@@ -39,7 +39,9 @@ import {
   CloseChoiceModal,
   UserProfileModal,
   EditProfileModal,
-  MoveCategoryModal
+  MoveCategoryModal,
+  ReleasesModal,
+  UpdateAlertModal
 } from "./components/Modals";
 
 function App() {
@@ -154,6 +156,69 @@ function App() {
   const [soundboardFavorites, setSoundboardFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem("micfudiddo.soundboardFavorites") || "[]"); } catch { return []; }
   });
+
+  const [appVersion, setAppVersion] = useState("v0.5.0");
+  const [updateAvailable, setUpdateAvailable] = useState(null);
+  const [showReleasesModal, setShowReleasesModal] = useState(false);
+
+  useEffect(() => {
+    window.micfudiddo?.getVersion?.().then((v) => {
+      if (v) setAppVersion("v" + v.replace(/^v/, ""));
+    });
+  }, []);
+
+  useEffect(() => {
+    const checkUpdates = async () => {
+      try {
+        const currentVersion = await window.micfudiddo?.getVersion?.();
+        if (!currentVersion) return;
+        
+        const res = await fetch("https://api.github.com/repos/OtavioBiazzi/MicStudio/releases");
+        if (!res.ok) return;
+        const releases = await res.json();
+        if (!releases || releases.length === 0) return;
+        
+        const latestRelease = releases[0];
+        const latestVersion = latestRelease.tag_name;
+        
+        const isNewer = (curr, lat) => {
+          const clean = (v) => v.replace(/^v/, "").split(".").map(Number);
+          const cParts = clean(curr);
+          const lParts = clean(lat);
+          for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+            const cVal = cParts[i] || 0;
+            const lVal = lParts[i] || 0;
+            if (lVal > cVal) return true;
+            if (cVal > lVal) return false;
+          }
+          return false;
+        };
+
+        if (isNewer(currentVersion, latestVersion)) {
+          const asset = latestRelease.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || latestRelease.assets.find(a => a.name.endsWith(".exe"));
+          if (asset) {
+            setUpdateAvailable({
+              version: latestVersion,
+              changelog: latestRelease.body,
+              downloadUrl: asset.browser_download_url
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao verificar atualizações:", err);
+      }
+    };
+    const timer = setTimeout(checkUpdates, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleUpdateApp = async (downloadUrl) => {
+    if (window.micfudiddo?.updateApp) {
+      await window.micfudiddo.updateApp(downloadUrl);
+    } else {
+      window.open(downloadUrl, "_blank");
+    }
+  };
 
   // Apply accent color
   useEffect(() => {
@@ -604,6 +669,8 @@ function App() {
           profileImagePosition={profileImagePosition}
           onOpenProfile={() => setUserProfileOpen(true)}
           onManageAccount={() => setEditProfileOpen(true)}
+          appVersion={appVersion}
+          onVersionClick={() => setShowReleasesModal(true)}
         />
 
         <main className="mainContent">
@@ -862,6 +929,24 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+        {showReleasesModal && (
+          <ReleasesModal
+            onClose={() => setShowReleasesModal(false)}
+            currentVersion={appVersion}
+            onUpdateApp={handleUpdateApp}
+          />
+        )}
+        {updateAvailable && (
+          <UpdateAlertModal
+            onClose={() => setUpdateAvailable(null)}
+            latestVersion={updateAvailable.version}
+            changelog={updateAvailable.changelog}
+            onConfirm={() => {
+              handleUpdateApp(updateAvailable.downloadUrl);
+              setUpdateAvailable(null);
+            }}
+          />
         )}
       </AnimatePresence>
     </div>

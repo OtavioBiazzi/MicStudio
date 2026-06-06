@@ -28,7 +28,9 @@ export function Sidebar({
   profilePlan,
   profileImage,
   profileImagePosition,
-  onOpenProfile
+  onOpenProfile,
+  appVersion,
+  onVersionClick
 }) {
   return (
     <aside className="sidebar">
@@ -88,8 +90,26 @@ export function Sidebar({
             <small>{profileSub}</small>
           </div>
         </div>
-        <div style={{ padding: "8px 4px 0 4px", fontSize: "9px", color: "var(--text-muted)", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "12px", width: "100%", opacity: 0.8 }}>
-          v0.4.0
+        <div 
+          onClick={onVersionClick}
+          onMouseEnter={(e) => e.currentTarget.style.color = "var(--purple)"}
+          onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+          style={{ 
+            padding: "8px 4px 0 4px", 
+            fontSize: "9.5px", 
+            color: "var(--text-muted)", 
+            textAlign: "center", 
+            borderTop: "1px solid rgba(255,255,255,0.06)", 
+            marginTop: "12px", 
+            width: "100%", 
+            opacity: 0.8,
+            cursor: "pointer",
+            fontWeight: "700",
+            transition: "color 0.2s"
+          }}
+          title="Ver histórico de atualizações"
+        >
+          {appVersion || "v0.5.0"}
         </div>
       </div>
     </aside>

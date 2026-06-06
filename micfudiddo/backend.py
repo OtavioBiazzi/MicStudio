@@ -1971,7 +1971,7 @@ class Handler(BaseHTTPRequestHandler):
             item.output_route = str(item.output_route or "both")
             STATE.library._sanitize_item(item)
             STATE.library.update(item)
-            return None
+            return STATE.snapshot()
         if path == "/api/sounds/defaults":
             STATE.library.defaults = SoundDefaults(
                 volume=max(0.0, float(data.get("volume", STATE.library.defaults.volume))),

@@ -818,6 +818,38 @@ export function CloseChoiceModal({ onCancel, onMinimize, onQuit }) {
   );
 }
 
+function cleanYoutubeUrl(url) {
+  if (!url) return "";
+  let cleanUrl = url.trim();
+  try {
+    const parsed = new URL(cleanUrl);
+    if (parsed.hostname.includes("youtube.com") && parsed.pathname === "/watch") {
+      const videoId = parsed.searchParams.get("v");
+      if (videoId) {
+        const t = parsed.searchParams.get("t");
+        let result = `https://www.youtube.com/watch?v=${videoId}`;
+        if (t) {
+          result += `&t=${t}`;
+        }
+        return result;
+      }
+    } else if (parsed.hostname.includes("youtu.be")) {
+      const videoId = parsed.pathname.slice(1);
+      if (videoId) {
+        const t = parsed.searchParams.get("t");
+        let result = `https://youtu.be/${videoId}`;
+        if (t) {
+          result += `?t=${t}`;
+        }
+        return result;
+      }
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return cleanUrl;
+}
+
 // --- YoutubeImportModal ---
 export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -846,10 +878,11 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
       setToast("Cole uma URL válida do YouTube.");
       return;
     }
+    const sanitizedUrl = cleanYoutubeUrl(youtubeUrl);
     setYoutubeLoading(true);
     setToast("Verificando vídeo do YouTube...");
     try {
-      await call("/api/sounds/import-youtube", { url: youtubeUrl.trim() });
+      await call("/api/sounds/import-youtube", { url: sanitizedUrl });
     } catch (err) {
       setToast("Erro: " + err.message);
       setYoutubeLoading(false);
@@ -1373,3 +1406,173 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
     </div>
   );
 }
+
+// --- ReleasesModal ---
+export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
+  const [releases, setReleases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [updatingUrl, setUpdatingUrl] = useState(null);
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/OtavioBiazzi/MicStudio/releases")
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro ao carregar do GitHub");
+        return res.json();
+      })
+      .then((data) => {
+        setReleases(data || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleUpdate = async (release) => {
+    const asset = release.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || release.assets.find(a => a.name.endsWith(".exe"));
+    if (!asset) {
+      alert("Nenhum executável de instalação encontrado para esta release.");
+      return;
+    }
+    setUpdatingUrl(asset.browser_download_url);
+    try {
+      await onUpdateApp(asset.browser_download_url);
+    } catch (err) {
+      alert("Erro ao atualizar: " + err.message);
+      setUpdatingUrl(null);
+    }
+  };
+
+  const isNewer = (latestTag) => {
+    const clean = (v) => v.replace(/^v/, "").split(".").map(Number);
+    const cParts = clean(currentVersion);
+    const lParts = clean(latestTag);
+    for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+      const cVal = cParts[i] || 0;
+      const lVal = lParts[i] || 0;
+      if (lVal > cVal) return true;
+      if (cVal > lVal) return false;
+    }
+    return false;
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <motion.div
+        className="modalContent"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 520, width: "90%", maxHeight: "80vh", display: "flex", flexDirection: "column", padding: 24 }}
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="modalHeader" style={{ paddingBottom: 12, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+          <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            🚀 Histórico de Versões & Updates
+          </h3>
+          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+        </div>
+
+        <div className="modalBody" style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: 4 }}>
+          {updatingUrl ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: 12 }}>
+              <div className="spinner" style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.08)", borderTopColor: "var(--purple)", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Baixando atualização...</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>O aplicativo será fechado automaticamente para iniciar o instalador assim que o download terminar.</span>
+            </div>
+          ) : loading ? (
+            <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+              <div className="spinner" style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.08)", borderTopColor: "var(--purple)", animation: "spin 0.8s linear infinite" }} />
+            </div>
+          ) : error ? (
+            <div style={{ color: "var(--danger)", fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+              {error}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ fontSize: 11.5, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", padding: "10px 12px", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Versão Atual Instalada:</span>
+                <strong style={{ color: "var(--cyan)", fontSize: 13 }}>{currentVersion}</strong>
+              </div>
+
+              {releases.map((release) => {
+                const isNew = isNewer(release.tag_name);
+                const isCurrent = release.tag_name.replace(/^v/, "") === currentVersion.replace(/^v/, "");
+                return (
+                  <div key={release.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 14, background: isCurrent ? "rgba(139, 92, 246, 0.04)" : "rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: isCurrent ? "var(--purple)" : "var(--text)" }}>{release.tag_name}</span>
+                        {isCurrent && <span style={{ fontSize: 9, background: "var(--purple-soft)", color: "var(--purple)", padding: "2px 6px", borderRadius: 10, fontWeight: 800 }}>ATUAL</span>}
+                        {isNew && <span style={{ fontSize: 9, background: "rgba(16,185,129,0.1)", color: "#10b981", padding: "2px 6px", borderRadius: 10, fontWeight: 800 }}>NOVO</span>}
+                      </div>
+                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{new Date(release.published_at).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}</span>
+                    </div>
+
+                    <div className="readme-container changelog-markdown" style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)", maxHeight: 150, overflowY: "auto", padding: "8px 10px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.02)" }}>
+                      {renderMarkdown(release.body || "*Nenhuma nota de versão fornecida.*")}
+                    </div>
+
+                    {isNew && (
+                      <button 
+                        className="btn btn-primary" 
+                        onClick={() => handleUpdate(release)} 
+                        style={{ padding: "6px 12px", fontSize: 11, background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", alignSelf: "flex-end", border: "none" }}
+                      >
+                        ⚡ Atualizar para {release.tag_name}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- UpdateAlertModal ---
+export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm }) {
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--purple)", display: "flex", alignItems: "center", gap: 8 }}>
+            🚀 Nova Atualização Disponível!
+          </h3>
+          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            Uma nova versão <strong>{latestVersion}</strong> do MicFudiddo Studio está disponível para download.
+          </p>
+          
+          <div style={{ fontSize: 11.5, maxHeight: 150, overflowY: "auto", padding: "10px 12px", background: "rgba(0,0,0,0.15)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--text)" }}>Novidades desta versão:</div>
+            <div className="changelog-markdown" style={{ color: "var(--text-secondary)" }}>
+              {renderMarkdown(changelog || "*Nenhuma nota de versão fornecida.*")}
+            </div>
+          </div>
+        </div>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>
+            Depois
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "8px 16px", fontSize: 12, background: "linear-gradient(135deg, var(--purple), var(--purple-dim))" }}
+            onClick={onConfirm}
+          >
+            ⚡ Atualizar Agora
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

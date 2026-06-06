@@ -584,7 +584,8 @@ function cleanOldVersion() {
     path.resolve(path.join(localAppData, "MicFudiddo")),
     path.resolve(path.join(localAppData, "MicFudiddoStudio")),
     path.resolve(path.join(localAppData, "micfudiddo-studio")),
-    path.resolve(path.join(localAppData, "MicFudiddo Studio"))
+    path.resolve(path.join(localAppData, "MicFudiddo Studio")),
+    path.resolve(path.join(localAppData, "Programs", "micfudiddo-studio"))
   ];
 
   for (const oldDir of oldDirsToClean) {
@@ -651,13 +652,19 @@ function cleanOldVersion() {
         iconIndex: 0
       };
 
-      // Gravar atalho na Área de Trabalho
+      // Gravar atalho na Área de Trabalho (deleta antes para evitar erro de arquivo existente)
+      if (fs.existsSync(newDesktopShortcut)) {
+        try { fs.unlinkSync(newDesktopShortcut); } catch (_) {}
+      }
       shell.writeShortcutLink(newDesktopShortcut, "create", shortcutOptions);
 
-      // Gravar atalho no Menu Iniciar
+      // Gravar atalho no Menu Iniciar (deleta antes para evitar erro de arquivo existente)
       if (appData) {
         const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
         const newStartMenuShortcut = path.join(startMenuProgramsDir, "MicFudiddo Studio.lnk");
+        if (fs.existsSync(newStartMenuShortcut)) {
+          try { fs.unlinkSync(newStartMenuShortcut); } catch (_) {}
+        }
         shell.writeShortcutLink(newStartMenuShortcut, "create", shortcutOptions);
       }
     }

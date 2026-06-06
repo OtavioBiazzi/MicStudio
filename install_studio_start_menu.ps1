@@ -33,7 +33,7 @@ if ($null -eq $studioExe -or -not (Test-Path (Join-Path $unpackedDir "MicFudiddo
     throw "Nao foi possivel encontrar o executavel em $releaseDir"
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA "Programs\micfudiddo-studio"
+$installDir = Join-Path $env:LOCALAPPDATA "Programs\MicFudiddo Studio"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $installedExe = Join-Path $installDir "MicFudiddo Studio.exe"

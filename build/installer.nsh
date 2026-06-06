@@ -18,6 +18,7 @@
   RMDir /r "$LOCALAPPDATA\MicFudiddoStudio"
   RMDir /r "$LOCALAPPDATA\micfudiddo-studio"
   RMDir /r "$LOCALAPPDATA\MicFudiddo Studio"
+  RMDir /r "$LOCALAPPDATA\Programs\micfudiddo-studio"
   
   ; Deletar pastas antigas do Menu Iniciar
   RMDir /r "$SMPROGRAMS\MicFudiddo"
@@ -25,10 +26,13 @@
   ; Deletar atalhos antigos do Desktop
   Delete "$DESKTOP\Mic Fudido.lnk"
   Delete "$DESKTOP\MicFudiddo.lnk"
+  Delete "$DESKTOP\MicFudiddo Studio.lnk"
   
   ; Deletar atalhos antigos do Menu Iniciar
   Delete "$SMPROGRAMS\Mic Fudido.lnk"
   Delete "$SMPROGRAMS\MicFudiddo.lnk"
+  Delete "$SMPROGRAMS\MicFudiddo Studio.lnk"
+  Delete "$SMPROGRAMS\MicFudiddo\MicFudiddo Studio.lnk"
 !macroend
 
 ; ─── VB-CABLE detection ────────────────────────────────────────

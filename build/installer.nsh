@@ -10,6 +10,21 @@
   nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe"'
   Pop $0
   Pop $1
+  
+  Sleep 1000
+
+  DetailPrint "Limpando diretórios e atalhos antigos do MicFudiddo..."
+  ; Deletar pasta antiga do app local
+  RMDir /r "$LOCALAPPDATA\MicFudiddoStudio"
+  
+  ; Deletar pastas antigas do Menu Iniciar
+  RMDir /r "$SMPROGRAMS\MicFudiddo"
+  RMDir /r "$SMPROGRAMS\MicFudiddo Studio"
+  
+  ; Deletar atalhos antigos do Desktop
+  Delete "$DESKTOP\MicFudiddo Studio.lnk"
+  Delete "$DESKTOP\Mic Fudido.lnk"
+  Delete "$DESKTOP\MicFudiddo.lnk"
 !macroend
 
 ; ─── VB-CABLE detection ────────────────────────────────────────

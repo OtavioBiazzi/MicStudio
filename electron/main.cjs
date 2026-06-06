@@ -571,7 +571,56 @@ ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
   });
 });
 
+function cleanOldVersion() {
+  const fs = require("fs");
+  const path = require("path");
+  const localAppData = process.env.LOCALAPPDATA;
+  const appData = process.env.APPDATA;
+  if (!localAppData) return;
+
+  const oldDir = path.resolve(path.join(localAppData, "MicFudiddoStudio"));
+  const currentDir = path.resolve(path.dirname(app.getPath("exe")));
+  
+  // Se o app atual estiver rodando de dentro da pasta antiga, nao deleta a si mesmo!
+  if (currentDir.toLowerCase().startsWith(oldDir.toLowerCase())) {
+    return;
+  }
+
+  if (fs.existsSync(oldDir)) {
+    try {
+      fs.rmSync(oldDir, { recursive: true, force: true });
+    } catch (e) {
+      console.error("Erro ao deletar pasta antiga:", e);
+    }
+  }
+
+  if (appData) {
+    const oldStartMenu1 = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo");
+    if (fs.existsSync(oldStartMenu1)) {
+      try { fs.rmSync(oldStartMenu1, { recursive: true, force: true }); } catch (_) {}
+    }
+    const oldStartMenu2 = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo Studio");
+    if (fs.existsSync(oldStartMenu2)) {
+      try { fs.rmSync(oldStartMenu2, { recursive: true, force: true }); } catch (_) {}
+    }
+  }
+
+  // Deletar atalhos alternativos antigos da área de trabalho
+  try {
+    const os = require("os");
+    const desktopDir = path.join(os.homedir(), "Desktop");
+    const altShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
+    altShortcuts.forEach((lnk) => {
+      const lnkPath = path.join(desktopDir, lnk);
+      if (fs.existsSync(lnkPath)) {
+        fs.unlinkSync(lnkPath);
+      }
+    });
+  } catch (_) {}
+}
+
 app.whenReady().then(async () => {
+  cleanOldVersion();
   await startBackend();
   createWindow();
   createTray();

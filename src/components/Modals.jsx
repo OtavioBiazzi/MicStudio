@@ -1411,7 +1411,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.6": `### 🛠️ Versão 0.5.6 (Versão Atual)
+  "v0.5.7": `### 🛠️ Versão 0.5.7 (Versão Atual)
+* 🗑️ **Limpeza Dupla de Versões Antigas**: Adicionada rotina de exclusão completa do diretório antigo de instalação (\`AppData\\Local\\MicFudiddoStudio\`) e dos atalhos obsoletos no Menu Iniciar e Desktop, tanto na inicialização do instalador quanto na abertura do aplicativo. Isso evita conflitos e impede que atalhos antigos continuem executando a versão anterior.`,
+
+  "v0.5.6": `### 🛠️ Versão 0.5.6
 * 🔄 **Unificação de Diretórios de Instalação**: Alinhamento do diretório de instalação dos scripts automatizados (\`instalar.ps1\` e \`install_studio_start_menu.ps1\`) com o diretório padrão do instalador oficial do Electron Builder (\`AppData\\Local\\Programs\\micfudiddo-studio\`). Isso impede que o aplicativo retorne a versões antigas após a atualização ao ser executado por atalhos existentes.
 * 🗑️ **Remoção do Indicador de Voz**: Removido o widget visualizador de status de processamento da voz ("VOZ STATUS: PROCESSANDO") do painel lateral (Sidebar) conforme solicitado.`,
 
@@ -1474,6 +1477,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.7", tag_name: "v0.5.7", published_at: "2026-06-06T02:00:00Z", body: "" },
   { id: "v0.5.6", tag_name: "v0.5.6", published_at: "2026-06-06T01:35:00Z", body: "" },
   { id: "v0.5.5", tag_name: "v0.5.5", published_at: "2026-06-06T01:30:00Z", body: "" },
   { id: "v0.5.4", tag_name: "v0.5.4", published_at: "2026-06-06T00:30:00Z", body: "" },

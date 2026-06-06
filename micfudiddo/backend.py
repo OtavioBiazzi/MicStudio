@@ -246,6 +246,7 @@ class AppState:
         self.windows_capture_endpoints: list[dict[str, str]] = []
         self.youtube_download_cancelled = False
         self.youtube_download_thread = None
+        self.youtube_status = ""
         self.selected_input: int | None = None
         self.selected_input_name: str | None = None
         self.selected_input_hostapi: str | None = None
@@ -1142,6 +1143,7 @@ class AppState:
             "sampleRate": self.engine.sample_rate,
             "level": self.engine.last_level,
             "route": route,
+            "youtubeStatus": self.youtube_status,
             "virtualMode": self.virtual_mode_active,
             "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
             "selected": {
@@ -1461,35 +1463,11 @@ class Handler(BaseHTTPRequestHandler):
             if not youtube_url:
                 raise RuntimeError("URL do YouTube ausente.")
             
-            import yt_dlp
-            # 1. Quick verification: check if video exists
-            browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'safari', None]
-            info = None
-            last_err = None
-            for browser in browsers:
-                ydl_opts_verify = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'simulate': True,
-                    'extractor_args': {
-                        'youtube': {
-                            'player_client': ['android', 'web']
-                        }
-                    }
-                }
-                if browser:
-                    ydl_opts_verify['cookiesfrombrowser'] = (browser,)
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
-                        info = ydl.extract_info(youtube_url, download=False)
-                    break
-                except Exception as e:
-                    last_err = e
-            
-            if not info:
-                raise RuntimeError(f"Video do YouTube invalido ou nao encontrado: {str(last_err)}")
-            
-            STATE.youtube_download_cancelled = False
+            with STATE.lock:
+                if STATE.youtube_download_thread and STATE.youtube_download_thread.is_alive():
+                    raise RuntimeError("Já existe um download em andamento.")
+                STATE.youtube_download_cancelled = False
+                STATE.youtube_status = "Iniciando verificação..."
             
             def bg_download():
                 import yt_dlp
@@ -1498,6 +1476,45 @@ class Handler(BaseHTTPRequestHandler):
                 from pathlib import Path
                 import uuid
                 from .soundboard import sanitize_sound_name
+                
+                browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'safari', None]
+                info = None
+                last_err = None
+                
+                # 1. Quick verification: check if video exists
+                for browser in browsers:
+                    if STATE.youtube_download_cancelled:
+                        break
+                    ydl_opts_verify = {
+                        'quiet': True,
+                        'no_warnings': True,
+                        'simulate': True,
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['android', 'web']
+                            }
+                        }
+                    }
+                    if browser:
+                        ydl_opts_verify['cookiesfrombrowser'] = (browser,)
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
+                            info = ydl.extract_info(youtube_url, download=False)
+                        break
+                    except Exception as e:
+                        if "CANCELLED" in str(e) or STATE.youtube_download_cancelled:
+                            break
+                        last_err = e
+                
+                if STATE.youtube_download_cancelled:
+                    with STATE.lock:
+                        STATE.youtube_status = "Importacao cancelada."
+                    return
+                
+                if not info:
+                    with STATE.lock:
+                        STATE.youtube_status = f"Erro: Video invalido ou nao encontrado ({str(last_err)})"
+                    return
                 
                 ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
                 temp_dir = tempfile.gettempdir()
@@ -1510,7 +1527,7 @@ class Handler(BaseHTTPRequestHandler):
                     if d['status'] == 'downloading':
                         percent = d.get('_percent_str', '').strip()
                         with STATE.lock:
-                            STATE.status = f"Baixando do YouTube: {percent}"
+                            STATE.youtube_status = f"Baixando: {percent}"
                             
                 info = None
                 last_err = None
@@ -1550,11 +1567,11 @@ class Handler(BaseHTTPRequestHandler):
                     if STATE.youtube_download_cancelled:
                         raise RuntimeError("CANCELLED")
                     if not info:
-                        raise last_err or RuntimeError("Falha ao extrair audio do YouTube.")
+                        raise last_err or RuntimeError("Falha ao extrair audio.")
                     
                     mp3_path = Path(temp_dir) / f"yt_{temp_id}.mp3"
                     if not mp3_path.exists():
-                        raise RuntimeError("Falha ao extrair audio do YouTube.")
+                        raise RuntimeError("Falha ao extrair audio.")
                     
                     title = info.get("title", "Som do YouTube")
                     sanitized_title = sanitize_sound_name(title)
@@ -1562,12 +1579,13 @@ class Handler(BaseHTTPRequestHandler):
                         sanitized_title = "som_youtube"
                         
                     with STATE.lock:
+                        STATE.youtube_status = "Adicionando a biblioteca..."
                         item = STATE.library.add_file(str(mp3_path), category="Geral", name=sanitized_title)
                         try:
                             mp3_path.unlink(missing_ok=True)
                         except OSError:
                             pass
-                        STATE.status = f"Som '{item.name}' importado do YouTube!"
+                        STATE.youtube_status = f"Concluido: '{item.name}' importado!"
                 except Exception as e:
                     try:
                         Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
@@ -1575,19 +1593,19 @@ class Handler(BaseHTTPRequestHandler):
                         pass
                     with STATE.lock:
                         if STATE.youtube_download_cancelled:
-                            STATE.status = "Importacao do YouTube cancelada."
+                            STATE.youtube_status = "Importacao cancelada."
                         else:
-                            STATE.status = f"Erro na importacao do YouTube: {str(e)}"
+                            STATE.youtube_status = f"Erro: {str(e)}"
                             
             STATE.youtube_download_thread = threading.Thread(target=bg_download, daemon=True)
             STATE.youtube_download_thread.start()
-            STATE.status = "Iniciando download do YouTube..."
-            return {"status": STATE.status}
+            return {"status": "started"}
 
         if path == "/api/sounds/import-youtube/cancel":
-            STATE.youtube_download_cancelled = True
-            STATE.status = "Cancelando download do YouTube..."
-            return STATE.snapshot()
+            with STATE.lock:
+                STATE.youtube_download_cancelled = True
+                STATE.youtube_status = "Cancelando..."
+            return {"status": "cancelled"}
 
         if path == "/api/sounds/download":
             url = data.get("url")

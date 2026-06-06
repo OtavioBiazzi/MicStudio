@@ -856,22 +856,22 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   useEffect(() => {
-    if (youtubeLoading && state?.status) {
-      const statusLower = state.status.toLowerCase();
-      if (statusLower.includes("importado do youtube")) {
+    if (youtubeLoading && state?.youtubeStatus) {
+      const statusLower = state.youtubeStatus.toLowerCase();
+      if (statusLower.includes("importado!")) {
         setYoutubeLoading(false);
-        setToast(state.status);
+        setToast(state.youtubeStatus);
         onClose();
-      } else if (statusLower.includes("erro na importacao") || statusLower.includes("erro na importação")) {
+      } else if (statusLower.includes("erro:")) {
         setYoutubeLoading(false);
-        setToast(state.status);
-      } else if (statusLower.includes("cancelada") || statusLower.includes("cancelado")) {
+        setToast(state.youtubeStatus);
+      } else if (statusLower.includes("cancelada")) {
         setYoutubeLoading(false);
         setToast("Importação cancelada!");
         onClose();
       }
     }
-  }, [state?.status, youtubeLoading, setToast, onClose]);
+  }, [state?.youtubeStatus, youtubeLoading, setToast, onClose]);
 
   const handleImport = async () => {
     if (!youtubeUrl || !youtubeUrl.trim()) {
@@ -947,7 +947,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
           {youtubeLoading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
               <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--accent)", animation: "spin 0.6s linear infinite" }} />
-              <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 700 }}>{state?.status || "Baixando..."}</span>
+              <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 700 }}>{state?.youtubeStatus || "Processando..."}</span>
             </div>
           )}
           
@@ -1411,7 +1411,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.14": `### 🌟 Versão 0.5.14 (Versão Atual)
+  "v0.5.15": `### 🌟 Versão 0.5.15 (Versão Atual)
+* 📺 **Descongelamento do YouTube**: O download de áudios longos do YouTube agora é feito de forma 100% assíncrona, não travando mais o aplicativo enquanto você baixa.
+* 🐛 **Bug do Status Consertado**: O nome da música sendo tocada no momento não vai mais sobrescrever o texto de progresso de download dentro da tela do YouTube.
+* 🛠️ **Cabo Virtual sem Falhas**: Correção na comunicação entre o instalador e o PowerShell para garantir que falsos-positivos não exibam o pop-up de ausência do driver.`,
+
+  "v0.5.14": `### 🌟 Versão 0.5.14
 * 🚀 **Instalador Inteligente e Silencioso**: A instalação agora é automática (OneClick) e só exibe mensagens caso haja problemas com dependências (como o driver de áudio).
 * 🎧 **Correção Crítica no VB-CABLE**: O instalador agora detecta o Cabo Virtual ativamente no Windows (via \`Get-PnpDevice\`), encerrando os alertas falsos onde o instalador achava que ele não estava instalado.
 * 🧹 **Importação Simplificada**: Botões de Importar Áudio e Importar Pacotes na Soundboard foram fundidos em um só para deixar a interface mais enxuta e bonita.
@@ -1509,6 +1514,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.15", tag_name: "v0.5.15", published_at: "2026-06-06T19:20:00Z", body: "" },
   { id: "v0.5.14", tag_name: "v0.5.14", published_at: "2026-06-06T18:45:00Z", body: "" },
   { id: "v0.5.13", tag_name: "v0.5.13", published_at: "2026-06-06T18:30:00Z", body: "" },
   { id: "v0.5.12", tag_name: "v0.5.12", published_at: "2026-06-06T18:05:00Z", body: "" },

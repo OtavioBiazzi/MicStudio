@@ -38,7 +38,7 @@
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
   ; Check if VB-CABLE is already installed by looking for the driver
-  nsExec::ExecToStack 'powershell -NoProfile -Command "if (Get-PnpDevice -FriendlyName ''*VB-Audio Virtual Cable*'' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"'
+  nsExec::Exec 'powershell -NoProfile -Command "if (Get-PnpDevice -FriendlyName ''*VB-Audio Virtual Cable*'' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"'
   Pop $0
   ${If} $0 != "0"
     ; VB-CABLE not found - ask user

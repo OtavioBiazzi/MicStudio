@@ -1504,7 +1504,9 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
   }, []);
 
   const handleUpdate = async (release) => {
-    const asset = release.assets?.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || release.assets?.find(a => a.name.endsWith(".exe"));
+    const asset = release.assets?.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) || 
+                  release.assets?.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || 
+                  release.assets?.find(a => a.name.endsWith(".exe"));
     if (!asset) {
       alert("Nenhum executável de instalação encontrado para esta release.");
       return;

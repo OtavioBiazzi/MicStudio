@@ -238,7 +238,9 @@ function App() {
         };
 
         if (isNewer(currentVersion, latestVersion)) {
-          const asset = latestRelease.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || latestRelease.assets.find(a => a.name.endsWith(".exe"));
+          const asset = latestRelease.assets.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) || 
+                        latestRelease.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || 
+                        latestRelease.assets.find(a => a.name.endsWith(".exe"));
           if (asset) {
             setUpdateAvailable({
               version: latestVersion,

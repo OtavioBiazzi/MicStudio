@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.4": `### 🛠️ Versão 0.5.4 (Versão Atual)
+  "v0.5.5": `### 🛠️ Versão 0.5.5 (Versão Atual)
+* 🐛 **Correção de Crash no Canvas**: Correção de um erro na barra lateral (Sidebar) causado por falha no Canvas ao renderizar variáveis CSS de cores no gradiente do visualizador de voz.
+* 🛡️ **Tratamento de Erros de Interface**: Adicionada proteção de tela ('ErrorBoundary') ao redor do menu lateral e do painel de atalhos inferior (Floating Dock) para impedir que problemas isolados travem todo o aplicativo.`,
+
+  "v0.5.4": `### 🛠️ Versão 0.5.4
 * 🐛 **Correção na Atualização**: Resolução do bug de conexão e da tela travada em cor de fundo padrão ao atualizar o aplicativo.
 * 🛡️ **Fechamento Automático do Instalador**: Encerramento forçado de processos ativos do app (\`MicFudiddo Studio.exe\` e \`MicFudiddoBackend.exe\`) ao iniciar a instalação para evitar arquivos travados (locks) e impedir o retorno indesejado à versão anterior.
 * ⏱️ **Timeout no Desligamento**: Implementação de tempo limite (timeout) na chamada de desligamento do backend para evitar travamentos da janela ao fechar ou atualizar.`,
@@ -1466,6 +1470,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.5", tag_name: "v0.5.5", published_at: "2026-06-06T01:30:00Z", body: "" },
   { id: "v0.5.4", tag_name: "v0.5.4", published_at: "2026-06-06T00:30:00Z", body: "" },
   { id: "v0.5.3", tag_name: "v0.5.3", published_at: "2026-06-06T00:00:00Z", body: "" },
   { id: "v0.5.2", tag_name: "v0.5.2", published_at: "2026-06-06T00:00:00Z", body: "" },

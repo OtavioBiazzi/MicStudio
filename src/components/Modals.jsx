@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.12": `### 🛠️ Versão 0.5.12 (Versão Atual)
+  "v0.5.13": `### 🌟 Versão 0.5.13 (Versão Atual)
+* 🌆 **Novo Tema Synthwave Retrowave**: Adicionado um novo tema escuro inspirado nos anos 80, com neon rosa e ciano, selecionável nas Configurações.
+* 🔔 **Notificações Flutuantes (HUD)**: Agora, sempre que você usar um atalho global (Mutar Mic, Bypass, Gravar, etc.), uma notificação visual bonita aparecerá na tela avisando o status, dando uma sensação muito mais interativa ao aplicativo.`,
+
+  "v0.5.12": `### 🛠️ Versão 0.5.12
 * 🔄 **Substituição de Atalhos Corrigida**: Resolvida falha silenciosa na API do Windows ao recriar o atalho de Área de Trabalho e do Menu Iniciar. Agora o atalho antigo é explicitamente removido antes de escrever o novo, forçando a atualização correta para a nova pasta de instalação.
 * ⚙️ **Alinhamento de Diretório de Desenvolvimento**: Alinhamento do diretório de instalação do script PowerShell (\`install_studio_start_menu.ps1\`) com o diretório padrão de produção (\`AppData\\Local\\Programs\\MicFudiddo Studio\`), evitando duplicidade de instalações e conflitos de atalhos.
 * 🗑️ **Limpeza Automática de Pastas Legadas**: Adicionada remoção automática da pasta legada \`Programs\\micfudiddo-studio\` (com hífen) durante o processo de atualização e inicialização do app.`,
@@ -1499,6 +1503,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.13", tag_name: "v0.5.13", published_at: "2026-06-06T18:30:00Z", body: "" },
   { id: "v0.5.12", tag_name: "v0.5.12", published_at: "2026-06-06T18:05:00Z", body: "" },
   { id: "v0.5.11", tag_name: "v0.5.11", published_at: "2026-06-06T17:42:00Z", body: "" },
   { id: "v0.5.10", tag_name: "v0.5.10", published_at: "2026-06-06T17:30:00Z", body: "" },

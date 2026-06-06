@@ -3953,3 +3953,17 @@ body.gamer-mode-active * {
   --text-muted: #00ffcc;
   --border: rgba(0, 229, 255, 0.12);
 }
+
+:root.theme-synthwave {
+  --bg-base: #0b0914;
+  --bg-sidebar: #05040a;
+  --bg-card: #141022;
+  --bg-card-hover: #1f1836;
+  --bg-card-secondary: #2a2046;
+  --bg-bottom-bar: #080610;
+  --bg-input: #0e0b1c;
+  --text: #ffffff;
+  --text-secondary: #ff007f;
+  --text-muted: #00f0ff;
+  --border: rgba(255, 0, 127, 0.15);
+}

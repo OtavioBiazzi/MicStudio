@@ -400,6 +400,7 @@ export function ConfigPage({
                     <option value="theme-dracula">Dracula Vamp</option>
                     <option value="theme-vampire">Vampire Red</option>
                     <option value="theme-neon">Neon Green</option>
+                    <option value="theme-synthwave">Synthwave Retrowave</option>
                   </select>
                 </div>
               </div>

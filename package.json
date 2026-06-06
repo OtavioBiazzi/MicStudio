@@ -1,6 +1,6 @@
 {
   "name": "micfudiddo-studio",
-  "version": "0.5.12",
+  "version": "0.5.13",
   "private": true,
   "description": "MicFudiddo Studio Electron UI",
   "main": "electron/main.cjs",

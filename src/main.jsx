@@ -735,19 +735,26 @@ function App() {
     return window.micfudiddo.onHotkeyTriggered((action) => {
       if (action === "mute_mic") {
         toggleMute();
+        setToast(state?.controls?.micMute ? "🎙️ Microfone Desmutado" : "🎙️ Microfone Mutado");
       } else if (action === "toggle_bypass") {
         toggleBypass();
+        setToast(bypassActive ? "🎧 Bypass Desativado" : "🎧 Bypass Ativado");
       } else if (action === "toggle_soundboard") {
         updateControls({ soundboardMonitor: !state?.controls?.soundboardMonitor });
+        setToast(state?.controls?.soundboardMonitor ? "🔊 Som da Soundboard Mutado" : "🔊 Som da Soundboard Ativado");
       } else if (action === "toggle_voicechanger") {
-        const togglePath = (state?.running && !state?.monitorOnly) || state?.virtualMode ? "/api/stop" : "/api/virtual/start";
-        call(togglePath).catch((err) => setToast(err.message));
+        const isVoiceChangerActive = (state?.running && !state?.monitorOnly) || state?.virtualMode;
+        const togglePath = isVoiceChangerActive ? "/api/stop" : "/api/virtual/start";
+        call(togglePath).then(() => setToast(isVoiceChangerActive ? "🎛️ Voice Changer Desativado" : "🎛️ Voice Changer Ativado")).catch((err) => setToast(err.message));
       } else if (action === "record_voice") {
-        call(state?.recording?.voice ? "/api/record/voice/stop" : "/api/record/voice/start").catch((e) => setToast(e.message));
+        const isRecording = state?.recording?.voice;
+        call(isRecording ? "/api/record/voice/stop" : "/api/record/voice/start").then(() => setToast(isRecording ? "⏹️ Gravação de Voz Parada" : "⏺️ Gravação de Voz Iniciada")).catch((e) => setToast(e.message));
       } else if (action === "record_pc") {
-        call(state?.recording?.pc ? "/api/record/pc/stop" : "/api/record/pc/start", { indexes: selectedRecordDevices }).catch((e) => setToast(e.message));
+        const isRecording = state?.recording?.pc;
+        call(isRecording ? "/api/record/pc/stop" : "/api/record/pc/start", { indexes: selectedRecordDevices }).then(() => setToast(isRecording ? "⏹️ Gravação do PC Parada" : "⏺️ Gravação do PC Iniciada")).catch((e) => setToast(e.message));
       } else if (action === "record_combo") {
-        call(state?.recording?.combo ? "/api/record/combo/stop" : "/api/record/combo/start", { indexes: selectedRecordDevices }).catch((e) => setToast(e.message));
+        const isRecording = state?.recording?.combo;
+        call(isRecording ? "/api/record/combo/stop" : "/api/record/combo/start", { indexes: selectedRecordDevices }).then(() => setToast(isRecording ? "⏹️ Gravação Combo Parada" : "⏺️ Gravação Combo Iniciada")).catch((e) => setToast(e.message));
       }
     });
   }, [state, bypassActive, toggleBypass, updateControls, toggleMute, call, selectedRecordDevices]);

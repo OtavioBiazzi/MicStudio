@@ -1411,7 +1411,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.8": `### 🛠️ Versão 0.5.8 (Versão Atual)
+  "v0.5.9": `### 🛠️ Versão 0.5.9 (Versão Atual)
+* ⚡ **Sincronização de Atalhos Aprimorada**: Correção definitiva na criação de atalhos apontando o ícone diretamente para o executável principal, evitando falhas silenciosas na API do Windows.
+* 🌐 **Changelogs Online Dinâmicos**: A interface agora prioriza e exibe as notas de atualização diretamente do corpo da release no GitHub em tempo real, permitindo ver as novidades online sem necessidade de atualização imediata.
+* 🗑️ **Limpeza Avançada de Resquícios**: Adicionada detecção e remoção automática de diretórios obsoletos deixados por antigas instalações do Squirrel.Windows.`,
+
+  "v0.5.8": `### 🛠️ Versão 0.5.8
 * 🔄 **Reconstrução e Correção de Atalhos**: Adicionada rotina robusta para garantir a presença e a integridade do atalho "MicFudiddo Studio.lnk" na Área de Trabalho e no Menu Iniciar sempre que o aplicativo for aberto.
 * 🗑️ **Limpeza Completa de Legados**: Remoção completa do diretório antigo do Python (\`AppData\\Local\\MicFudiddo\`), da antiga pasta no Menu Iniciar (\`MicFudiddo\`) e dos atalhos obsoletos (\`MicFudiddo.lnk\`, \`Mic Fudido.lnk\`), evitando qualquer inicialização acidental de versões antigas.`,
 
@@ -1481,6 +1486,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.9", tag_name: "v0.5.9", published_at: "2026-06-06T14:20:00Z", body: "" },
   { id: "v0.5.8", tag_name: "v0.5.8", published_at: "2026-06-06T02:05:00Z", body: "" },
   { id: "v0.5.7", tag_name: "v0.5.7", published_at: "2026-06-06T02:00:00Z", body: "" },
   { id: "v0.5.6", tag_name: "v0.5.6", published_at: "2026-06-06T01:35:00Z", body: "" },
@@ -1607,7 +1613,7 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
                     </div>
 
                     <div className="readme-container changelog-markdown" style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)", maxHeight: 150, overflowY: "auto", padding: "8px 10px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.02)" }}>
-                      {renderMarkdown(LOCAL_CHANGELOGS[release.tag_name] || release.body || "*Nenhuma nota de versão fornecida.*")}
+                      {renderMarkdown(release.body || LOCAL_CHANGELOGS[release.tag_name] || "*Nenhuma nota de versão fornecida.*")}
                     </div>
 
                     {isNew && release.assets && release.assets.length > 0 && (
@@ -1632,7 +1638,7 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
 
 // --- UpdateAlertModal ---
 export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm }) {
-  const displayChangelog = LOCAL_CHANGELOGS[latestVersion] || changelog;
+  const displayChangelog = changelog || LOCAL_CHANGELOGS[latestVersion];
   return (
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>

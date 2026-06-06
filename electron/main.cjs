@@ -584,7 +584,9 @@ function cleanOldVersion() {
   // 1. Limpar pastas antigas de instalação local
   const oldDirsToClean = [
     path.resolve(path.join(localAppData, "MicFudiddo")),
-    path.resolve(path.join(localAppData, "MicFudiddoStudio"))
+    path.resolve(path.join(localAppData, "MicFudiddoStudio")),
+    path.resolve(path.join(localAppData, "micfudiddo-studio")),
+    path.resolve(path.join(localAppData, "MicFudiddo Studio"))
   ];
 
   for (const oldDir of oldDirsToClean) {
@@ -645,7 +647,7 @@ function cleanOldVersion() {
         target: app.getPath("exe"),
         workingDirectory: path.dirname(app.getPath("exe")),
         description: "MicFudiddo Studio - modificador de voz e soundboard",
-        icon: getIconPath(),
+        icon: app.getPath("exe"),
         iconIndex: 0
       };
 

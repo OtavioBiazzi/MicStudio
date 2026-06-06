@@ -17,6 +17,8 @@
   ; Deletar pastas antigas do app local
   RMDir /r "$LOCALAPPDATA\MicFudiddo"
   RMDir /r "$LOCALAPPDATA\MicFudiddoStudio"
+  RMDir /r "$LOCALAPPDATA\micfudiddo-studio"
+  RMDir /r "$LOCALAPPDATA\MicFudiddo Studio"
   
   ; Deletar pastas antigas do Menu Iniciar
   RMDir /r "$SMPROGRAMS\MicFudiddo"

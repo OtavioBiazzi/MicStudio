@@ -34,24 +34,24 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
   const [scrollLeft, setScrollLeft] = useState(0);
   const [isDragging, setIsDragging] = useState(null);
 
-  // Generate a beautiful, deterministic wave shape from the sound ID
-  const peaks = useMemo(() => {
-    const list = [];
-    let seed = 0;
-    const key = String(soundId || "clean");
-    for (let i = 0; i < key.length; i++) {
-      seed += key.charCodeAt(i);
-    }
-    const nextRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
-    for (let i = 0; i < 300; i++) {
-      const envelope = Math.sin((i / 300) * Math.PI) * 0.4 + Math.sin((i / 300) * Math.PI * 4) * 0.3 + 0.3;
-      const noise = nextRandom() * 0.4;
-      list.push(Math.min(1.0, Math.max(0.05, (envelope + noise) * 0.85)));
-    }
-    return list;
+  const [peaks, setPeaks] = useState([]);
+  
+  useEffect(() => {
+    if (!soundId) return;
+    let isMounted = true;
+    fetch("http://127.0.0.1:38717/api/sounds/waveform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: soundId })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (isMounted && data.peaks) {
+          setPeaks(data.peaks);
+        }
+      })
+      .catch(console.error);
+    return () => { isMounted = false; };
   }, [soundId]);
 
   useEffect(() => {
@@ -1411,7 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.15": `### 🌟 Versão 0.5.15 (Versão Atual)
+  "v0.5.16": `### 🌟 Versão 0.5.16 (Versão Atual)
+* ☁️ **Compartilhamento em Nuvem**: Agora você pode gerar "Links Mágicos" dos seus áudios ou importar pacotes de amigos apenas colando a URL! Chega de mandar arquivos pesados pelo Discord.
+* ✂️ **Cortador de Áudio Embutido Melhorado**: O editor visual de cortes agora carrega as ondas sonoras REAIS do seu arquivo de áudio para cortes precisos e milimétricos (antes era apenas uma onda visual decorativa).`,
+
+  "v0.5.15": `### 🌟 Versão 0.5.15
 * 📺 **Descongelamento do YouTube**: O download de áudios longos do YouTube agora é feito de forma 100% assíncrona, não travando mais o aplicativo enquanto você baixa.
 * 🐛 **Bug do Status Consertado**: O nome da música sendo tocada no momento não vai mais sobrescrever o texto de progresso de download dentro da tela do YouTube.
 * 🛠️ **Cabo Virtual sem Falhas**: Correção na comunicação entre o instalador e o PowerShell para garantir que falsos-positivos não exibam o pop-up de ausência do driver.`,
@@ -1514,6 +1518,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.16", tag_name: "v0.5.16", published_at: "2026-06-06T19:45:00Z", body: "" },
   { id: "v0.5.15", tag_name: "v0.5.15", published_at: "2026-06-06T19:20:00Z", body: "" },
   { id: "v0.5.14", tag_name: "v0.5.14", published_at: "2026-06-06T18:45:00Z", body: "" },
   { id: "v0.5.13", tag_name: "v0.5.13", published_at: "2026-06-06T18:30:00Z", body: "" },

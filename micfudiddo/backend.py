@@ -1443,6 +1443,103 @@ class Handler(BaseHTTPRequestHandler):
             with STATE.lock:
                 STATE.status = f"Som importado: {item.name}"
             return {"ok": True, "soundId": item.id}
+            
+        if path == "/api/sounds/waveform":
+            item_id = str(data["id"])
+            item = STATE.library.by_id(item_id)
+            if not item:
+                raise RuntimeError("Som não encontrado.")
+            
+            import soundfile as sf
+            import numpy as np
+            
+            audio_path = item.path
+            original_backup = STATE.library.sounds_dir / f"{item.id}.original.wav"
+            if original_backup.exists():
+                audio_path = str(original_backup)
+            
+            try:
+                data_audio, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+                if data_audio.size == 0:
+                    return {"peaks": []}
+                mono = data_audio.mean(axis=1)
+                
+                num_peaks = 300
+                chunk_size = max(1, len(mono) // num_peaks)
+                peaks = []
+                for i in range(num_peaks):
+                    chunk = mono[i * chunk_size : (i+1) * chunk_size]
+                    if len(chunk) > 0:
+                        peaks.append(float(np.max(np.abs(chunk))))
+                    else:
+                        peaks.append(0.0)
+                
+                max_peak = max(peaks) if peaks else 1.0
+                if max_peak > 0:
+                    peaks = [p / max_peak for p in peaks]
+                    
+                return {"peaks": peaks, "duration": len(mono) / sr}
+            except Exception as e:
+                raise RuntimeError(f"Erro ao extrair waveform: {e}")
+
+        if path == "/api/sounds/share-cloud":
+            sound_id = str(data["id"])
+            import tempfile
+            from pathlib import Path
+            import urllib.request
+            import urllib.error
+            import uuid
+            
+            with tempfile.TemporaryDirectory() as tmp:
+                export_path = str(Path(tmp) / f"export_{uuid.uuid4().hex}.mfsound")
+                result_path = STATE.library.export_mfsound(sound_id, export_path)
+                
+                boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+                body = []
+                body.append(f"--{boundary}")
+                body.append('Content-Disposition: form-data; name="reqtype"')
+                body.append('')
+                body.append('fileupload')
+                body.append(f"--{boundary}")
+                body.append('Content-Disposition: form-data; name="fileToUpload"; filename="sound.mfsound"')
+                body.append('Content-Type: application/octet-stream')
+                body.append('')
+                
+                body_bytes = b"\r\n".join([s.encode("utf-8") for s in body]) + b"\r\n"
+                with open(result_path, "rb") as f:
+                    body_bytes += f.read() + b"\r\n"
+                body_bytes += f"--{boundary}--\r\n".encode("utf-8")
+                
+                req = urllib.request.Request("https://catbox.moe/user/api.php", data=body_bytes)
+                req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+                req.add_header("User-Agent", "Mozilla/5.0")
+                
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        link = response.read().decode("utf-8").strip()
+                        return {"ok": True, "link": link}
+                except urllib.error.URLError as e:
+                    raise RuntimeError(f"Falha ao enviar para nuvem: {e}")
+
+        if path == "/api/sounds/import-cloud":
+            url = str(data["url"]).strip()
+            import tempfile
+            import urllib.request
+            from pathlib import Path
+            
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_path = Path(tmp) / "download.mfsound"
+                headers = {"User-Agent": "Mozilla/5.0"}
+                req = urllib.request.Request(url, headers=headers)
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response, open(temp_path, "wb") as out_file:
+                        out_file.write(response.read())
+                    item = STATE.library.import_mfsound(str(temp_path))
+                    with STATE.lock:
+                        STATE.status = f"Som importado da nuvem: {item.name}"
+                    return {"ok": True, "soundId": item.id}
+                except Exception as e:
+                    raise RuntimeError(f"Falha ao baixar pacote: {e}")
         if path == "/api/sounds/add":
             paths = data.get("paths", [])
             def bg_add():

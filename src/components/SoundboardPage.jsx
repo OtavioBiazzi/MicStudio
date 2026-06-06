@@ -3,7 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
-  MusicNotes, Keyboard, ArrowClockwise, X
+  MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple
 } from "@phosphor-icons/react";
 import { formatTime, formatLastUsed, filePathToUrl } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
@@ -213,7 +213,19 @@ export function SoundboardPage({
             </button>
           )}
           <div className="importButtonGroup">
-            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio ou pacotes .mfsound"><UploadSimple size={14} /> Importar Sons / Pacotes</button>
+            <button className="btn btn-ghost" onClick={() => {
+              setPromptState({
+                title: "Importar Link de Pacote",
+                value: "",
+                onConfirm: (url) => {
+                  if (url && url.trim()) {
+                    setToast("Baixando pacote da nuvem...");
+                    call("/api/sounds/import-cloud", { url: url.trim() }).catch(e => setToast("Erro: " + e.message));
+                  }
+                }
+              });
+            }} title="Importar pacote .mfsound através de um link (Catbox, etc)"><CloudArrowDown size={14} /> Importar Link</button>
+            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio ou pacotes .mfsound"><UploadSimple size={14} /> Importar Arquivos</button>
             <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
           </div>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
@@ -475,16 +487,28 @@ export function SoundboardPage({
               const defaultName = `${s.name}.mfsound`;
               const filePath = await window.micfudiddo?.saveMfsoundPath?.(defaultName);
               if (filePath) {
+                setToast("Exportando...");
                 try {
-                  setToast("Exportando pacote .mfsound...");
                   await call("/api/sounds/export-mfsound", { id: s.id, exportPath: filePath });
-                  setToast("Pacote .mfsound exportado com sucesso!");
                 } catch (e) {
-                  setToast("Erro ao exportar pacote: " + e.message);
+                  setToast("Erro: " + e.message);
                 }
               }
             }}>
-              <Export size={14} /> Exportar Pacote (.mfsound)
+              <DownloadSimple size={14} /> Exportar como .mfsound
+            </button>
+            <button onClick={() => {
+              const s = contextMenu.sound;
+              setContextMenu(null);
+              setToast("Gerando link mágico, aguarde...");
+              call("/api/sounds/share-cloud", { id: s.id }).then(res => {
+                if (res.link) {
+                  navigator.clipboard.writeText(res.link);
+                  setToast("Link copiado para a área de transferência!");
+                }
+              }).catch(e => setToast("Erro ao fazer upload: " + e.message));
+            }}>
+              <CloudArrowUp size={14} /> Copiar Link de Compartilhamento
             </button>
             <button onClick={() => {
               navigator.clipboard.writeText(contextMenu.sound.path);

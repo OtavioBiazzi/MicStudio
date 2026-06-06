@@ -150,11 +150,15 @@ function AudioVisualizer({ running }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     let animationFrameId;
     
     let currentLevel = 0;
     const numBars = 16;
     const barHeights = Array(numBars).fill(0);
+    const styles = getComputedStyle(document.documentElement);
+    const purpleDim = styles.getPropertyValue("--purple-dim").trim() || "#6D42D9";
+    const purple = styles.getPropertyValue("--purple").trim() || "#8B5CF6";
 
     const render = () => {
       currentLevel += (level - currentLevel) * 0.15;
@@ -180,8 +184,8 @@ function AudioVisualizer({ running }) {
         const y = height - barHeights[i];
         
         const gradient = ctx.createLinearGradient(0, height, 0, 0);
-        gradient.addColorStop(0, "var(--purple-dim, #6D42D9)");
-        gradient.addColorStop(1, "var(--purple, #8B5CF6)");
+        gradient.addColorStop(0, purpleDim);
+        gradient.addColorStop(1, purple);
         
         ctx.fillStyle = gradient;
         ctx.beginPath();

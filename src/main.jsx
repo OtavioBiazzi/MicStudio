@@ -785,20 +785,22 @@ function App() {
 
       {/* Body */}
       <div className="appBody">
-        <Sidebar
-          page={page}
-          setPage={setPage}
-          state={state}
-          profileName={profileName}
-          profileSub={profileSub}
-          profilePlan={profilePlan}
-          profileImage={profileImage}
-          profileImagePosition={profileImagePosition}
-          onOpenProfile={() => setUserProfileOpen(true)}
-          onManageAccount={() => setEditProfileOpen(true)}
-          appVersion={appVersion}
-          onVersionClick={() => setShowReleasesModal(true)}
-        />
+        <ErrorBoundary>
+          <Sidebar
+            page={page}
+            setPage={setPage}
+            state={state}
+            profileName={profileName}
+            profileSub={profileSub}
+            profilePlan={profilePlan}
+            profileImage={profileImage}
+            profileImagePosition={profileImagePosition}
+            onOpenProfile={() => setUserProfileOpen(true)}
+            onManageAccount={() => setEditProfileOpen(true)}
+            appVersion={appVersion}
+            onVersionClick={() => setShowReleasesModal(true)}
+          />
+        </ErrorBoundary>
 
         <main className="mainContent">
           <ErrorBoundary>
@@ -947,23 +949,25 @@ function App() {
       </div>
 
       {/* Floating Dock */}
-      <FloatingDock
-        state={state}
-        call={call}
-        updateControls={updateControls}
-        toggleMute={toggleMute}
-        activePreset={activePreset}
-        processingActive={processingActive}
-        lastPlayedSound={lastPlayedSound}
-        toggleBypass={toggleBypass}
-        bypassActive={bypassActive}
-        setPage={setPage}
-        soundboardFavorites={soundboardFavorites}
-        dockMinimized={dockMinimized}
-        setDockMinimized={setDockMinimized}
-        setSelectedSound={setSelectedSound}
-        forcedPresetId={forcedPresetId}
-      />
+      <ErrorBoundary>
+        <FloatingDock
+          state={state}
+          call={call}
+          updateControls={updateControls}
+          toggleMute={toggleMute}
+          activePreset={activePreset}
+          processingActive={processingActive}
+          lastPlayedSound={lastPlayedSound}
+          toggleBypass={toggleBypass}
+          bypassActive={bypassActive}
+          setPage={setPage}
+          soundboardFavorites={soundboardFavorites}
+          dockMinimized={dockMinimized}
+          setDockMinimized={setDockMinimized}
+          setSelectedSound={setSelectedSound}
+          forcedPresetId={forcedPresetId}
+        />
+      </ErrorBoundary>
 
       {/* Modals */}
       <AnimatePresence>

@@ -1416,6 +1416,7 @@ const LOCAL_CHANGELOGS = {
 * ⬇️ **Download do YouTube Invisível**: A barra de status de download do YouTube agora fica flutuando na tela principal caso você feche a janela enquanto ele baixa em segundo plano!`,
 
   "v0.5.17": `### 🌟 Versão 0.5.17
+* 🩹 **Hotfix**: Correção no bloqueio de segurança do navegador que impedia a cópia do Link Mágico de Compartilhamento na Nuvem para a área de transferência.`,
 
   "v0.5.16": `### 🌟 Versão 0.5.16
 * ☁️ **Compartilhamento em Nuvem**: Agora você pode gerar "Links Mágicos" dos seus áudios ou importar pacotes de amigos apenas colando a URL! Chega de mandar arquivos pesados pelo Discord.

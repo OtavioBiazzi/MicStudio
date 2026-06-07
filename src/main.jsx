@@ -1114,6 +1114,14 @@ function App() {
           <div className="floating-yt-status">
             <span className="yt-spinner"></span>
             <span>{state.youtubeStatus}</span>
+            <button 
+              className="btn btn-ghost" 
+              style={{ padding: "4px 8px", marginLeft: "auto", minWidth: 0, color: "var(--text-muted)" }}
+              onClick={() => fetch("http://127.0.0.1:38717/api/sounds/import-youtube/cancel")}
+              title="Cancelar"
+            >
+              <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
+            </button>
           </div>
         )}
       </AnimatePresence>

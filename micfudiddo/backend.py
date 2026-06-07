@@ -1523,23 +1523,43 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/sounds/import-cloud":
             url = str(data["url"]).strip()
-            import tempfile
-            import urllib.request
-            from pathlib import Path
             
-            with tempfile.TemporaryDirectory() as tmp:
-                temp_path = Path(tmp) / "download.mfsound"
-                headers = {"User-Agent": "Mozilla/5.0"}
-                req = urllib.request.Request(url, headers=headers)
-                try:
-                    with urllib.request.urlopen(req, timeout=30) as response, open(temp_path, "wb") as out_file:
-                        out_file.write(response.read())
-                    item = STATE.library.import_mfsound(str(temp_path))
-                    with STATE.lock:
-                        STATE.status = f"Som importado da nuvem: {item.name}"
-                    return {"ok": True, "soundId": item.id}
-                except Exception as e:
-                    raise RuntimeError(f"Falha ao baixar pacote: {e}")
+            def bg_cloud_import():
+                import tempfile
+                import urllib.request
+                from pathlib import Path
+                
+                STATE.youtube_status = "Iniciando download da nuvem..."
+                with tempfile.TemporaryDirectory() as tmp:
+                    temp_path = Path(tmp) / "download.mfsound"
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    req = urllib.request.Request(url, headers=headers)
+                    try:
+                        STATE.youtube_status = "Baixando pacote da nuvem..."
+                        STATE.youtube_cancel = False
+                        with urllib.request.urlopen(req, timeout=60) as response, open(temp_path, "wb") as out_file:
+                            while True:
+                                if getattr(STATE, "youtube_cancel", False):
+                                    STATE.youtube_status = "Importacao cancelada."
+                                    return
+                                chunk = response.read(65536)
+                                if not chunk:
+                                    break
+                                out_file.write(chunk)
+                        
+                        STATE.youtube_status = "Extraindo pacote..."
+                        item = STATE.library.import_mfsound(str(temp_path))
+                        
+                        with STATE.lock:
+                            STATE.status = f"Som importado da nuvem: {item.name}"
+                        STATE.youtube_status = f"Concluido: '{item.name}' importado!"
+                    except Exception as e:
+                        STATE.youtube_status = f"Erro: Falha ao baixar pacote ({e})"
+            
+            import threading
+            threading.Thread(target=bg_cloud_import, daemon=True).start()
+            return {"ok": True, "message": "Importação em andamento"}
+            
         if path == "/api/sounds/add":
             paths = data.get("paths", [])
             def bg_add():

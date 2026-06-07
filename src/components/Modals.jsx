@@ -1411,10 +1411,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 // --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.20": `### 🌟 Versão 0.5.20 (Versão Atual)
-* 🩹 **Hotfix Final**: Correção final no texto do changelog que impedia a compilação.
-* 🎨 **Melhorias Visuais (UX)**: A cópia do Link Mágico agora abre uma janelinha para você visualizar o link antes de copiar.
-* ⬇️ **Download do YouTube Invisível**: A barra de status de download do YouTube agora fica flutuando na tela principal caso você feche a janela enquanto ele baixa em segundo plano!`,
+  "v0.5.21": `### 🌟 Versão 0.5.21 (Versão Atual)
+* ⛔ **Cancelamento de Downloads**: Adicionado um botão "X" na notificação flutuante para você conseguir cancelar qualquer download em andamento no fundo!
+* ☁️ **Progresso de Importação na Nuvem**: Importar links mágicos agora roda em segundo plano e mostra o progresso no canto da tela, igual ao YouTube.`,
+
+  "v0.5.20": `### 🌟 Versão 0.5.20
 
   "v0.5.19": `### 🌟 Versão 0.5.19`,
 
@@ -1532,6 +1533,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.21", tag_name: "v0.5.21", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.20", tag_name: "v0.5.20", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.19", tag_name: "v0.5.19", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.18", tag_name: "v0.5.18", published_at: new Date().toISOString(), body: "" },

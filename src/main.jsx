@@ -34,7 +34,6 @@ import { ConfigPage, colorPalettes } from "./components/ConfigPage";
 
 // Modals
 import {
-  VirtualCableWarningModal,
   ChooseMicOnCloseModal,
   CloseChoiceModal,
   UserProfileModal,
@@ -118,20 +117,7 @@ function App() {
     }
   }, [state?.controls?.gain]);
 
-  const [showVirtualCableWarning, setShowVirtualCableWarning] = useState(false);
-  const [checkedVirtualCable, setCheckedVirtualCable] = useState(false);
 
-  useEffect(() => {
-    if (state && !checkedVirtualCable) {
-      setCheckedVirtualCable(true);
-      if (state.virtualCableDetected === false) {
-        const ignored = localStorage.getItem("micfudiddo.ignoreVirtualCableWarning") === "true";
-        if (!ignored) {
-          setShowVirtualCableWarning(true);
-        }
-      }
-    }
-  }, [state, checkedVirtualCable]);
 
   const [accentColor, setAccentColor] = useState(() => {
     return localStorage.getItem("micfudiddo.accentColor") || "purple";
@@ -820,6 +806,56 @@ function App() {
               setSelectedSound={setSelectedSound}
             />
           </ErrorBoundary>
+
+          {state.virtualCableDetected === false && (
+            <div style={{ 
+              margin: "16px 28px 0 28px",
+              padding: "14px 18px", 
+              background: "rgba(239, 68, 68, 0.06)", 
+              border: "1px solid var(--danger-soft)", 
+              borderRadius: "var(--radius-md)", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between", 
+              gap: 16,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.15)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 13, color: "var(--danger)", fontWeight: 700 }}>
+                    Cabo Virtual (VB-CABLE) não detectado
+                  </span>
+                  <span style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                    Para transmitir sua voz modificada e os sons da Soundboard no Discord ou em jogos, você precisa de um cabo virtual instalado.
+                  </span>
+                </div>
+              </div>
+              <a 
+                href="https://vb-audio.com/Cable/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="btn btn-primary" 
+                style={{ 
+                  padding: "8px 16px", 
+                  fontSize: 11.5, 
+                  background: "linear-gradient(135deg, var(--danger), var(--danger-dim))", 
+                  border: "1px solid var(--danger)",
+                  textDecoration: "none", 
+                  color: "#fff", 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: 6, 
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                  borderRadius: "var(--radius-sm)",
+                  boxShadow: "0 2px 8px rgba(239, 68, 68, 0.2)"
+                }}
+              >
+                📥 Baixar VB-CABLE
+              </a>
+            </div>
+          )}
           <AnimatePresence mode="wait">
             <motion.div
               key={page}
@@ -978,11 +1014,6 @@ function App() {
 
       {/* Modals */}
       <AnimatePresence>
-        {showVirtualCableWarning && (
-          <VirtualCableWarningModal
-            onClose={() => setShowVirtualCableWarning(false)}
-          />
-        )}
         {chooseMicOnCloseOpen && (
           <ChooseMicOnCloseModal
             state={state}

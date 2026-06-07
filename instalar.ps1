@@ -17,46 +17,6 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "         Instalador do MicFudiddo Studio" -ForegroundColor Purple
 Write-Host "==================================================" -ForegroundColor Purple
 Write-Host ""
-
-# 2. Verificar se o VB-CABLE está instalado
-$driverPath = "C:\Windows\System32\drivers\vbcable_xp64.sys"
-$hasVbCable = Test-Path -LiteralPath $driverPath
-
-if (-not $hasVbCable) {
-    Write-Host "[1/2] VB-CABLE não detectado. Baixando e instalando..." -ForegroundColor Yellow
-    
-    $tempDir = Join-Path $env:TEMP "MicFudiddoInstaller"
-    $zipPath = Join-Path $tempDir "VBCABLE_Driver_Pack45.zip"
-    $extractDir = Join-Path $tempDir "VB-CABLE"
-    
-    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-    
-    $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
-    
-    Write-Host "Baixando VB-CABLE oficial de $url ..." -ForegroundColor Gray
-    Invoke-WebRequest -Uri $url -OutFile $zipPath
-    
-    Write-Host "Extraindo arquivos..." -ForegroundColor Gray
-    if (Test-Path -LiteralPath $extractDir) {
-        Remove-Item -LiteralPath $extractDir -Recurse -Force
-    }
-    New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
-    
-    $setup = Get-ChildItem -LiteralPath $extractDir -Recurse -Filter "VBCABLE_Setup_x64.exe" -File | Select-Object -First 1
-    
-    if ($null -ne $setup) {
-        Write-Host "Abrindo instalador oficial do VB-CABLE..." -ForegroundColor Cyan
-        Write-Host "IMPORTANTE: Clique em 'Install Driver' na janela que abrir." -ForegroundColor Magenta
-        Start-Process -FilePath $setup.FullName -Verb RunAs -Wait
-        Write-Host "VB-CABLE instalado com sucesso! (Pode ser necessário reiniciar o PC depois)" -ForegroundColor Green
-    } else {
-        Write-Host "Erro: Não foi possível localizar o executável de instalação do VB-CABLE." -ForegroundColor Red
-    }
-} else {
-    Write-Host "[1/2] VB-CABLE já está instalado no sistema." -ForegroundColor Green
-}
-
 Write-Host ""
 
 # 3. Localizar e Instalar o MicFudiddo Studio
@@ -64,7 +24,7 @@ $installDir = Join-Path $env:LOCALAPPDATA "Programs\micfudiddo-studio"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 $targetExe = Join-Path $installDir "MicFudiddo Studio.exe"
 
-Write-Host "[2/2] Localizando executável do aplicativo..." -ForegroundColor Yellow
+Write-Host "Localizando executável do aplicativo..." -ForegroundColor Yellow
 
 # Verificar se existe executável compilado localmente
 $localReleaseDir = Join-Path $PSScriptRoot "studio-release"
@@ -132,6 +92,4 @@ Add-Type -TypeDefinition $code -Namespace Shell32 -Name NativeMethods
 Write-Host "Instalação concluída com sucesso!" -ForegroundColor Green
 Write-Host "O aplicativo foi instalado em: $installDir" -ForegroundColor Gray
 Write-Host "Você pode pesquisar por 'MicFudiddo Studio' ou 'Mic Fudido' no seu Menu Iniciar." -ForegroundColor Gray
-if (-not $hasVbCable) {
-    Write-Host "IMPORTANTE: Reinicie o seu computador para ativar o driver de áudio VB-CABLE." -ForegroundColor Yellow
-}
+

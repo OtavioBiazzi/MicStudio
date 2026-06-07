@@ -1339,9 +1339,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
   );
 }
 
-// --- LOCAL_CHANGELOGS & FALLBACKS ---
 const LOCAL_CHANGELOGS = {
-  "v0.5.21": `### 🌟 Versão 0.5.21 (Versão Atual)
+  "v0.5.22": `### 🌟 Versão 0.5.22 (Versão Atual)
+* 🐛 **Correção de Reprodução de Áudio**: Corrigido um bug interno (UnboundLocalError) no servidor que impedia a reprodução de efeitos locais e online (retornando status 500).`,
+
+  "v0.5.21": `### 🌟 Versão 0.5.21
 * ⛔ **Cancelamento de Downloads**: Adicionado um botão "X" na notificação flutuante para você conseguir cancelar qualquer download em andamento no fundo!
 * ☁️ **Progresso de Importação na Nuvem**: Importar links mágicos agora roda em segundo plano e mostra o progresso no canto da tela, igual ao YouTube.`,
 
@@ -1463,6 +1465,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.22", tag_name: "v0.5.22", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.21", tag_name: "v0.5.21", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.20", tag_name: "v0.5.20", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.19", tag_name: "v0.5.19", published_at: new Date().toISOString(), body: "" },

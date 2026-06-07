@@ -1556,7 +1556,6 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as e:
                         STATE.youtube_status = f"Erro: Falha ao baixar pacote ({e})"
             
-            import threading
             threading.Thread(target=bg_cloud_import, daemon=True).start()
             return {"ok": True, "message": "Importação em andamento"}
             

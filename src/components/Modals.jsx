@@ -1416,7 +1416,7 @@ const LOCAL_CHANGELOGS = {
 * 🎨 **Melhorias Visuais (UX)**: A cópia do Link Mágico agora abre uma janelinha para você visualizar o link antes de copiar.
 * ⬇️ **Download do YouTube Invisível**: A barra de status de download do YouTube agora fica flutuando na tela principal caso você feche a janela enquanto ele baixa em segundo plano!`,
 
-  "v0.5.19": `### 🌟 Versão 0.5.19
+  "v0.5.19": `### 🌟 Versão 0.5.19`,
 
   "v0.5.18": `### 🌟 Versão 0.5.18
 * 🎨 **Melhorias Visuais (UX)**: A cópia do Link Mágico agora abre uma janelinha para você visualizar o link antes de copiar.

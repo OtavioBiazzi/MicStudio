@@ -1202,11 +1202,9 @@ function TTSWidget() {
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ValerioNeural", name: "Valerio (Masculina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "pt-PT-FernandaNeural", name: "Fernanda (Feminina - PT)" },
+    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
@@ -1370,7 +1368,7 @@ function TTSWidget() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSpeak(); }}
-          maxLength={1000}
+          maxLength={10000}
           style={{
             width: "100%",
             background: "rgba(255, 255, 255, 0.05)",
@@ -1389,7 +1387,7 @@ function TTSWidget() {
           color: "rgba(255, 255, 255, 0.4)",
           pointerEvents: "none"
         }}>
-          {text.length}/1000
+          {text.length}/10000
         </span>
       </div>
 

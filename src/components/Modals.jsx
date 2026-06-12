@@ -1823,11 +1823,9 @@ export function TTSModal({ onClose, call, setToast }) {
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ValerioNeural", name: "Valerio (Masculina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "pt-PT-FernandaNeural", name: "Fernanda (Feminina - PT)" },
+    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
@@ -1880,14 +1878,14 @@ export function TTSModal({ onClose, call, setToast }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}/1000</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}/10000</span>
             </div>
             <textarea
               placeholder="Digite aqui o que você quer que o robô fale..."
               value={text}
               onChange={handleTextChange}
               disabled={isWorking}
-              maxLength={1000}
+              maxLength={10000}
               autoFocus
               rows={3}
               style={{

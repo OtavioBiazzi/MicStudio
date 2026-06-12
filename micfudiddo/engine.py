@@ -753,6 +753,9 @@ class AudioEngine:
                 with self._recording_lock:
                     if self._recording:
                         self._recorded_chunks.append(processed.copy())
+            clipping_mgr = getattr(self, "_clipping_manager", None)
+            if clipping_mgr:
+                clipping_mgr.write_voice(processed)
             return processed, monitor_mix
         except Exception as exc:
             self._last_error = str(exc)

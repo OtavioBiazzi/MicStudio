@@ -18,12 +18,19 @@ from .processing import DualDelayPitchShifter, EffectsSettings, VoiceEffectsProc
 
 
 def sanitize_sound_name(name: str) -> str:
-    name = str(name or "").lower()
+    name = str(name or "")
     sanitized = []
     for c in name:
         cat = unicodedata.category(c)
-        if cat.startswith("L") or cat.startswith("N") or c in " _-":
-            sanitized.append(c)
+        if (
+            cat.startswith("L")
+            or cat.startswith("N")
+            or cat.startswith("P")
+            or cat.startswith("Z")
+            or cat.startswith("S")
+        ):
+            if c not in '"\\':
+                sanitized.append(c)
     result = "".join(sanitized)
     result = re.sub(r"\s+", " ", result).strip()
     return result

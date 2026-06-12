@@ -204,7 +204,8 @@ async function refreshSoundHotkeys() {
       shortcutToggleVoiceChanger: "toggle_voicechanger",
       shortcutRecordVoice: "record_voice",
       shortcutRecordPC: "record_pc",
-      shortcutRecordCombo: "record_combo"
+      shortcutRecordCombo: "record_combo",
+      shortcutClip: "clip"
     };
 
     const GLOBAL_SHORTCUT_LABELS = {
@@ -214,7 +215,8 @@ async function refreshSoundHotkeys() {
       shortcutToggleVoiceChanger: "Ativar Voice Changer",
       shortcutRecordVoice: "Gravar Própria Voz",
       shortcutRecordPC: "Gravar Áudio PC",
-      shortcutRecordCombo: "Gravar Combo"
+      shortcutRecordCombo: "Gravar Combo",
+      shortcutClip: "Salvar Clipe Retroativo"
     };
 
     for (const [settingsKey, actionName] of Object.entries(GLOBAL_SHORTCUT_MAP)) {

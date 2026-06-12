@@ -208,6 +208,9 @@ DEFAULT_APP_SETTINGS = {
     "closeBehavior": "ask",
     "onlinePlaybackRoute": "both",
     "maxSoundVolume": "1.0",
+    "clipEnabled": False,
+    "clipDuration": "30",
+    "shortcutClip": "",
 }
 
 DEFAULT_PROFILE = {
@@ -227,6 +230,192 @@ DEFAULT_PROFILE = {
 }
 
 
+from collections import deque
+
+class AudioClippingManager:
+    def __init__(self, app_state: AppState) -> None:
+        self.app_state = app_state
+        self._voice_chunks: deque[np.ndarray] = deque()
+        self._pc_chunks: deque[np.ndarray] = deque()
+        self._voice_available = 0
+        self._pc_available = 0
+        self._lock = threading.Lock()
+        self._running = False
+        self._pa = None
+        self._pc_streams = []
+
+    def write_voice(self, samples: np.ndarray) -> None:
+        if not self._running:
+            return
+        chunk = np.asarray(samples, dtype=np.float32).copy()
+        if chunk.size == 0:
+            return
+        with self._lock:
+            self._voice_chunks.append(chunk)
+            self._voice_available += chunk.size
+            max_samples = 60 * 48000
+            while self._voice_available > max_samples and self._voice_chunks:
+                overflow = self._voice_available - max_samples
+                first = self._voice_chunks[0]
+                if first.size <= overflow:
+                    self._voice_chunks.popleft()
+                    self._voice_available -= first.size
+                else:
+                    self._voice_chunks[0] = first[overflow:].copy()
+                    self._voice_available -= overflow
+
+    def _make_pc_callback(self, device, stream_rate: int):
+        import pyaudiowpatch as pyaudio
+        def callback(in_data, frame_count, _time_info, status_flags):
+            if not self._running:
+                return (None, pyaudio.paComplete)
+            data = np.frombuffer(in_data, dtype=np.float32)
+            if data.size == 0:
+                return (None, pyaudio.paContinue)
+            try:
+                data = data.reshape(-1, device.channels)
+                mono = data.mean(axis=1).astype(np.float32, copy=False)
+            except ValueError:
+                mono = data.astype(np.float32, copy=False)
+            
+            if int(stream_rate) != 48000:
+                from .recording import _resample_linear
+                mono = _resample_linear(mono, int(stream_rate), 48000)
+            
+            with self._lock:
+                self._pc_chunks.append(mono.copy())
+                self._pc_available += mono.size
+                max_samples = 60 * 48000
+                while self._pc_available > max_samples and self._pc_chunks:
+                    overflow = self._pc_available - max_samples
+                    first = self._pc_chunks[0]
+                    if first.size <= overflow:
+                        self._pc_chunks.popleft()
+                        self._pc_available -= first.size
+                    else:
+                        self._pc_chunks[0] = first[overflow:].copy()
+                        self._pc_available -= overflow
+            return (None, pyaudio.paContinue)
+        return callback
+
+    def update(self) -> None:
+        enabled = bool(self.app_state.settings.get("clipEnabled", False))
+        if enabled:
+            self.start_capture()
+        else:
+            self.stop_capture()
+
+    def start_capture(self) -> None:
+        if self._running:
+            return
+        
+        indexes = self.app_state.record_selected_indexes
+        devices = self.app_state.resolve_pc_record_devices(indexes)
+        
+        import pyaudiowpatch as pyaudio
+        self._pa = pyaudio.PyAudio()
+        self._pc_streams = []
+        self._running = True
+        
+        for device in devices:
+            try:
+                stream_rate = max(8000, int(device.sample_rate or 48000))
+                stream = self._pa.open(
+                    format=pyaudio.paFloat32,
+                    channels=device.channels,
+                    rate=stream_rate,
+                    input=True,
+                    input_device_index=device.index,
+                    frames_per_buffer=1024,
+                    stream_callback=self._make_pc_callback(device, stream_rate),
+                )
+                stream.start_stream()
+                self._pc_streams.append(stream)
+            except Exception as e:
+                print(f"Clipping: Error opening stream for {device.name}: {e}")
+                
+        print(f"Clipping: Started capturing PC audio on {len(self._pc_streams)} streams.")
+
+    def stop_capture(self) -> None:
+        if not self._running:
+            return
+        self._running = False
+        
+        for stream in self._pc_streams:
+            try:
+                stream.stop_stream()
+                stream.close()
+            except Exception:
+                pass
+        self._pc_streams = []
+        
+        if self._pa:
+            try:
+                self._pa.terminate()
+            except Exception:
+                pass
+        self._pa = None
+        
+        with self._lock:
+            self._voice_chunks.clear()
+            self._pc_chunks.clear()
+            self._voice_available = 0
+            self._pc_available = 0
+            
+        print("Clipping: Stopped capturing.")
+
+    def save_clip(self, duration_sec: int) -> dict | None:
+        if not self._running:
+            return None
+        with self._lock:
+            voice_chunks = list(self._voice_chunks)
+            pc_chunks = list(self._pc_chunks)
+        
+        needed_samples = int(duration_sec * 48000)
+        
+        voice_audio = np.zeros(0, dtype=np.float32)
+        if voice_chunks:
+            full_voice = np.concatenate(voice_chunks)
+            if full_voice.size > needed_samples:
+                voice_audio = full_voice[-needed_samples:]
+            else:
+                voice_audio = full_voice
+        
+        pc_audio = np.zeros(0, dtype=np.float32)
+        if pc_chunks:
+            full_pc = np.concatenate(pc_chunks)
+            if full_pc.size > needed_samples:
+                pc_audio = full_pc[-needed_samples:]
+            else:
+                pc_audio = full_pc
+                
+        max_len = max(voice_audio.size, pc_audio.size)
+        if max_len == 0:
+            return None
+            
+        mixed = np.zeros(max_len, dtype=np.float32)
+        if voice_audio.size > 0:
+            mixed[:voice_audio.size] += voice_audio
+        if pc_audio.size > 0:
+            mixed[:pc_audio.size] += pc_audio
+            
+        if voice_audio.size > 0 and pc_audio.size > 0:
+            mixed /= 2.0
+            
+        import soundfile as sf
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        output_dir = self.app_state.library.base_dir / "recordings"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"clip_{stamp}.wav"
+        output_path = output_dir / filename
+        
+        sf.write(str(output_path), mixed, 48000)
+        
+        item = self.app_state.add_recording_to_soundboard(output_path, name=f"Clip {time.strftime('%H%M%S')}")
+        self.app_state.status = f"Clipe de {duration_sec}s salvo: {item.name}"
+        return {"soundId": item.id, "name": item.name}
+
+
 class AppState:
     def __init__(self) -> None:
         self.lock = threading.RLock()
@@ -237,6 +426,8 @@ class AppState:
         self.settings = self.load_app_settings()
         self.profile = self.load_profile()
         self.pc_recorder = MultiDeviceRecorder(self.library.base_dir / "pc_recordings")
+        self.clipping_manager = AudioClippingManager(self)
+        self.engine._clipping_manager = self.clipping_manager
         self.combo_recording = False
         self.sound_cache: dict[str, tuple[float, int, np.ndarray]] = {}
         self.duration_cache: dict[str, tuple[int, float]] = {}
@@ -295,6 +486,7 @@ class AppState:
         self.clean_online_cache()
         self.refresh_windows_capture_endpoints()
         self.register_hotkeys()
+        self.clipping_manager.update()
 
     def load_custom_voices(self) -> list:
         if not self.custom_voices_path.exists():
@@ -453,6 +645,7 @@ class AppState:
                 else:
                     self.settings[key] = str(patch[key])
         self.save_app_settings()
+        self.clipping_manager.update()
 
     def load_profile(self) -> dict:
         if not self.profile_path.exists():
@@ -1161,6 +1354,22 @@ class AppState:
     def add_recording_to_soundboard(self, path: Path, name: str | None = None):
         return self.library.add_file(str(path), category="Gravacoes", name=name or Path(path).stem, color="#49e2d1")
 
+    def calculate_total_storage(self) -> int:
+        total = 0
+        try:
+            if self.library.sounds_dir.exists():
+                for f in self.library.sounds_dir.rglob("*"):
+                    if f.is_file():
+                        total += f.stat().st_size
+            recordings_dir = self.library.base_dir / "recordings"
+            if recordings_dir.exists():
+                for f in recordings_dir.rglob("*"):
+                    if f.is_file():
+                        total += f.stat().st_size
+        except Exception:
+            pass
+        return total
+
     def snapshot(self) -> dict:
         input_device = self.device_by_index(self.selected_input)
         output_device = self.device_by_index(self.selected_output)
@@ -1177,6 +1386,7 @@ class AppState:
             "sampleRate": self.engine.sample_rate,
             "level": self.engine.last_level,
             "route": route,
+            "storageUsed": self.calculate_total_storage(),
             "youtubeStatus": self.youtube_status,
             "virtualMode": self.virtual_mode_active,
             "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
@@ -2337,6 +2547,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/record/combo/stop":
             result = STATE.stop_combo_recording()
             return {**result, **STATE.snapshot()}
+        if path == "/api/record/clip":
+            duration = int(data.get("duration", 30))
+            res = STATE.clipping_manager.save_clip(duration)
+            if not res:
+                raise RuntimeError("Não foi possível gerar o clipe (o buffer de áudio está vazio ou o clipping está desativado).")
+            return {**res, **STATE.snapshot()}
         if path == "/api/custom-voices/save":
             voice = data.get("voice")
             if not voice or not isinstance(voice, dict):

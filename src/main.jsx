@@ -742,6 +742,16 @@ function App() {
       } else if (action === "record_combo") {
         const isRecording = state?.recording?.combo;
         call(isRecording ? "/api/record/combo/stop" : "/api/record/combo/start", { indexes: selectedRecordDevices }).then(() => setToast(isRecording ? "⏹️ Gravação Combo Parada" : "⏺️ Gravação Combo Iniciada")).catch((e) => setToast(e.message));
+      } else if (action === "clip") {
+        if (!state?.settings?.clipEnabled) {
+          setToast("⚠️ Clipping desativado nas configurações");
+          return;
+        }
+        const duration = Number(state?.settings?.clipDuration || 30);
+        setToast("🎬 Salvando clipe...");
+        call("/api/record/clip", { duration })
+          .then((res) => setToast(`🎬 Clipe de ${duration}s salvo!`))
+          .catch((e) => setToast("Erro ao clipar: " + e.message));
       }
     });
   }, [state, bypassActive, toggleBypass, updateControls, toggleMute, call, selectedRecordDevices]);

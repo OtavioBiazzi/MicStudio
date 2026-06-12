@@ -3,7 +3,8 @@ import { AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
-  MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple
+  MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
+  Scissors
 } from "@phosphor-icons/react";
 import { formatTime, formatLastUsed, filePathToUrl } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
@@ -259,6 +260,27 @@ export function SoundboardPage({
         >
           <Record size={14} weight="fill" /> {state.recording?.combo ? "Parar Combo" : "Voz + PC"}
         </button>
+        {state.settings?.clipEnabled && (
+          <button
+            onClick={() => {
+              const duration = Number(state.settings?.clipDuration || 30);
+              setToast("🎬 Salvando clipe...");
+              call("/api/record/clip", { duration })
+                .then(() => setToast(`🎬 Clipe de ${duration}s salvo!`))
+                .catch((e) => setToast("Erro ao clipar: " + e.message));
+            }}
+            style={{
+              background: "linear-gradient(135deg, var(--cyan), var(--purple))",
+              color: "#fff",
+              border: "none",
+              fontWeight: "bold",
+              boxShadow: "0 0 10px rgba(139, 92, 246, 0.4)"
+            }}
+            title="Salvar os últimos segundos do áudio (Voz + PC) em segundo plano"
+          >
+            <Scissors size={14} weight="bold" /> Clipar ({state.settings?.clipDuration || "30"}s)
+          </button>
+        )}
       </div>
 
       <div className="categoryPills">

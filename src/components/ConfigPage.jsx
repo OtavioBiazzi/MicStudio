@@ -308,6 +308,37 @@ export function ConfigPage({
                     Define um limite máximo global para o volume de reprodução de todos os sons do soundboard.
                   </small>
                 </div>
+
+                <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <ToggleSetting
+                    label="Ativar Gravação de Clipes (Clipping)"
+                    description="Mantém um buffer circular de áudio em segundo plano para capturar momentos retroativamente"
+                    checked={state.settings?.clipEnabled}
+                    onChange={(v) => call("/api/settings", { clipEnabled: v })}
+                  />
+                  {state.settings?.clipEnabled && (
+                    <div style={{ marginTop: 12 }}>
+                      <Slider
+                        label="Duração do Clipe"
+                        value={Number(state.settings?.clipDuration ?? 30)}
+                        min={1}
+                        max={60}
+                        suffix="s"
+                        onChange={(v) => call("/api/settings", { clipDuration: String(v) })}
+                      />
+                      <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
+                        Define o tamanho em segundos do arquivo de áudio gerado quando você salvar um clipe (Máx: 60s).
+                      </small>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Armazenamento Ocupado:</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--cyan)", textShadow: "0 0 8px var(--cyan-glow)" }}>
+                    {state.storageUsed ? (state.storageUsed / (1024 * 1024)).toFixed(2) + " MB" : "0.00 MB"}
+                  </span>
+                </div>
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
@@ -577,6 +608,14 @@ export function ConfigPage({
                   onChange={(val) => call("/api/settings", { shortcutRecordCombo: val })}
                   onClear={() => call("/api/settings", { shortcutRecordCombo: "" })}
                 />
+                {state.settings?.clipEnabled && (
+                  <HotkeyInput
+                    label="Gerar Clipe (Salvar últimos segundos)"
+                    value={state.settings?.shortcutClip}
+                    onChange={(val) => call("/api/settings", { shortcutClip: val })}
+                    onClear={() => call("/api/settings", { shortcutClip: "" })}
+                  />
+                )}
               </div>
 
               <div className="labCardTitle" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 16 }}>

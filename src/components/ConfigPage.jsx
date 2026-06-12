@@ -280,6 +280,25 @@ export function ConfigPage({
                   checked={state.settings?.unlimitedTts === true}
                   onChange={(v) => call("/api/settings", { unlimitedTts: v })}
                 />
+                <ToggleSetting
+                  label="Manter texto após falar no TTS"
+                  description="Não apagar o texto digitado no TTS após reproduzir a voz ou pressionar Enter"
+                  checked={state.settings?.keepTtsTextAfterSpeak === true}
+                  onChange={(v) => call("/api/settings", { keepTtsTextAfterSpeak: v })}
+                />
+                <div style={{ padding: "8px 0", marginTop: 8 }}>
+                  <Slider
+                    label="Opacidade do Widget TTS"
+                    value={Number(state.settings?.ttsWidgetOpacity ?? 82)}
+                    min={10}
+                    max={100}
+                    suffix="%"
+                    onChange={(v) => call("/api/settings", { ttsWidgetOpacity: v })}
+                  />
+                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
+                    Ajusta o nível de transparência da janela flutuante do TTS (padrão: 82%).
+                  </small>
+                </div>
                 {state.settings?.restoreOnDisable && (
                   <div className="selectField" style={{ marginTop: 12 }}>
                     <label>Microfone padrão ao fechar o app</label>
@@ -633,6 +652,12 @@ export function ConfigPage({
                   value={state.settings?.shortcutRecordCombo}
                   onChange={(val) => call("/api/settings", { shortcutRecordCombo: val })}
                   onClear={() => call("/api/settings", { shortcutRecordCombo: "" })}
+                />
+                <HotkeyInput
+                  label="Focar Digitação (Widget TTS)"
+                  value={state.settings?.shortcutFocusTtsWidget}
+                  onChange={(val) => call("/api/settings", { shortcutFocusTtsWidget: val })}
+                  onClear={() => call("/api/settings", { shortcutFocusTtsWidget: "" })}
                 />
                 {state.settings?.clipEnabled && (
                   <HotkeyInput

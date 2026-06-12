@@ -1781,6 +1781,7 @@ export function TTSModal({ onClose, call, setToast }) {
   const [speaking, setSpeaking] = useState(false);
   const [pinHover, setPinHover] = useState(false);
   const [unlimited, setUnlimited] = useState(false);
+  const [keepText, setKeepText] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1788,6 +1789,7 @@ export function TTSModal({ onClose, call, setToast }) {
         const res = await call("/api/state");
         if (res && res.settings) {
           setUnlimited(res.settings.unlimitedTts === true);
+          setKeepText(res.settings.keepTtsTextAfterSpeak === true);
         }
       } catch (err) {
         console.error("Error fetching state:", err);
@@ -1836,6 +1838,7 @@ export function TTSModal({ onClose, call, setToast }) {
         rate: formattedRate
       });
       setToast("📢 Falando...");
+      if (!keepText) setText("");
     } catch (err) {
       setToast("Erro ao falar: " + err.message);
     } finally {
@@ -1858,6 +1861,7 @@ export function TTSModal({ onClose, call, setToast }) {
         name: soundName.trim()
       });
       setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
+      if (!keepText) setText("");
       onClose();
     } catch (err) {
       setToast("Erro ao salvar: " + err.message);

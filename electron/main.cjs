@@ -206,7 +206,8 @@ async function refreshSoundHotkeys() {
       shortcutRecordVoice: "record_voice",
       shortcutRecordPC: "record_pc",
       shortcutRecordCombo: "record_combo",
-      shortcutClip: "clip"
+      shortcutClip: "clip",
+      shortcutFocusTtsWidget: "focus_tts_widget"
     };
 
     const GLOBAL_SHORTCUT_LABELS = {
@@ -217,7 +218,8 @@ async function refreshSoundHotkeys() {
       shortcutRecordVoice: "Gravar Própria Voz",
       shortcutRecordPC: "Gravar Áudio PC",
       shortcutRecordCombo: "Gravar Combo",
-      shortcutClip: "Salvar Clipe Retroativo"
+      shortcutClip: "Salvar Clipe Retroativo",
+      shortcutFocusTtsWidget: "Focar Digitação (Widget TTS)"
     };
 
     for (const [settingsKey, actionName] of Object.entries(GLOBAL_SHORTCUT_MAP)) {
@@ -241,8 +243,25 @@ async function refreshSoundHotkeys() {
       }
       try {
         const ok = globalShortcut.register(accelerator, () => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("hotkey:trigger", actionName);
+          if (actionName === "focus_tts_widget") {
+            if (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed()) {
+              createTtsWidgetWindow();
+              ttsWidgetWindow.webContents.on("did-finish-load", () => {
+                setTimeout(() => {
+                  if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
+                    ttsWidgetWindow.focus();
+                    ttsWidgetWindow.webContents.send("tts-widget:focus-input");
+                  }
+                }, 400);
+              });
+            } else {
+              ttsWidgetWindow.focus();
+              ttsWidgetWindow.webContents.send("tts-widget:focus-input");
+            }
+          } else {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("hotkey:trigger", actionName);
+            }
           }
         });
         if (ok) {
@@ -501,7 +520,7 @@ ipcMain.handle("clipboard:write", async (_event, text) => {
   return true;
 });
 
-ipcMain.handle("window:open-tts-widget", () => {
+function createTtsWidgetWindow() {
   if (ttsWidgetWindow) {
     ttsWidgetWindow.focus();
     return true;
@@ -539,6 +558,10 @@ ipcMain.handle("window:open-tts-widget", () => {
   });
   
   return true;
+}
+
+ipcMain.handle("window:open-tts-widget", () => {
+  return createTtsWidgetWindow();
 });
 
 ipcMain.handle("window:close-tts-widget", () => {

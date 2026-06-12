@@ -214,6 +214,9 @@ DEFAULT_APP_SETTINGS = {
     "clipSource": "both",
     "showTtsWidgetSpeed": True,
     "unlimitedTts": False,
+    "ttsWidgetOpacity": 82,
+    "shortcutFocusTtsWidget": "",
+    "keepTtsTextAfterSpeak": False,
 }
 
 DEFAULT_PROFILE = {

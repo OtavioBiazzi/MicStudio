@@ -1196,9 +1196,14 @@ function TTSWidget() {
   const [speaking, setSpeaking] = useState(false);
   const [showSpeed, setShowSpeed] = useState(true);
   const [unlimited, setUnlimited] = useState(false);
+  const [opacity, setOpacity] = useState(0.82);
+  const [keepText, setKeepText] = useState(false);
+  const [focusShortcut, setFocusShortcut] = useState("");
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   });
+
+  const inputRef = useRef(null);
 
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
@@ -1224,12 +1229,26 @@ function TTSWidget() {
         if (json && json.settings) {
           setShowSpeed(json.settings.showTtsWidgetSpeed !== false);
           setUnlimited(json.settings.unlimitedTts === true);
+          setOpacity((json.settings.ttsWidgetOpacity ?? 82) / 100);
+          setKeepText(json.settings.keepTtsTextAfterSpeak === true);
+          setFocusShortcut(json.settings.shortcutFocusTtsWidget || "");
         }
       } catch (err) {
         console.error("Error fetching state:", err);
       }
     };
     fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    if (window.micfudiddo?.onTtsWidgetFocusInput) {
+      return window.micfudiddo.onTtsWidgetFocusInput(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      });
+    }
   }, []);
 
   const handleSpeak = async () => {
@@ -1246,7 +1265,7 @@ function TTSWidget() {
           rate: formattedRate
         })
       });
-      setText("");
+      if (!keepText) setText("");
     } catch (err) {
       console.error(err);
     } finally {
@@ -1275,7 +1294,7 @@ function TTSWidget() {
       height: showSpeed ? "88px" : "60px",
       width: "100vw",
       borderRadius: "16px",
-      background: "rgba(10, 18, 30, 0.82)",
+      background: `rgba(10, 18, 30, ${opacity})`,
       backdropFilter: "blur(20px)",
       border: "1px solid rgba(255, 255, 255, 0.08)",
       boxSizing: "border-box",
@@ -1342,8 +1361,9 @@ function TTSWidget() {
         {/* Input Field with Character Limit & Counter */}
         <div style={{ display: "flex", flex: 1, alignItems: "center", position: "relative", WebkitAppRegion: "no-drag" }}>
           <input 
+            ref={inputRef}
             type="text" 
-            placeholder="Digite para falar..." 
+            placeholder={focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSpeak(); }}

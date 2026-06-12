@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     ipcRenderer.on("tts-widget:closed", listener);
     return () => ipcRenderer.removeListener("tts-widget:closed", listener);
   },
+  onTtsWidgetFocusInput: (callback) => {
+    const listener = () => callback?.();
+    ipcRenderer.on("tts-widget:focus-input", listener);
+    return () => ipcRenderer.removeListener("tts-widget:focus-input", listener);
+  },
   onCloseChoiceRequested: (callback) => {
     const listener = () => callback?.();
     ipcRenderer.on("window:close-choice-requested", listener);

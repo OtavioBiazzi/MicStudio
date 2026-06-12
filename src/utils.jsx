@@ -73,6 +73,7 @@ export function isVoicePresetActive(controls, preset) {
     const left = controls.effects?.[key];
     const right = expected[key];
     if (typeof right === "boolean") return Boolean(left) === right;
+    if (typeof right === "string") return left === right;
     return Math.abs(Number(left ?? 0) - Number(right)) < 0.03;
   });
 }

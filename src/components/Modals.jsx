@@ -1738,6 +1738,7 @@ export function TTSModal({ onClose, call, setToast }) {
   const [soundName, setSoundName] = useState("");
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [pinHover, setPinHover] = useState(false);
 
   // Auto-fill soundName when text changes
   const handleTextChange = (e) => {
@@ -1834,21 +1835,23 @@ export function TTSModal({ onClose, call, setToast }) {
                 window.micfudiddo?.openTtsWidget();
                 onClose();
               }}
+              onMouseEnter={() => setPinHover(true)}
+              onMouseLeave={() => setPinHover(false)}
+              disabled={isWorking}
               style={{
                 background: "none",
                 border: "none",
-                color: "var(--purple)",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
+                color: pinHover ? "var(--purple)" : "var(--text-muted)",
+                cursor: isWorking ? "not-allowed" : "pointer",
+                transition: "color 0.2s",
                 display: "flex",
                 alignItems: "center",
-                gap: 4
+                justifyContent: "center",
+                padding: 4
               }}
               title="Fixar Widget Flutuante"
             >
-              <PushPin size={14} weight="fill" />
-              <span>Fixar Widget</span>
+              <PushPin size={18} weight={pinHover ? "fill" : "bold"} />
             </button>
             <button className="closeBtn" onClick={handleClose} disabled={isWorking} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: isWorking ? "not-allowed" : "pointer" }}>
               <X size={18} />

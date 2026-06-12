@@ -217,6 +217,7 @@ DEFAULT_APP_SETTINGS = {
     "ttsWidgetOpacity": 82,
     "shortcutFocusTtsWidget": "",
     "keepTtsTextAfterSpeak": False,
+    "ttsVolume": 100,
 }
 
 DEFAULT_PROFILE = {
@@ -2042,9 +2043,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 raise RuntimeError(f"Erro ao carregar áudio gerado: {e}")
             route = str(STATE.settings.get("onlinePlaybackRoute", "both")).strip().lower()
+            tts_volume = float(STATE.settings.get("ttsVolume", 100)) / 100.0
             rendered = render_sound_for_playback(
                 audio,
-                volume=1.0,
+                volume=tts_volume,
                 pitch_semitones=0.0,
                 repeats=1,
                 sample_rate=sr
@@ -2091,6 +2093,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 sr = 48000
                 audio = load_audio_mono(str(temp_mp3), sr)
+                tts_volume = float(STATE.settings.get("ttsVolume", 100)) / 100.0
+                if abs(tts_volume - 1.0) > 0.01:
+                    audio = audio * tts_volume
                 sf.write(str(dest_path), audio, sr, format="WAV", subtype="PCM_16")
             except Exception as e:
                 import shutil

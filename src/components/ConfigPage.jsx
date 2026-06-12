@@ -385,6 +385,20 @@ export function ConfigPage({
                     checked={state.settings?.keepTtsTextAfterSpeak === true}
                     onChange={(v) => call("/api/settings", { keepTtsTextAfterSpeak: v })}
                   />
+
+                  <div style={{ padding: "6px 0", borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+                    <Slider
+                      label="Volume padrão da voz do TTS"
+                      value={Number(state.settings?.ttsVolume ?? 100)}
+                      min={0}
+                      max={200}
+                      suffix="%"
+                      onChange={(v) => call("/api/settings", { ttsVolume: v })}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                      Define a altura/volume padrão em que a voz sintetizada será reproduzida (padrão: 100%).
+                    </small>
+                  </div>
                 </div>
               </div>
             </>

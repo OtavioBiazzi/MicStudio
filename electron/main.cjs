@@ -521,6 +521,10 @@ ipcMain.handle("window:open-tts-widget", () => {
     }
   });
   
+  // Enforce a higher always-on-top level so it stays visible during fullscreen gaming & focus loss
+  ttsWidgetWindow.setAlwaysOnTop(true, "screen-saver");
+  ttsWidgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  
   const url = isDev
     ? "http://127.0.0.1:5177/?widget=tts"
     : `file://${path.join(__dirname, "..", "studio-dist", "index.html")}?widget=tts`;

@@ -1733,7 +1733,9 @@ export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm 
 // --- TTSModal ---
 export function TTSModal({ onClose, call, setToast }) {
   const [text, setText] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState("pt-BR-FranciscaNeural");
+  const [selectedVoice, setSelectedVoice] = useState(() => {
+    return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
+  });
   const [rate, setRate] = useState(0); // Slider: -50 to +50
   const [soundName, setSoundName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1753,6 +1755,12 @@ export function TTSModal({ onClose, call, setToast }) {
     } else {
       setSoundName("");
     }
+  };
+
+  const handleVoiceChange = (e) => {
+    const val = e.target.value;
+    setSelectedVoice(val);
+    localStorage.setItem("tts_default_voice", val);
   };
 
   const handleSpeak = async () => {
@@ -1806,18 +1814,18 @@ export function TTSModal({ onClose, call, setToast }) {
   };
 
   const voicesList = [
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
+    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
+    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
     { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" }
+    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
+    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
   ];
 
   const isWorking = loading || speaking;
@@ -1893,7 +1901,7 @@ export function TTSModal({ onClose, call, setToast }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Selecionar Voz</span>
               <select
                 value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
+                onChange={handleVoiceChange}
                 disabled={isWorking}
                 style={{
                   width: "100%",

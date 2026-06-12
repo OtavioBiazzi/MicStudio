@@ -1191,23 +1191,23 @@ function App() {
 function TTSWidget() {
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(() => {
-    return localStorage.getItem("tts_widget_voice") || "pt-BR-FranciscaNeural";
+    return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
   });
   const [speaking, setSpeaking] = useState(false);
 
   const voicesList = [
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
+    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
+    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
     { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" }
+    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
+    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
   ];
 
   const handleSpeak = async () => {
@@ -1234,7 +1234,7 @@ function TTSWidget() {
   const handleVoiceChange = (e) => {
     const val = e.target.value;
     setSelectedVoice(val);
-    localStorage.setItem("tts_widget_voice", val);
+    localStorage.setItem("tts_default_voice", val);
   };
 
   return (
@@ -1245,7 +1245,7 @@ function TTSWidget() {
       padding: "8px 12px",
       height: "75px",
       width: "100vw",
-      borderRadius: "12px",
+      borderRadius: "16px",
       background: "rgba(10, 18, 30, 0.82)",
       backdropFilter: "blur(20px)",
       border: "1px solid rgba(255, 255, 255, 0.08)",
@@ -1387,6 +1387,11 @@ const isTtsWidget = window.location.search.includes("widget=tts");
 const container = document.getElementById("root");
 const root = createRoot(container);
 if (isTtsWidget) {
+  // Override background colors of root elements to enable transparent window corners
+  document.documentElement.style.background = "transparent";
+  document.body.style.background = "transparent";
+  if (container) container.style.background = "transparent";
+  
   root.render(<TTSWidget />);
 } else {
   root.render(<App />);

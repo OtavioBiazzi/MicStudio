@@ -480,12 +480,8 @@ function App() {
 
   const toggleMute = () => {
     if (!state) return;
-    const isCurrentlyMuted = state.controls?.gain === 0;
-    if (isCurrentlyMuted) {
-      updateControls({ gain: lastNonZeroGain || 1.0 });
-    } else {
-      updateControls({ gain: 0.0 });
-    }
+    const isCurrentlyMuted = !!state.controls?.masterMute;
+    updateControls({ masterMute: !isCurrentlyMuted });
   };
 
   const updateEffects = (patch) => {
@@ -1192,6 +1188,206 @@ function App() {
   );
 }
 
+function TTSWidget() {
+  const [text, setText] = useState("");
+  const [selectedVoice, setSelectedVoice] = useState(() => {
+    return localStorage.getItem("tts_widget_voice") || "pt-BR-FranciscaNeural";
+  });
+  const [speaking, setSpeaking] = useState(false);
+
+  const voicesList = [
+    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
+    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
+    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
+    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
+    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
+    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
+    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
+    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
+    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" },
+    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" }
+  ];
+
+  const handleSpeak = async () => {
+    if (!text.trim() || speaking) return;
+    setSpeaking(true);
+    try {
+      await fetch(`${API}/api/tts/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text.trim(),
+          voice: selectedVoice,
+          rate: "+0%"
+        })
+      });
+      setText("");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSpeaking(false);
+    }
+  };
+
+  const handleVoiceChange = (e) => {
+    const val = e.target.value;
+    setSelectedVoice(val);
+    localStorage.setItem("tts_widget_voice", val);
+  };
+
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "8px 12px",
+      height: "75px",
+      width: "100vw",
+      borderRadius: "12px",
+      background: "rgba(10, 18, 30, 0.82)",
+      backdropFilter: "blur(20px)",
+      border: "1px solid rgba(255, 255, 255, 0.08)",
+      boxSizing: "border-box",
+      overflow: "hidden",
+      gap: "8px",
+      color: "#f3f4f6",
+      fontFamily: "system-ui, sans-serif"
+    }}>
+      {/* Drag Handle */}
+      <div 
+        title="Arraste para mover" 
+        style={{
+          cursor: "move",
+          width: "18px",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: "3px",
+          padding: "0 4px",
+          color: "rgba(255, 255, 255, 0.25)",
+          WebkitAppRegion: "drag",
+          userSelect: "none"
+        }}
+      >
+        <div style={{ display: "flex", gap: "3px" }}><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div></div>
+        <div style={{ display: "flex", gap: "3px" }}><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div></div>
+        <div style={{ display: "flex", gap: "3px" }}><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div><div style={{ width: "3px", height: "3px", background: "currentColor", borderRadius: "50%" }}></div></div>
+      </div>
+
+      {/* Voice Select */}
+      <select 
+        value={selectedVoice} 
+        onChange={handleVoiceChange}
+        style={{
+          WebkitAppRegion: "no-drag",
+          background: "rgba(255, 255, 255, 0.05)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: "6px",
+          color: "#fff",
+          padding: "6px 8px",
+          fontSize: "12px",
+          maxWidth: "130px",
+          cursor: "pointer",
+          outline: "none"
+        }}
+      >
+        {voicesList.map(v => (
+          <option key={v.id} value={v.id} style={{ background: "#0a121e", color: "#fff" }}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+
+      {/* Input Field with Character Limit & Counter */}
+      <div style={{ display: "flex", flex: 1, alignItems: "center", position: "relative", WebkitAppRegion: "no-drag" }}>
+        <input 
+          type="text" 
+          placeholder="Digite para falar..." 
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSpeak(); }}
+          maxLength={1000}
+          style={{
+            width: "100%",
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "6px",
+            color: "#fff",
+            padding: "6px 50px 6px 12px",
+            fontSize: "12px",
+            outline: "none"
+          }}
+        />
+        <span style={{
+          position: "absolute",
+          right: "10px",
+          fontSize: "10px",
+          color: "rgba(255, 255, 255, 0.4)",
+          pointerEvents: "none"
+        }}>
+          {text.length}/1000
+        </span>
+      </div>
+
+      {/* Speak Button */}
+      <button 
+        onClick={handleSpeak}
+        disabled={speaking}
+        style={{
+          WebkitAppRegion: "no-drag",
+          background: speaking ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #a855f7, #7c3aed)",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          padding: "6px 12px",
+          fontSize: "12px",
+          fontWeight: "bold",
+          cursor: speaking ? "not-allowed" : "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+          outline: "none"
+        }}
+      >
+        <span>{speaking ? "📢" : "Falar"}</span>
+      </button>
+
+      {/* Close Button */}
+      <button 
+        onClick={() => window.micfudiddo?.closeTtsWidget()}
+        style={{
+          WebkitAppRegion: "no-drag",
+          background: "none",
+          border: "none",
+          color: "rgba(255, 255, 255, 0.4)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "24px",
+          height: "24px",
+          borderRadius: "4px",
+          outline: "none"
+        }}
+        title="Fechar Widget"
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)"; e.currentTarget.style.color = "#ef4444"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
+      >
+        <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
+      </button>
+    </div>
+  );
+}
+
+const isTtsWidget = window.location.search.includes("widget=tts");
+
 const container = document.getElementById("root");
 const root = createRoot(container);
-root.render(<App />);
+if (isTtsWidget) {
+  root.render(<TTSWidget />);
+} else {
+  root.render(<App />);
+}

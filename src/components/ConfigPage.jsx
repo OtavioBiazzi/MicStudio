@@ -197,19 +197,19 @@ export function ConfigPage({
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <SelectField
-                  label="Dispositivo de entrada"
+                  label="Microfone (Dispositivo de Entrada)"
                   value={state.selected?.input}
                   items={state.devices?.inputs || []}
                   onChange={(v) => call("/api/selection", { input: v })}
                 />
                 <SelectField
-                  label="Dispositivo de saída (virtual)"
+                  label="Cabo Virtual (VB-CABLE / Saída de Áudio)"
                   value={state.selected?.output}
                   items={state.devices?.outputs || []}
                   onChange={(v) => call("/api/selection", { output: v })}
                 />
                 <SelectField
-                  label="Dispositivo de monitor"
+                  label="Fone de Ouvido / Auto-falante (Para você se ouvir / Monitoramento)"
                   value={state.selected?.monitor}
                   items={state.devices?.outputs || []}
                   onChange={(v) => call("/api/selection", { monitor: v })}

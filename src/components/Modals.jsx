@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   X, Play, Minus, Trash, Star, UploadSimple, FolderOpen, MagnifyingGlass,
   Pencil, Waveform, MusicNotes, ArrowClockwise, ArrowCounterClockwise,
-  StopCircle, Sparkle, YoutubeLogo
+  StopCircle, Sparkle, YoutubeLogo, PushPin
 } from "@phosphor-icons/react";
 import {
   filePathToUrl,
@@ -1807,6 +1807,8 @@ export function TTSModal({ onClose, call, setToast }) {
   const voicesList = [
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
+    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
@@ -1826,18 +1828,45 @@ export function TTSModal({ onClose, call, setToast }) {
           <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--purple)", display: "flex", alignItems: "center", gap: 8 }}>
             🎙️ Gerar Voz por Texto (TTS)
           </h3>
-          <button className="closeBtn" onClick={handleClose} disabled={isWorking} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: isWorking ? "not-allowed" : "pointer" }}>
-            <X size={18} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={() => {
+                window.micfudiddo?.openTtsWidget();
+                onClose();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--purple)",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 4
+              }}
+              title="Fixar Widget Flutuante"
+            >
+              <PushPin size={14} weight="fill" />
+              <span>Fixar Widget</span>
+            </button>
+            <button className="closeBtn" onClick={handleClose} disabled={isWorking} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: isWorking ? "not-allowed" : "pointer" }}>
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}/1000</span>
+            </div>
             <textarea
               placeholder="Digite aqui o que você quer que o robô fale..."
               value={text}
               onChange={handleTextChange}
               disabled={isWorking}
+              maxLength={1000}
               autoFocus
               rows={3}
               style={{

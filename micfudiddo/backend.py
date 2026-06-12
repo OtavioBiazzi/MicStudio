@@ -219,6 +219,8 @@ DEFAULT_PROFILE = {
     "pitch": 0.0,
     "masterMicGain": 1.0,
     "masterVoiceVolume": 1.0,
+    "masterPitch": 0.0,
+    "masterMute": False,
     "monitor": True,
     "monitorVolume": 1.0,
     "soundboardMonitor": True,
@@ -246,8 +248,10 @@ class AudioClippingManager:
         self._running = False
         self._pa = None
         self._pc_streams = []
+        self._monitor_history: deque[np.ndarray] = deque()
+        self._monitor_history_size = 0
 
-    def write_voice(self, samples: np.ndarray) -> None:
+    def write_voice(self, samples: np.ndarray, monitor_voice: np.ndarray | None = None) -> None:
         if not self._running:
             return
         source = str(self.app_state.settings.get("clipSource", "both"))
@@ -269,6 +273,23 @@ class AudioClippingManager:
                 else:
                     self._voice_chunks[0] = first[overflow:].copy()
                     self._voice_available -= overflow
+
+            # Handle monitor history synchronously to preserve timing alignment
+            if monitor_voice is not None:
+                m_chunk = np.asarray(monitor_voice, dtype=np.float32).copy()
+            else:
+                m_chunk = np.zeros_like(chunk)
+            self._monitor_history.append(m_chunk)
+            self._monitor_history_size += m_chunk.size
+            while self._monitor_history_size > max_samples and self._monitor_history:
+                overflow = self._monitor_history_size - max_samples
+                first = self._monitor_history[0]
+                if first.size <= overflow:
+                    self._monitor_history.popleft()
+                    self._monitor_history_size -= first.size
+                else:
+                    self._monitor_history[0] = first[overflow:].copy()
+                    self._monitor_history_size -= overflow
 
     def _make_pc_callback(self, device, stream_rate: int):
         import pyaudiowpatch as pyaudio
@@ -370,6 +391,8 @@ class AudioClippingManager:
         with self._lock:
             self._pc_chunks.clear()
             self._pc_available = 0
+            self._monitor_history.clear()
+            self._monitor_history_size = 0
             
         print("Clipping: Stopped PC capture streams.")
 
@@ -390,6 +413,7 @@ class AudioClippingManager:
         with self._lock:
             voice_chunks = list(self._voice_chunks)
             pc_chunks = list(self._pc_chunks)
+            monitor_chunks = list(self._monitor_history)
         
         needed_samples = int(duration_sec * 48000)
         
@@ -409,6 +433,73 @@ class AudioClippingManager:
             else:
                 pc_audio = full_pc
                 
+        monitor_audio = np.zeros(0, dtype=np.float32)
+        if monitor_chunks:
+            full_monitor = np.concatenate(monitor_chunks)
+            if full_monitor.size > needed_samples:
+                monitor_audio = full_monitor[-needed_samples:]
+            else:
+                monitor_audio = full_monitor
+
+        # Align and subtract monitored voice from pc_audio if both exist to cancel duplication
+        if pc_audio.size > 0 and monitor_audio.size > 0:
+            try:
+                max_size = min(monitor_audio.size, pc_audio.size)
+                seg_len = 48000
+                search_margin = 12000
+                if max_size >= (seg_len + search_margin):
+                    num_windows = (max_size - search_margin) // seg_len
+                    best_energy = -1.0
+                    best_window_idx = 0
+                    for w in range(num_windows):
+                        start = w * seg_len
+                        end = start + seg_len
+                        energy = np.sum(monitor_audio[start:end] ** 2)
+                        if energy > best_energy:
+                            best_energy = energy
+                            best_window_idx = start
+                    
+                    if best_energy > 1e-3:
+                        voice_sig = monitor_audio[best_window_idx : best_window_idx + seg_len]
+                        pc_start = best_window_idx
+                        pc_end = best_window_idx + seg_len + search_margin
+                        if pc_end <= pc_audio.size:
+                            pc_sig = pc_audio[pc_start:pc_end]
+                            
+                            # Downsample by 4 for coarse search to be fast and light
+                            voice_ds = voice_sig[::4]
+                            pc_ds = pc_sig[::4]
+                            
+                            corr = np.correlate(pc_ds, voice_ds, mode='valid')
+                            if corr.size > 0:
+                                coarse_delay_ds = int(np.argmax(corr))
+                                coarse_delay = coarse_delay_ds * 4
+                                
+                                # Refine delay in [coarse_delay - 6, coarse_delay + 6]
+                                refine_min = max(0, coarse_delay - 6)
+                                refine_max = min(search_margin, coarse_delay + 6)
+                                
+                                best_d = coarse_delay
+                                best_dot = -1.0
+                                for d in range(refine_min, refine_max + 1):
+                                    dot_val = np.dot(pc_sig[d : d + seg_len], voice_sig)
+                                    if dot_val > best_dot:
+                                        best_dot = dot_val
+                                        best_d = d
+                                
+                                # Calculate optimal scale
+                                ref_voice = voice_sig
+                                ref_pc = pc_sig[best_d : best_d + seg_len]
+                                denom = np.dot(ref_voice, ref_voice)
+                                scale = np.dot(ref_pc, ref_voice) / denom if denom > 1e-5 else 0.0
+                                
+                                # If scale is reasonable, subtract from pc_audio
+                                if 0.05 < scale < 2.5:
+                                    pc_audio[best_d:] -= scale * monitor_audio[:pc_audio.size - best_d]
+                                    print(f"Offline Clipping Cancelation: aligned at {best_d} samples ({best_d/48000*1000:.2f}ms), scale={scale:.3f}", flush=True)
+            except Exception as e:
+                print(f"Error in offline clipping cancelation: {e}", flush=True)
+
         max_len = max(voice_audio.size, pc_audio.size)
         if max_len == 0:
             return None
@@ -477,6 +568,8 @@ class AppState:
         self.pitch = 0.0
         self.master_mic_gain = 1.0
         self.master_voice_volume = 1.0
+        self.master_pitch = 0.0
+        self.master_mute = False
         self.effects = EffectsSettings()
         self.monitor_enabled = True
         self.monitor_volume = 1.0
@@ -728,6 +821,8 @@ class AppState:
         self.pitch = float(self.profile.get("pitch", 0.0))
         self.master_mic_gain = max(0.0, float(self.profile.get("masterMicGain", 1.0)))
         self.master_voice_volume = max(0.0, float(self.profile.get("masterVoiceVolume", 1.0)))
+        self.master_pitch = float(self.profile.get("masterPitch", 0.0))
+        self.master_mute = bool(self.profile.get("masterMute", False))
         self.monitor_enabled = bool(self.profile.get("monitor", False))
         self.monitor_volume = max(0.0, min(3.0, float(self.profile.get("monitorVolume", 1.0))))
         self.soundboard_monitor_enabled = bool(self.profile.get("soundboardMonitor", False))
@@ -778,6 +873,8 @@ class AppState:
                 soundboard_monitor_volume=self.soundboard_monitor_volume,
                 master_mic_gain=self.master_mic_gain,
                 master_voice_volume=self.master_voice_volume,
+                master_pitch=self.master_pitch,
+                master_mute=self.master_mute,
             )
 
     def save_profile(self) -> None:
@@ -786,6 +883,8 @@ class AppState:
             "pitch": self.pitch,
             "masterMicGain": self.master_mic_gain,
             "masterVoiceVolume": self.master_voice_volume,
+            "masterPitch": self.master_pitch,
+            "masterMute": self.master_mute,
             "monitor": self.monitor_enabled,
             "monitorVolume": self.monitor_volume,
             "soundboardMonitor": self.soundboard_monitor_enabled,
@@ -868,6 +967,8 @@ class AppState:
             soundboard_monitor_volume=self.soundboard_monitor_volume,
             master_mic_gain=self.master_mic_gain,
             master_voice_volume=self.master_voice_volume,
+            master_pitch=self.master_pitch,
+            master_mute=self.master_mute,
         )
 
     def register_hotkeys(self) -> None:
@@ -1669,6 +1770,8 @@ class Handler(BaseHTTPRequestHandler):
             STATE.pitch = float(controls.get("pitch", STATE.pitch))
             STATE.master_mic_gain = max(0.0, float(controls.get("masterMicGain", STATE.master_mic_gain)))
             STATE.master_voice_volume = max(0.0, float(controls.get("masterVoiceVolume", STATE.master_voice_volume)))
+            STATE.master_pitch = float(controls.get("masterPitch", STATE.master_pitch))
+            STATE.master_mute = bool(controls.get("masterMute", STATE.master_mute))
             STATE.monitor_enabled = bool(controls.get("monitor", STATE.monitor_enabled))
             STATE.monitor_volume = max(0.0, min(3.0, float(controls.get("monitorVolume", STATE.monitor_volume))))
             STATE.soundboard_monitor_enabled = bool(controls.get("soundboardMonitor", STATE.soundboard_monitor_enabled))
@@ -1687,6 +1790,8 @@ class Handler(BaseHTTPRequestHandler):
                         soundboard_monitor_volume=STATE.soundboard_monitor_volume,
                         master_mic_gain=STATE.master_mic_gain,
                         master_voice_volume=STATE.master_voice_volume,
+                        master_pitch=STATE.master_pitch,
+                        master_mute=STATE.master_mute,
                     )
                     STATE.engine.set_monitor(
                         STATE.monitor_enabled,
@@ -1707,6 +1812,8 @@ class Handler(BaseHTTPRequestHandler):
                     soundboard_monitor_volume=STATE.soundboard_monitor_volume,
                     master_mic_gain=STATE.master_mic_gain,
                     master_voice_volume=STATE.master_voice_volume,
+                    master_pitch=STATE.master_pitch,
+                    master_mute=STATE.master_mute,
                 )
                 STATE.engine.set_monitor(
                     STATE.monitor_enabled,

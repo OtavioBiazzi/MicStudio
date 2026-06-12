@@ -9,6 +9,7 @@ const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : proce
 const API = "http://127.0.0.1:38717";
 const isDev = !app.isPackaged;
 let mainWindow;
+let ttsWidgetWindow;
 let tray;
 let backend;
 let quitting = false;
@@ -497,6 +498,50 @@ ipcMain.handle("shortcuts:get-conflicts", () => {
 
 ipcMain.handle("clipboard:write", async (_event, text) => {
   clipboard.writeText(text);
+  return true;
+});
+
+ipcMain.handle("window:open-tts-widget", () => {
+  if (ttsWidgetWindow) {
+    ttsWidgetWindow.focus();
+    return true;
+  }
+  
+  ttsWidgetWindow = new BrowserWindow({
+    width: 480,
+    height: 75,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      webSecurity: false
+    }
+  });
+  
+  const url = isDev
+    ? "http://127.0.0.1:5177/?widget=tts"
+    : `file://${path.join(__dirname, "..", "studio-dist", "index.html")}?widget=tts`;
+  
+  ttsWidgetWindow.loadURL(url);
+  
+  ttsWidgetWindow.on("closed", () => {
+    ttsWidgetWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("tts-widget:closed");
+    }
+  });
+  
+  return true;
+});
+
+ipcMain.handle("window:close-tts-widget", () => {
+  if (ttsWidgetWindow) {
+    ttsWidgetWindow.close();
+    ttsWidgetWindow = null;
+  }
   return true;
 });
 

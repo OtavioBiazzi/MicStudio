@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   openSoundSettings: () => ipcRenderer.invoke("system:open-sound-settings"),
   openSoundControlPanel: () => ipcRenderer.invoke("system:open-mmsys"),
   getShortcutConflicts: () => ipcRenderer.invoke("shortcuts:get-conflicts"),
+  openTtsWidget: () => ipcRenderer.invoke("window:open-tts-widget"),
+  closeTtsWidget: () => ipcRenderer.invoke("window:close-tts-widget"),
+  onTtsWidgetClosed: (callback) => {
+    const listener = () => callback?.();
+    ipcRenderer.on("tts-widget:closed", listener);
+    return () => ipcRenderer.removeListener("tts-widget:closed", listener);
+  },
   onCloseChoiceRequested: (callback) => {
     const listener = () => callback?.();
     ipcRenderer.on("window:close-choice-requested", listener);

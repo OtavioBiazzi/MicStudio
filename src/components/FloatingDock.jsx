@@ -119,12 +119,12 @@ export function FloatingDock({
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button
-              className={`bbBtn icon-only ${state.controls?.gain === 0 ? "on" : ""}`}
+              className={`bbBtn icon-only ${state.controls?.masterMute ? "on" : ""}`}
               onClick={toggleMute}
               title="Mute"
               style={{ width: 28, height: 28 }}
             >
-              {state.controls?.gain === 0 ? <MicrophoneSlash size={14} color="var(--danger)" /> : <Microphone size={14} />}
+              {state.controls?.masterMute ? <MicrophoneSlash size={14} color="var(--danger)" /> : <Microphone size={14} />}
             </button>
 
             <button
@@ -164,11 +164,11 @@ export function FloatingDock({
           </button>
 
           <button
-            className={`bbBtn icon-only ${state.controls?.gain === 0 ? "on" : ""}`}
+            className={`bbBtn icon-only ${state.controls?.masterMute ? "on" : ""}`}
             onClick={toggleMute}
             title="Mute"
           >
-            {state.controls?.gain === 0 ? <MicrophoneSlash size={16} color="var(--danger)" /> : <Microphone size={16} />}
+            {state.controls?.masterMute ? <MicrophoneSlash size={16} color="var(--danger)" /> : <Microphone size={16} />}
           </button>
 
           <button
@@ -311,6 +311,8 @@ export function FloatingDock({
                     gain: 1.0,
                     masterMicGain: 1.0,
                     masterVoiceVolume: 1.0,
+                    masterPitch: 0.0,
+                    masterMute: false,
                     monitor: true,
                     monitorVolume: 1.0,
                     soundboardMonitor: true,
@@ -337,8 +339,8 @@ export function FloatingDock({
                 <input
                   type="range"
                   min={0}
-                  max={10}
-                  step={0.1}
+                  max={100}
+                  step={1}
                   value={state.controls?.masterMicGain ?? 1}
                   onChange={(e) => updateControls({ masterMicGain: Number(e.target.value) })}
                   className="mixer-slider"
@@ -356,8 +358,8 @@ export function FloatingDock({
                 <input
                   type="range"
                   min={0}
-                  max={10}
-                  step={0.1}
+                  max={100}
+                  step={1}
                   value={state.controls?.masterVoiceVolume ?? 1}
                   onChange={(e) => updateControls({ masterVoiceVolume: Number(e.target.value) })}
                   className="mixer-slider"
@@ -377,11 +379,11 @@ export function FloatingDock({
                   min={-36}
                   max={36}
                   step={1}
-                  value={state.controls?.pitch ?? 0}
-                  onChange={(e) => updateControls({ pitch: Number(e.target.value) })}
+                  value={state.controls?.masterPitch ?? 0}
+                  onChange={(e) => updateControls({ masterPitch: Number(e.target.value) })}
                   className="mixer-slider"
                 />
-                <span className="slider-value">{(state.controls?.pitch ?? 0) > 0 ? `+${state.controls?.pitch}` : state.controls?.pitch}st</span>
+                <span className="slider-value">{(state.controls?.masterPitch ?? 0) > 0 ? `+${state.controls?.masterPitch}` : state.controls?.masterPitch}st</span>
               </div>
             </div>
 

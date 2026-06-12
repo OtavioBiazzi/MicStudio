@@ -44,6 +44,8 @@ class EngineConfig:
     primary_outputs_monitor_mix: bool = False
     master_mic_gain: float = 1.0
     master_voice_volume: float = 1.0
+    master_pitch: float = 0.0
+    master_mute: bool = False
 
 
 class AudioRingBuffer:
@@ -164,6 +166,8 @@ class AudioEngine:
         self._gain = 1.0
         self._master_mic_gain = 1.0
         self._master_voice_volume = 1.0
+        self._master_pitch_semitones = 0.0
+        self._master_mute = False
         self._pitch_semitones = 0.0
         self._effects = EffectsSettings()
         self._monitor_enabled = False
@@ -220,6 +224,8 @@ class AudioEngine:
         soundboard_monitor_volume: float | None = None,
         master_mic_gain: float | None = None,
         master_voice_volume: float | None = None,
+        master_pitch: float | None = None,
+        master_mute: bool | None = None,
     ) -> None:
         with self._control_lock:
             self._gain = max(0.0, float(gain))
@@ -236,6 +242,10 @@ class AudioEngine:
                 self._master_mic_gain = max(0.0, float(master_mic_gain))
             if master_voice_volume is not None:
                 self._master_voice_volume = max(0.0, float(master_voice_volume))
+            if master_pitch is not None:
+                self._master_pitch_semitones = float(master_pitch)
+            if master_mute is not None:
+                self._master_mute = bool(master_mute)
 
     def play_sound(
         self,
@@ -438,6 +448,8 @@ class AudioEngine:
             soundboard_monitor_volume=config.soundboard_monitor_volume,
             master_mic_gain=config.master_mic_gain,
             master_voice_volume=config.master_voice_volume,
+            master_pitch=config.master_pitch,
+            master_mute=config.master_mute,
         )
         self._monitor_enabled = bool(config.monitor_enabled)
 
@@ -738,8 +750,8 @@ class AudioEngine:
     def _process_audio_block(self, mono: np.ndarray, frames: int) -> tuple[np.ndarray, np.ndarray]:
         try:
             with self._control_lock:
-                gain = self._gain * self._master_mic_gain
-                pitch_semitones = self._pitch_semitones
+                gain = (self._gain * self._master_mic_gain) if not self._master_mute else 0.0
+                pitch_semitones = self._pitch_semitones + self._master_pitch_semitones
                 effects = self._effects
                 monitor_enabled = self._monitor_enabled
                 monitor_volume = self._monitor_volume
@@ -769,7 +781,10 @@ class AudioEngine:
                         self._recorded_chunks.append(processed.copy())
             clipping_mgr = getattr(self, "_clipping_manager", None)
             if clipping_mgr:
-                clipping_mgr.write_voice(processed)
+                clipping_mgr.write_voice(
+                    processed,
+                    monitor_voice=(voice_bus * np.float32(monitor_volume)) if monitor_enabled else None
+                )
             return processed, monitor_mix
         except Exception as exc:
             self._last_error = str(exc)

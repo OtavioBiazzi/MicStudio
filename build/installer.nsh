@@ -37,10 +37,23 @@
 
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
-  ; Check if VB-CABLE is already installed by looking for the driver
-  nsExec::Exec 'powershell -NoProfile -Command "if (Get-PnpDevice -FriendlyName ''*VB-Audio Virtual Cable*'' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"'
-  Pop $0
-  ${If} $0 != "0"
+  ; Check if VB-CABLE is already installed by looking in 64-bit and 32-bit Registry
+  SetRegView 64
+  ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\VB:VBCABLE {87459874-1236-4469}" "DisplayName"
+  SetRegView 32
+  
+  ; Fallback check if registry query returned empty: check if installer file exists on disk
+  ${If} $0 == ""
+    IfFileExists "$PROGRAMFILES64\VB\CABLE\VBCABLE_Setup_x64.exe" foundCable noCable
+    foundCable:
+      StrCpy $0 "VB-CABLE"
+      Goto doneCheck
+    noCable:
+      StrCpy $0 ""
+    doneCheck:
+  ${EndIf}
+
+  ${If} $0 == ""
     ; VB-CABLE not found - ask user
     MessageBox MB_YESNO|MB_ICONQUESTION "O driver VB-CABLE (cabo de audio virtual) nao foi encontrado no seu sistema.$\r$\n$\r$\nEle e necessario para que o MicFudiddo Studio funcione corretamente no Discord e outros apps.$\r$\n$\r$\nDeseja baixar e instalar o VB-CABLE agora?" IDYES downloadVBCable IDNO skipVBCable
 

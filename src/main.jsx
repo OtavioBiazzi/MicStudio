@@ -95,6 +95,7 @@ function App() {
   const [chooseMicOnCloseOpen, setChooseMicOnCloseOpen] = useState(false);
   const [bootError, setBootError] = useState(null);
   const controlsOptimisticRef = useRef(null);
+  const lastYoutubeStatusRef = useRef("");
 
   const [bypassActive, setBypassActive] = useState(false);
   const [lastActivePresetId, setLastActivePresetId] = useState(null);
@@ -752,6 +753,27 @@ function App() {
       return () => clearTimeout(id);
     }
   }, [toast]);
+
+  // Global YouTube status change monitoring (shows toast even if modal is closed)
+  useEffect(() => {
+    if (state?.youtubeStatus) {
+      const currentStatus = state.youtubeStatus;
+      const lastStatus = lastYoutubeStatusRef.current;
+      if (currentStatus !== lastStatus) {
+        lastYoutubeStatusRef.current = currentStatus;
+        const lower = currentStatus.toLowerCase();
+        if (
+          lower.startsWith("concluido:") ||
+          lower.startsWith("erro:") ||
+          lower.startsWith("importacao cancelada")
+        ) {
+          setToast(currentStatus);
+        }
+      }
+    } else if (state?.youtubeStatus === "") {
+      lastYoutubeStatusRef.current = "";
+    }
+  }, [state?.youtubeStatus, setToast]);
 
   if (bootError && !state) {
     return (

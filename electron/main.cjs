@@ -188,36 +188,11 @@ async function refreshSoundHotkeys() {
     }
 
     for (const accelerator of registeredSoundShortcuts.keys()) {
-      if (nextSounds.get(accelerator) !== registeredSoundShortcuts.get(accelerator)) {
-        globalShortcut.unregister(accelerator);
-        registeredSoundShortcuts.delete(accelerator);
-      }
+      globalShortcut.unregister(accelerator);
+      registeredSoundShortcuts.delete(accelerator);
     }
 
-    for (const [accelerator, soundId] of nextSounds.entries()) {
-      if (registeredSoundShortcuts.has(accelerator)) {
-        shortcutConflicts.delete(accelerator);
-        continue;
-      }
-      try {
-        const ok = globalShortcut.register(accelerator, () => {
-          fetch(`${API}/api/sounds/play`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ id: soundId })
-          }).catch(() => {});
-        });
-        if (ok) {
-          registeredSoundShortcuts.set(accelerator, soundId);
-          shortcutConflicts.delete(accelerator);
-        } else {
-          const sound = (data.sounds || []).find(s => s.id === soundId);
-          shortcutConflicts.set(accelerator, `Som: ${sound ? sound.name : 'Desconhecido'}`);
-        }
-      } catch (_) {
-        shortcutConflicts.set(accelerator, "Erro de Registro");
-      }
-    }
+    // Sound shortcuts are now registered and handled natively on the Python backend to avoid blocking keys.
 
     // 2. Refresh Global App Hotkeys
     const settings = data.settings || {};

@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, FadersHorizontal, YoutubeLogo, Lightning, ChartBar,
-  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes
+  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone
 } from "@phosphor-icons/react";
 import { formatTime } from "../utils";
-import { YoutubeImportModal } from "./Modals";
+import { YoutubeImportModal, TTSModal } from "./Modals";
 import { API } from "../apiClient";
 
 export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSoundboardFavorite }) {
@@ -24,6 +24,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
   const [maxDur, setMaxDur] = useState(300);
   const [showFilters, setShowFilters] = useState(false);
   const [showYoutubeModal, setShowYoutubeModal] = useState(false);
+  const [showTTSModal, setShowTTSModal] = useState(false);
 
   const parseDuration = (durVal) => {
     if (durVal === null || durVal === undefined) return 3.0;
@@ -287,6 +288,30 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             <YoutubeLogo size={16} color="#FF0000" />
             <span>Adicionar Som do YouTube</span>
           </button>
+          <button
+            onClick={() => {
+              setShowTTSModal(true);
+              setShowFilters(false);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 16px",
+              background: showTTSModal ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
+              border: showTTSModal ? "1px solid var(--purple)" : "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              color: showTTSModal ? "var(--text)" : "var(--text-secondary)",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 12,
+              height: 38,
+              transition: "all 0.2s"
+            }}
+          >
+            <Microphone size={16} color="var(--purple)" />
+            <span>Gerar Voz por Texto (TTS)</span>
+          </button>
         </div>
 
         <AnimatePresence>
@@ -517,6 +542,13 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             call={call}
             setToast={setToast}
             state={state}
+          />
+        )}
+        {showTTSModal && (
+          <TTSModal
+            onClose={() => setShowTTSModal(false)}
+            call={call}
+            setToast={setToast}
           />
         )}
       </AnimatePresence>

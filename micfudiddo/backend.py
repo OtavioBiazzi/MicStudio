@@ -276,6 +276,7 @@ class AppState:
         self.virtual_mode_active = False
         self.monitor_only_active = False
         self.status = "Backend pronto"
+        self.hotkey_handles = []
         
         self.custom_voices_path = self.library.base_dir / "custom_voices.json"
         self.custom_categories_path = self.library.base_dir / "custom_categories.json"
@@ -293,6 +294,7 @@ class AppState:
         self.online_cache_dir = self.library.base_dir / "online_cache"
         self.clean_online_cache()
         self.refresh_windows_capture_endpoints()
+        self.register_hotkeys()
 
     def load_custom_voices(self) -> list:
         if not self.custom_voices_path.exists():
@@ -628,6 +630,38 @@ class AppState:
             soundboard_monitor_enabled=self.soundboard_monitor_enabled,
             soundboard_monitor_volume=self.soundboard_monitor_volume,
         )
+
+    def register_hotkeys(self) -> None:
+        try:
+            import keyboard
+        except Exception as e:
+            print("keyboard library not available or error:", e)
+            return
+            
+        with self.lock:
+            if hasattr(self, "hotkey_handles"):
+                for handle in self.hotkey_handles:
+                    try:
+                        keyboard.remove_hotkey(handle)
+                    except Exception:
+                        pass
+            self.hotkey_handles = []
+            
+            for item in self.library.items:
+                if not item.shortcut:
+                    continue
+                hotkey = item.shortcut.strip().lower().replace("control", "ctrl").replace("commandorcontrol", "ctrl").replace("cmdorctrl", "ctrl").replace(" ", "")
+                if not hotkey:
+                    continue
+                try:
+                    handle = keyboard.add_hotkey(
+                        hotkey, 
+                        lambda item_id=item.id: self.play_sound(item_id),
+                        suppress=False
+                    )
+                    self.hotkey_handles.append(handle)
+                except Exception as e:
+                    print(f"Error registering hotkey {hotkey} for sound {item.name}: {e}")
 
     def start(self) -> None:
         self.monitor_only_active = False
@@ -1547,9 +1581,8 @@ class Handler(BaseHTTPRequestHandler):
                                     break
                                 out_file.write(chunk)
                         
-                        STATE.youtube_status = "Extraindo pacote..."
                         item = STATE.library.import_mfsound(str(temp_path))
-                        
+                        STATE.register_hotkeys()
                         with STATE.lock:
                             STATE.status = f"Som importado da nuvem: {item.name}"
                         STATE.youtube_status = f"Concluido: '{item.name}' importado!"
@@ -1571,9 +1604,113 @@ class Handler(BaseHTTPRequestHandler):
                         print("Error adding file:", e)
                 with STATE.lock:
                     STATE.status = f"{added} som(ns) importado(s)" if added else STATE.status
+                    STATE.register_hotkeys()
             threading.Thread(target=bg_add, daemon=True).start()
             STATE.status = "Importando sons..."
             return None
+
+        if path == "/api/tts/voices":
+            return {
+                "voices": [
+                    {"id": "pt-BR-FranciscaNeural", "name": "Francisca (Feminina - BR)", "lang": "pt-BR"},
+                    {"id": "pt-BR-AntonioNeural", "name": "Antonio (Masculina - BR)", "lang": "pt-BR"},
+                    {"id": "en-US-AriaNeural", "name": "Aria (Feminina - US)", "lang": "en-US"},
+                    {"id": "en-US-GuyNeural", "name": "Guy (Masculina - US)", "lang": "en-US"},
+                    {"id": "es-ES-ElviraNeural", "name": "Elvira (Feminina - ES)", "lang": "es-ES"},
+                    {"id": "es-MX-JorgeNeural", "name": "Jorge (Masculina - MX)", "lang": "es-MX"},
+                    {"id": "ja-JP-NanamiNeural", "name": "Nanami (Feminina - JP)", "lang": "ja-JP"},
+                    {"id": "ja-JP-KeitaNeural", "name": "Keita (Masculina - JP)", "lang": "ja-JP"},
+                    {"id": "de-DE-KatjaNeural", "name": "Katja (Feminina - DE)", "lang": "de-DE"},
+                    {"id": "de-DE-ConradNeural", "name": "Conrad (Masculina - DE)", "lang": "de-DE"}
+                ]
+            }
+
+        if path == "/api/tts/speak":
+            text = data.get("text", "").strip()
+            voice = data.get("voice", "pt-BR-FranciscaNeural")
+            rate = data.get("rate", "+0%")
+            if not text:
+                raise RuntimeError("Texto vazio.")
+            import asyncio
+            import edge_tts
+            temp_path = STATE.online_cache_dir / "tts_temp.mp3"
+            async def run_tts():
+                communicate = edge_tts.Communicate(text, voice, rate=rate)
+                await communicate.save(str(temp_path))
+            try:
+                asyncio.run(run_tts())
+            except Exception as e:
+                raise RuntimeError(f"Erro na síntese de voz: {e}")
+            sr = STATE.engine.sample_rate or 48000
+            try:
+                audio = load_audio_mono(str(temp_path), sr)
+            except Exception as e:
+                raise RuntimeError(f"Erro ao carregar áudio gerado: {e}")
+            route = str(STATE.settings.get("onlinePlaybackRoute", "both")).strip().lower()
+            rendered = render_sound_for_playback(
+                audio,
+                volume=1.0,
+                pitch_semitones=0.0,
+                repeats=1,
+                sample_rate=sr
+            )
+            with STATE.lock:
+                for p in list(STATE.engine._playbacks):
+                    if p.sound_id == "tts_preview":
+                        STATE.engine.stop_sound(playback_id=p.playback_id)
+            STATE.engine.play_sound(
+                rendered,
+                block_voice=False,
+                mute_others=False,
+                sound_id="tts_preview",
+                name="TTS Preview",
+                replace=True,
+                loop=False,
+                output_route=route
+            )
+            return {"ok": True}
+
+        if path == "/api/tts/save":
+            text = data.get("text", "").strip()
+            voice = data.get("voice", "pt-BR-FranciscaNeural")
+            rate = data.get("rate", "+0%")
+            name = data.get("name", "").strip()
+            if not text:
+                raise RuntimeError("Texto vazio.")
+            if not name:
+                name = text[:20] + "..." if len(text) > 20 else text
+            import asyncio
+            import edge_tts
+            import uuid
+            filename = f"tts_{uuid.uuid4().hex}.wav"
+            temp_mp3 = STATE.online_cache_dir / f"{uuid.uuid4().hex}.mp3"
+            dest_path = STATE.library.sounds_dir / filename
+            async def run_tts():
+                communicate = edge_tts.Communicate(text, voice, rate=rate)
+                await communicate.save(str(temp_mp3))
+            try:
+                asyncio.run(run_tts())
+            except Exception as e:
+                raise RuntimeError(f"Erro na síntese de voz: {e}")
+            import soundfile as sf
+            try:
+                sr = 48000
+                audio = load_audio_mono(str(temp_mp3), sr)
+                sf.write(str(dest_path), audio, sr, format="WAV", subtype="PCM_16")
+            except Exception as e:
+                import shutil
+                dest_path = STATE.library.sounds_dir / f"tts_{uuid.uuid4().hex}.mp3"
+                shutil.copy(str(temp_mp3), str(dest_path))
+            finally:
+                if temp_mp3.exists():
+                    try:
+                        temp_mp3.unlink()
+                    except Exception:
+                        pass
+            item = STATE.library.add_file(str(dest_path), name=name, category="TTS")
+            STATE.save_profile()
+            STATE.register_hotkeys()
+            return {"ok": True, "sound": asdict(item)}
         if path == "/api/sounds/import-youtube":
             youtube_url = data.get("url")
             if not youtube_url:
@@ -1702,6 +1839,7 @@ class Handler(BaseHTTPRequestHandler):
                         except OSError:
                             pass
                         STATE.youtube_status = f"Concluido: '{item.name}' importado!"
+                        STATE.register_hotkeys()
                 except Exception as e:
                     try:
                         Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
@@ -1763,6 +1901,7 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
                 STATE.status = f"Som '{item.name}' baixado com sucesso!"
+            STATE.register_hotkeys()
             return {"soundId": item.id, **STATE.snapshot()}
             
         if path == "/api/windows/set-default-mic":
@@ -2011,6 +2150,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.trash_bin.append(removed)
                 STATE.save_trash_bin()
                 STATE.status = "Som movido para a Lixeira"
+                STATE.register_hotkeys()
             return {"removed": [removed] if removed else [], **STATE.snapshot()}
         if path == "/api/sounds/delete-batch":
             ids = [str(value) for value in data.get("ids", [])]
@@ -2021,6 +2161,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.trash_bin.extend(removed)
                 STATE.save_trash_bin()
                 STATE.status = f"{len(removed)} som(ns) movido(s) para a Lixeira"
+                STATE.register_hotkeys()
             return {"removed": removed, **STATE.snapshot()}
         if path == "/api/sounds/restore":
             items_to_restore = data.get("items", [])
@@ -2029,6 +2170,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE.trash_bin = [t for t in STATE.trash_bin if t.get("id") not in restored_ids]
             STATE.save_trash_bin()
             STATE.status = f"{len(restored)} som(ns) restaurado(s)"
+            STATE.register_hotkeys()
             return {"restoredIds": [item.id for item in restored], **STATE.snapshot()}
         if path == "/api/sounds/cover":
             STATE.library.set_cover(str(data["id"]), str(data["path"]))
@@ -2054,6 +2196,7 @@ class Handler(BaseHTTPRequestHandler):
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/save-edited":
             item = STATE.save_sound_edit(data, replace=bool(data.get("replace", False)))
+            STATE.register_hotkeys()
             return {"soundId": item.id, **STATE.snapshot()}
         if path == "/api/sounds/restore-original":
             item_id = str(data["id"])
@@ -2123,6 +2266,7 @@ class Handler(BaseHTTPRequestHandler):
             item.output_route = str(item.output_route or "both")
             STATE.library._sanitize_item(item)
             STATE.library.update(item)
+            STATE.register_hotkeys()
             return STATE.snapshot()
         if path == "/api/sounds/defaults":
             STATE.library.defaults = SoundDefaults(

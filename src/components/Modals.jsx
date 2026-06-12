@@ -783,25 +783,36 @@ function cleanYoutubeUrl(url) {
 // --- YoutubeImportModal ---
 export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeLoading, setYoutubeLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const isYoutubeDownloading = (status) => {
+    if (!status) return false;
+    const statusLower = status.toLowerCase();
+    return (
+      status !== "" &&
+      !statusLower.startsWith("concluido") &&
+      !statusLower.startsWith("erro") &&
+      !statusLower.startsWith("importacao cancelada") &&
+      !statusLower.startsWith("cancelando")
+    );
+  };
+
+  const youtubeLoading = localLoading || isYoutubeDownloading(state?.youtubeStatus);
 
   useEffect(() => {
     if (youtubeLoading && state?.youtubeStatus) {
       const statusLower = state.youtubeStatus.toLowerCase();
       if (statusLower.includes("importado!")) {
-        setYoutubeLoading(false);
-        setToast(state.youtubeStatus);
+        setLocalLoading(false);
         onClose();
       } else if (statusLower.includes("erro:")) {
-        setYoutubeLoading(false);
-        setToast(state.youtubeStatus);
+        setLocalLoading(false);
       } else if (statusLower.includes("cancelada")) {
-        setYoutubeLoading(false);
-        setToast("Importação cancelada!");
+        setLocalLoading(false);
         onClose();
       }
     }
-  }, [state?.youtubeStatus, youtubeLoading, setToast, onClose]);
+  }, [state?.youtubeStatus, youtubeLoading, onClose]);
 
   const handleImport = async () => {
     if (!youtubeUrl || !youtubeUrl.trim()) {
@@ -809,13 +820,13 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
       return;
     }
     const sanitizedUrl = cleanYoutubeUrl(youtubeUrl);
-    setYoutubeLoading(true);
+    setLocalLoading(true);
     setToast("Verificando vídeo do YouTube...");
     try {
       await call("/api/sounds/import-youtube", { url: sanitizedUrl });
     } catch (err) {
       setToast("Erro: " + err.message);
-      setYoutubeLoading(false);
+      setLocalLoading(false);
     }
   };
 
@@ -826,7 +837,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
       } catch (err) {
         setToast("Erro ao cancelar: " + err.message);
       } finally {
-        setYoutubeLoading(false);
+        setLocalLoading(false);
       }
     } else {
       onClose();
@@ -834,14 +845,14 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
   };
 
   return (
-    <div className="modalOverlay" onClick={handleCancel}>
+    <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
         <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
           <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
             <YoutubeLogo size={20} color="#FF0000" weight="fill" />
             <span>Adicionar Som do YouTube</span>
           </h3>
-          <button className="closeBtn" onClick={handleCancel} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
             <X size={18} />
           </button>
         </div>
@@ -882,34 +893,33 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
           )}
           
           <small style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
-            💡 O processo pode demorar alguns segundos dependendo do tamanho do vídeo.
+            💡 O processo roda em segundo plano. Você pode fechar esta tela e continuar navegando livremente pelo aplicativo.
           </small>
         </div>
         <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
-          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleCancel}>
-            {youtubeLoading ? "Cancelar Download" : "Cancelar"}
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ padding: "8px 20px", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}
-            onClick={handleImport}
-            disabled={youtubeLoading}
-          >
-            {youtubeLoading && (
-              <div
-                className="spinner"
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: "50%",
-                  border: "2px solid rgba(255,255,255,0.2)",
-                  borderTopColor: "#fff",
-                  animation: "spin 0.6s linear infinite",
-                }}
-              />
-            )}
-            {youtubeLoading ? "Baixando..." : "Importar"}
-          </button>
+          {youtubeLoading ? (
+            <>
+              <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleCancel}>
+                Cancelar Download
+              </button>
+              <button className="btn btn-primary" style={{ padding: "8px 20px", fontSize: 12 }} onClick={onClose}>
+                Fechar Tela
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ padding: "8px 20px", fontSize: 12 }}
+                onClick={handleImport}
+              >
+                Importar
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1662,6 +1672,263 @@ export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm 
             onClick={onConfirm}
           >
             ⚡ Atualizar Agora
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- TTSModal ---
+export function TTSModal({ onClose, call, setToast }) {
+  const [text, setText] = useState("");
+  const [selectedVoice, setSelectedVoice] = useState("pt-BR-FranciscaNeural");
+  const [rate, setRate] = useState(0); // Slider: -50 to +50
+  const [soundName, setSoundName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+
+  // Auto-fill soundName when text changes
+  const handleTextChange = (e) => {
+    const val = e.target.value;
+    setText(val);
+    
+    // Auto-generate name from first few words
+    const words = val.trim();
+    if (words) {
+      const truncated = words.length > 22 ? words.substring(0, 20) + "..." : words;
+      setSoundName(truncated);
+    } else {
+      setSoundName("");
+    }
+  };
+
+  const handleSpeak = async () => {
+    if (!text.trim()) {
+      setToast("Digite algum texto para falar.");
+      return;
+    }
+    setSpeaking(true);
+    const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
+    try {
+      await call("/api/tts/speak", {
+        text: text.trim(),
+        voice: selectedVoice,
+        rate: formattedRate
+      });
+      setToast("📢 Falando...");
+    } catch (err) {
+      setToast("Erro ao falar: " + err.message);
+    } finally {
+      setSpeaking(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!text.trim()) {
+      setToast("Digite algum texto antes de salvar.");
+      return;
+    }
+    setLoading(true);
+    const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
+    try {
+      const res = await call("/api/tts/save", {
+        text: text.trim(),
+        voice: selectedVoice,
+        rate: formattedRate,
+        name: soundName.trim()
+      });
+      setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
+      onClose();
+    } catch (err) {
+      setToast("Erro ao salvar: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!loading && !speaking) {
+      onClose();
+    }
+  };
+
+  const voicesList = [
+    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
+    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
+    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
+    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
+    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
+    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
+    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
+    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
+    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" },
+    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" }
+  ];
+
+  const isWorking = loading || speaking;
+
+  return (
+    <div className="modalOverlay" onClick={handleClose}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, padding: 24 }}>
+        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--purple)", display: "flex", alignItems: "center", gap: 8 }}>
+            🎙️ Gerar Voz por Texto (TTS)
+          </h3>
+          <button className="closeBtn" onClick={handleClose} disabled={isWorking} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: isWorking ? "not-allowed" : "pointer" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
+            <textarea
+              placeholder="Digite aqui o que você quer que o robô fale..."
+              value={text}
+              onChange={handleTextChange}
+              disabled={isWorking}
+              autoFocus
+              rows={3}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font)",
+                boxSizing: "border-box",
+                resize: "none"
+              }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Selecionar Voz</span>
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                disabled={isWorking}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text)",
+                  fontSize: 13,
+                  outline: "none",
+                  fontFamily: "var(--font)",
+                  cursor: "pointer"
+                }}
+              >
+                {voicesList.map((v) => (
+                  <option key={v.id} value={v.id} style={{ background: "var(--bg-card)", color: "var(--text)" }}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
+                <span>Velocidade</span>
+                <span style={{ color: "var(--purple)", fontWeight: 800 }}>{rate >= 0 ? `+${rate}%` : `${rate}%`}</span>
+              </span>
+              <input
+                type="range"
+                min={-50}
+                max={50}
+                step={5}
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value))}
+                disabled={isWorking}
+                style={{
+                  width: "100%",
+                  height: 36,
+                  accentColor: "var(--purple)",
+                  cursor: "pointer"
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Nome do Som (Para salvar)</span>
+            <input
+              type="text"
+              placeholder="Ex: Minha frase engraçada"
+              value={soundName}
+              onChange={(e) => setSoundName(e.target.value)}
+              disabled={isWorking}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font)",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} disabled={isWorking} onClick={handleClose}>
+            Fechar
+          </button>
+          
+          <button
+            className="btn"
+            style={{
+              padding: "8px 16px",
+              fontSize: 12,
+              background: "rgba(255, 255, 255, 0.05)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: isWorking ? "not-allowed" : "pointer"
+            }}
+            onClick={handleSpeak}
+            disabled={isWorking || !text.trim()}
+          >
+            {speaking ? (
+              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--text)", animation: "spin 0.6s linear infinite" }} />
+            ) : (
+              <Play size={14} weight="fill" />
+            )}
+            <span>Falar</span>
+          </button>
+
+          <button
+            className="btn btn-primary"
+            style={{
+              padding: "8px 16px",
+              fontSize: 12,
+              background: "linear-gradient(135deg, var(--purple), var(--purple-dim))",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: isWorking ? "not-allowed" : "pointer"
+            }}
+            onClick={handleSave}
+            disabled={isWorking || !text.trim()}
+          >
+            {loading ? (
+              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#fff", animation: "spin 0.6s linear infinite" }} />
+            ) : (
+              <UploadSimple size={14} weight="bold" />
+            )}
+            <span>Salvar no Soundboard</span>
           </button>
         </div>
       </div>

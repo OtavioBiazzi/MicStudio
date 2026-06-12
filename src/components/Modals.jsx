@@ -1373,7 +1373,37 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.26": `### 🌟 Versão 0.5.26 (Versão Atual)
+  "v0.5.33": `### 🌟 Versão 0.5.33 (Versão Atual)
+* 🎛️ **Novo Layout do Widget TTS**: Redesenhamos o widget de TTS flutuante com uma estrutura de duas linhas. Os controles principais ficam no topo e o slider de velocidade horizontal estende-se por toda a largura na linha inferior para maior precisão e design elegante. A altura da janela foi aumentada para 90px.
+* 🗂️ **Agrupamento de Vozes por Região**: Vozes em português agrupadas por região (todas as BR primeiro: Antonio, Francisca, Thalita; seguidas das de Portugal: Duarte, Raquel).`,
+
+  "v0.5.32": `### 🌟 Versão 0.5.32
+* 🔓 **Sem Limite de Caracteres no TTS**: Adicionada opção nas Configurações (desativada por padrão) para remover o limite máximo de 10.000 caracteres, permitindo sintetizar textos gigantescos sem restrições.`,
+
+  "v0.5.31": `### 🌟 Versão 0.5.31
+* 🧹 **Limpeza de Vozes Inválidas**: Remoção das vozes pt-BR/pt-PT que falhavam no Edge TTS. Mantidas apenas as vozes estáveis, dispostas de forma alternada (Masculino ➔ Feminino).
+* 📈 **Aumento do Limite do TTS**: Elevação do limite prático padrão de caracteres de 1.000 para 10.000 para maior estabilidade e capacidade.`,
+
+  "v0.5.30": `### 🌟 Versão 0.5.30
+* ⏱️ **Velocidade no Widget TTS**: Adicionado mini-slider de velocidade de fala (-50% a +50%) diretamente no widget flutuante, sincronizado com o modal principal.
+* ⚙️ **Visibilidade Customizável**: Opção nas Configurações para exibir ou ocultar o slider de velocidade no widget.`,
+
+  "v0.5.29": `### 🌟 Versão 0.5.29
+* 🎙️ **Alternância e Persistência**: Vozes do TTS reordenadas para Masculino ➔ Feminino, com salvamento unificado sob a chave "tts_default_voice".
+* 🎮 **Visibilidade em Jogos (Always-on-top)**: Prioridade da janela flutuante elevada para "screen-saver" com visibilidade persistente em tela cheia.
+* 🎨 **Cantos Arredondados do Widget**: Ajuste de borda (16px) e plano de fundo transparente forçado no Electron para renderizar cantos arredondados sem bordas pretas.`,
+
+  "v0.5.28": `### 🌟 Versão 0.5.28
+* ⚙️ **Correção de Presets no Mixer**: Correção no comparador de efeitos para tratar strings (como Magic Chords), evitando que presets ativos aparecessem incorretamente como "Voz Personalizada".
+* 📌 **Botão Fixar Minimalista**: Remoção de texto do botão de fixar no TTSModal, mantendo apenas o ícone de alfinete (PushPin) elegante.`,
+
+  "v0.5.27": `### 🌟 Versão 0.5.27
+* 🔇 **Cancelamento de Eco em Clipes**: Algoritmo matemático para detecção de latência do Windows e cancelamento de eco da voz monitorada no áudio gravado do PC (clipes de Voz + PC).
+* 📝 **Contador de Caracteres no TTS**: Adicionado limite inicial de 1.000 caracteres com contador dinâmico na tela e no widget.
+* 📌 **Botão Fixar Widget**: Atalho rápido para alternar do modal completo para a barra flutuante compacta.
+* 🏷️ **Nomes Claros de Dispositivos**: Identificação simplificada de dispositivos de áudio na página de Configurações.`,
+
+  "v0.5.26": `### 🌟 Versão 0.5.26
 * 🐛 **Correção de Inicialização e Conexão**: Resolvidos problemas críticos de colisão de porta e falhas de inicialização do backend que causavam erro de conexão ao abrir o aplicativo.
 * 🎵 **Ritmo & Harmonia**: Lançamento do harmonizador polifônico **Magic Chords** (escalas Major, Minor, Space, Octaves, Mystic) e da bateria procedural **Beatbox Jam** (bumbo, caixa e chimbal sintetizados em tempo real). Expostos controles de BPM e Modo no Modular Voice Lab e na edição de presets.
 * 🎛️ **Faders Mestres Globais**: Ganho do Microfone e Volume da Voz no Quick Mixer agora atuam de forma global, garantindo que presets e efeitos nunca desconfigurem ou silenciem seu volume configurado.
@@ -1524,6 +1554,13 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.33", tag_name: "v0.5.33", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.32", tag_name: "v0.5.32", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.31", tag_name: "v0.5.31", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.30", tag_name: "v0.5.30", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.29", tag_name: "v0.5.29", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.28", tag_name: "v0.5.28", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.27", tag_name: "v0.5.27", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.26", tag_name: "v0.5.26", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.25", tag_name: "v0.5.25", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.24", tag_name: "v0.5.24", published_at: new Date().toISOString(), body: "" },

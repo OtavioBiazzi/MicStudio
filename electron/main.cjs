@@ -509,7 +509,7 @@ ipcMain.handle("window:open-tts-widget", () => {
   
   ttsWidgetWindow = new BrowserWindow({
     width: 480,
-    height: 75,
+    height: 90,
     frame: false,
     transparent: true,
     alwaysOnTop: true,

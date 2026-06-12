@@ -1838,9 +1838,9 @@ export function TTSModal({ onClose, call, setToast }) {
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
+    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },

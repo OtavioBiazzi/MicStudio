@@ -211,11 +211,14 @@ DEFAULT_APP_SETTINGS = {
     "clipEnabled": False,
     "clipDuration": "30",
     "shortcutClip": "",
+    "clipSource": "both",
 }
 
 DEFAULT_PROFILE = {
     "gain": 1.0,
     "pitch": 0.0,
+    "masterMicGain": 1.0,
+    "masterVoiceVolume": 1.0,
     "monitor": True,
     "monitorVolume": 1.0,
     "soundboardMonitor": True,
@@ -247,6 +250,9 @@ class AudioClippingManager:
     def write_voice(self, samples: np.ndarray) -> None:
         if not self._running:
             return
+        source = str(self.app_state.settings.get("clipSource", "both"))
+        if source == "pc":
+            return
         chunk = np.asarray(samples, dtype=np.float32).copy()
         if chunk.size == 0:
             return
@@ -268,6 +274,9 @@ class AudioClippingManager:
         import pyaudiowpatch as pyaudio
         def callback(in_data, frame_count, _time_info, status_flags):
             if not self._running:
+                return (None, pyaudio.paComplete)
+            source = str(self.app_state.settings.get("clipSource", "both"))
+            if source == "voice":
                 return (None, pyaudio.paComplete)
             data = np.frombuffer(in_data, dtype=np.float32)
             if data.size == 0:
@@ -300,13 +309,20 @@ class AudioClippingManager:
 
     def update(self) -> None:
         enabled = bool(self.app_state.settings.get("clipEnabled", False))
+        source = str(self.app_state.settings.get("clipSource", "both"))
+        
         if enabled:
-            self.start_capture()
+            if source in ("both", "pc"):
+                self.start_capture()
+            else:
+                self.stop_pc_capture()
+                self._running = True
         else:
             self.stop_capture()
 
     def start_capture(self) -> None:
-        if self._running:
+        self._running = True
+        if self._pc_streams:
             return
         
         indexes = self.app_state.record_selected_indexes
@@ -315,7 +331,6 @@ class AudioClippingManager:
         import pyaudiowpatch as pyaudio
         self._pa = pyaudio.PyAudio()
         self._pc_streams = []
-        self._running = True
         
         for device in devices:
             try:
@@ -336,11 +351,7 @@ class AudioClippingManager:
                 
         print(f"Clipping: Started capturing PC audio on {len(self._pc_streams)} streams.")
 
-    def stop_capture(self) -> None:
-        if not self._running:
-            return
-        self._running = False
-        
+    def stop_pc_capture(self) -> None:
         for stream in self._pc_streams:
             try:
                 stream.stop_stream()
@@ -357,16 +368,25 @@ class AudioClippingManager:
         self._pa = None
         
         with self._lock:
-            self._voice_chunks.clear()
             self._pc_chunks.clear()
-            self._voice_available = 0
             self._pc_available = 0
             
-        print("Clipping: Stopped capturing.")
+        print("Clipping: Stopped PC capture streams.")
+
+    def stop_capture(self) -> None:
+        self._running = False
+        self.stop_pc_capture()
+        with self._lock:
+            self._voice_chunks.clear()
+            self._voice_available = 0
+        print("Clipping: Stopped all capturing.")
 
     def save_clip(self, duration_sec: int) -> dict | None:
         if not self._running:
             return None
+        
+        source = str(self.app_state.settings.get("clipSource", "both"))
+        
         with self._lock:
             voice_chunks = list(self._voice_chunks)
             pc_chunks = list(self._pc_chunks)
@@ -374,7 +394,7 @@ class AudioClippingManager:
         needed_samples = int(duration_sec * 48000)
         
         voice_audio = np.zeros(0, dtype=np.float32)
-        if voice_chunks:
+        if source in ("both", "voice") and voice_chunks:
             full_voice = np.concatenate(voice_chunks)
             if full_voice.size > needed_samples:
                 voice_audio = full_voice[-needed_samples:]
@@ -382,7 +402,7 @@ class AudioClippingManager:
                 voice_audio = full_voice
         
         pc_audio = np.zeros(0, dtype=np.float32)
-        if pc_chunks:
+        if source in ("both", "pc") and pc_chunks:
             full_pc = np.concatenate(pc_chunks)
             if full_pc.size > needed_samples:
                 pc_audio = full_pc[-needed_samples:]
@@ -399,7 +419,7 @@ class AudioClippingManager:
         if pc_audio.size > 0:
             mixed[:pc_audio.size] += pc_audio
             
-        if voice_audio.size > 0 and pc_audio.size > 0:
+        if source == "both" and voice_audio.size > 0 and pc_audio.size > 0:
             mixed /= 2.0
             
         import soundfile as sf
@@ -410,6 +430,12 @@ class AudioClippingManager:
         output_path = output_dir / filename
         
         sf.write(str(output_path), mixed, 48000)
+        
+        # Save individual tracks for future clip remixing/separation
+        if voice_audio.size > 0:
+            sf.write(str(output_path.parent / f"{output_path.stem}.voice.wav"), voice_audio, 48000)
+        if pc_audio.size > 0:
+            sf.write(str(output_path.parent / f"{output_path.stem}.pc.wav"), pc_audio, 48000)
         
         item = self.app_state.add_recording_to_soundboard(output_path, name=f"Clip {time.strftime('%H%M%S')}")
         self.app_state.status = f"Clipe de {duration_sec}s salvo: {item.name}"
@@ -449,6 +475,8 @@ class AppState:
         self.selected_monitor_hostapi: str | None = None
         self.gain = 1.0
         self.pitch = 0.0
+        self.master_mic_gain = 1.0
+        self.master_voice_volume = 1.0
         self.effects = EffectsSettings()
         self.monitor_enabled = True
         self.monitor_volume = 1.0
@@ -698,6 +726,8 @@ class AppState:
     def apply_profile(self) -> None:
         self.gain = max(0.0, float(self.profile.get("gain", 1.0)))
         self.pitch = float(self.profile.get("pitch", 0.0))
+        self.master_mic_gain = max(0.0, float(self.profile.get("masterMicGain", 1.0)))
+        self.master_voice_volume = max(0.0, float(self.profile.get("masterVoiceVolume", 1.0)))
         self.monitor_enabled = bool(self.profile.get("monitor", False))
         self.monitor_volume = max(0.0, min(3.0, float(self.profile.get("monitorVolume", 1.0))))
         self.soundboard_monitor_enabled = bool(self.profile.get("soundboardMonitor", False))
@@ -738,10 +768,24 @@ class AppState:
         except (TypeError, ValueError):
             self.record_selected_indexes = set()
 
+        if self.engine.running:
+            self.engine.set_controls(
+                self.gain,
+                self.pitch,
+                self.effects,
+                monitor_volume=self.monitor_volume,
+                soundboard_monitor_enabled=self.soundboard_monitor_enabled,
+                soundboard_monitor_volume=self.soundboard_monitor_volume,
+                master_mic_gain=self.master_mic_gain,
+                master_voice_volume=self.master_voice_volume,
+            )
+
     def save_profile(self) -> None:
         self.profile = {
             "gain": self.gain,
             "pitch": self.pitch,
+            "masterMicGain": self.master_mic_gain,
+            "masterVoiceVolume": self.master_voice_volume,
             "monitor": self.monitor_enabled,
             "monitorVolume": self.monitor_volume,
             "soundboardMonitor": self.soundboard_monitor_enabled,
@@ -822,6 +866,8 @@ class AppState:
             monitor_volume=self.monitor_volume,
             soundboard_monitor_enabled=self.soundboard_monitor_enabled,
             soundboard_monitor_volume=self.soundboard_monitor_volume,
+            master_mic_gain=self.master_mic_gain,
+            master_voice_volume=self.master_voice_volume,
         )
 
     def register_hotkeys(self) -> None:
@@ -1322,11 +1368,24 @@ class AppState:
         item = self.library.by_id(str(data["id"]))
         if item is None:
             raise RuntimeError("Som nao encontrado.")
+        
+        name_val = data.get("name")
+        if name_val is not None:
+            name_val = str(name_val).strip()
+        if not name_val:
+            name_val = item.name
+
+        category_val = data.get("category")
+        if category_val is not None:
+            category_val = str(category_val).strip()
+        if not category_val:
+            category_val = item.category
+
         saved = self.library.save_edited(
             item.id,
             replace=replace,
-            name=str(data.get("name") or item.name),
-            category=str(data.get("category") or item.category),
+            name=name_val,
+            category=category_val,
             color=_sanitize_color(data.get("color", item.color)),
             volume=max(0.0, float(data.get("volume", item.volume))),
             pitch_semitones=float(data.get("pitch_semitones", item.pitch_semitones)),
@@ -1398,6 +1457,8 @@ class AppState:
             "controls": {
                 "gain": self.gain,
                 "pitch": self.pitch,
+                "masterMicGain": self.master_mic_gain,
+                "masterVoiceVolume": self.master_voice_volume,
                 "monitor": self.monitor_enabled,
                 "monitorVolume": self.monitor_volume,
                 "soundboardMonitor": self.soundboard_monitor_enabled,
@@ -1417,7 +1478,13 @@ class AppState:
                     "plays": item.play_count,
                     "duration": self.cached_audio_duration(item.path),
                     "coverUrl": self.cached_cover_url(item.cover_path),
-                    "hasOriginal": (self.library.sounds_dir / f"{item.id}.original.wav").exists()
+                    "hasOriginal": (self.library.sounds_dir / f"{item.id}.original.wav").exists(),
+                    "isClip": Path(item.path).name.startswith("clip_") and (
+                        (Path(item.path).parent / f"{Path(item.path).stem}.voice.wav").exists() or
+                        (Path(item.path).parent / f"{Path(item.path).stem}.pc.wav").exists()
+                    ),
+                    "clipVoiceEnabled": not (Path(item.path).parent / f"{Path(item.path).stem}.voice.disabled").exists() if Path(item.path).name.startswith("clip_") else True,
+                    "clipPcEnabled": not (Path(item.path).parent / f"{Path(item.path).stem}.pc.disabled").exists() if Path(item.path).name.startswith("clip_") else True,
                 }
                 for item in self.library.items
             ],
@@ -1600,6 +1667,8 @@ class Handler(BaseHTTPRequestHandler):
             controls = data.get("controls", data)
             STATE.gain = max(0.0, float(controls.get("gain", STATE.gain)))
             STATE.pitch = float(controls.get("pitch", STATE.pitch))
+            STATE.master_mic_gain = max(0.0, float(controls.get("masterMicGain", STATE.master_mic_gain)))
+            STATE.master_voice_volume = max(0.0, float(controls.get("masterVoiceVolume", STATE.master_voice_volume)))
             STATE.monitor_enabled = bool(controls.get("monitor", STATE.monitor_enabled))
             STATE.monitor_volume = max(0.0, min(3.0, float(controls.get("monitorVolume", STATE.monitor_volume))))
             STATE.soundboard_monitor_enabled = bool(controls.get("soundboardMonitor", STATE.soundboard_monitor_enabled))
@@ -1616,6 +1685,8 @@ class Handler(BaseHTTPRequestHandler):
                         monitor_volume=STATE.monitor_volume,
                         soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
                         soundboard_monitor_volume=STATE.soundboard_monitor_volume,
+                        master_mic_gain=STATE.master_mic_gain,
+                        master_voice_volume=STATE.master_voice_volume,
                     )
                     STATE.engine.set_monitor(
                         STATE.monitor_enabled,
@@ -1634,6 +1705,8 @@ class Handler(BaseHTTPRequestHandler):
                     monitor_volume=STATE.monitor_volume,
                     soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
                     soundboard_monitor_volume=STATE.soundboard_monitor_volume,
+                    master_mic_gain=STATE.master_mic_gain,
+                    master_voice_volume=STATE.master_voice_volume,
                 )
                 STATE.engine.set_monitor(
                     STATE.monitor_enabled,
@@ -2353,6 +2426,90 @@ class Handler(BaseHTTPRequestHandler):
             STATE.status = f"Categoria '{category_to_delete}' excluída, {modified} som(ns) movidos para Geral."
             return STATE.snapshot()
 
+def remix_clip(clip_path_str: str) -> None:
+    clip_path = Path(clip_path_str)
+    base_dir = clip_path.parent
+    stem = clip_path.stem
+    
+    voice_path = base_dir / f"{stem}.voice.wav"
+    pc_path = base_dir / f"{stem}.pc.wav"
+    
+    voice_disabled = (base_dir / f"{stem}.voice.disabled").exists()
+    pc_disabled = (base_dir / f"{stem}.pc.disabled").exists()
+    
+    import soundfile as sf
+    import numpy as np
+    
+    voice_audio = np.zeros(0, dtype=np.float32)
+    if voice_path.exists() and not voice_disabled:
+        try:
+            voice_audio, _ = sf.read(str(voice_path), dtype="float32")
+        except Exception:
+            pass
+            
+    pc_audio = np.zeros(0, dtype=np.float32)
+    if pc_path.exists() and not pc_disabled:
+        try:
+            pc_audio, _ = sf.read(str(pc_path), dtype="float32")
+        except Exception:
+            pass
+            
+    max_len = max(voice_audio.size, pc_audio.size)
+    if max_len == 0:
+        sf.write(str(clip_path), np.zeros(1024, dtype=np.float32), 48000)
+        return
+        
+    mixed = np.zeros(max_len, dtype=np.float32)
+    if voice_audio.size > 0:
+        mixed[:voice_audio.size] += voice_audio
+    if pc_audio.size > 0:
+        mixed[:pc_audio.size] += pc_audio
+        
+    if voice_audio.size > 0 and pc_audio.size > 0:
+        mixed /= 2.0
+        
+    sf.write(str(clip_path), mixed, 48000)
+
+
+def handle_clip_remix_payload(item, data):
+    if not item or not item.path:
+        return
+    clip_path = Path(item.path)
+    if not clip_path.name.startswith("clip_"):
+        return
+    
+    stem = clip_path.stem
+    base_dir = clip_path.parent
+    changed = False
+    
+    if "clipVoiceEnabled" in data:
+        enabled = bool(data["clipVoiceEnabled"])
+        sentinel = base_dir / f"{stem}.voice.disabled"
+        if enabled:
+            if sentinel.exists():
+                sentinel.unlink(missing_ok=True)
+                changed = True
+        else:
+            if not sentinel.exists():
+                sentinel.write_text("disabled")
+                changed = True
+                
+    if "clipPcEnabled" in data:
+        enabled = bool(data["clipPcEnabled"])
+        sentinel = base_dir / f"{stem}.pc.disabled"
+        if enabled:
+            if sentinel.exists():
+                sentinel.unlink(missing_ok=True)
+                changed = True
+        else:
+            if not sentinel.exists():
+                sentinel.write_text("disabled")
+                changed = True
+                
+    if changed:
+        remix_clip(item.path)
+
+
         if path == "/api/sounds/delete":
             removed = STATE.library.detach(str(data["id"]))
             if removed:
@@ -2406,6 +2563,7 @@ class Handler(BaseHTTPRequestHandler):
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/save-edited":
             item = STATE.save_sound_edit(data, replace=bool(data.get("replace", False)))
+            handle_clip_remix_payload(item, data)
             STATE.register_hotkeys()
             return {"soundId": item.id, **STATE.snapshot()}
         if path == "/api/sounds/restore-original":
@@ -2417,6 +2575,7 @@ class Handler(BaseHTTPRequestHandler):
             item = STATE.library.by_id(str(data["id"]))
             if item is None:
                 raise RuntimeError("Som nao encontrado.")
+            handle_clip_remix_payload(item, data)
             for key in (
                 "name",
                 "category",

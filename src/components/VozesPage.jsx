@@ -10,7 +10,8 @@ import {
   displayEffectValue,
   storeEffectValue,
   EffectSliderRow,
-  effectGroups
+  effectGroups,
+  copyTextToClipboard
 } from "../utils";
 import { voicePresets, visibleVoicePresets } from "../voicePresets";
 
@@ -344,8 +345,9 @@ export function VozesPage({
               const jsonStr = JSON.stringify(voiceData);
               const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
               const shareCode = `MFVOICE-${base64}`;
-              navigator.clipboard.writeText(shareCode)
-                .then(() => setToast?.("Código de compartilhamento copiado!"));
+              copyTextToClipboard(shareCode)
+                .then(() => setToast?.("Código de compartilhamento copiado!"))
+                .catch((err) => alert("Erro ao copiar: " + err.message));
             } catch (err) {
               alert("Erro ao gerar código de compartilhamento: " + err.message);
             }
@@ -564,17 +566,51 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                   const raw = controls.effects?.[valueKey] ?? effectDefaults[valueKey];
                   const displayed = displayEffectValue(valueKey, raw);
                   return (
-                    <EffectSliderRow
-                      key={valueKey}
-                      label={label}
-                      enabled={enabled}
-                      value={displayed}
-                      min={min}
-                      max={max}
-                      suffix={suffix}
-                      onToggle={() => updateEffects({ [enableKey]: !enabled })}
-                      onChange={(v) => updateEffects({ [valueKey]: storeEffectValue(valueKey, v) })}
-                    />
+                    <div key={valueKey} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
+                      <EffectSliderRow
+                        label={label}
+                        enabled={enabled}
+                        value={displayed}
+                        min={min}
+                        max={max}
+                        suffix={suffix}
+                        onToggle={() => updateEffects({ [enableKey]: !enabled })}
+                        onChange={(v) => updateEffects({ [valueKey]: storeEffectValue(valueKey, v) })}
+                      />
+                      {valueKey === "harmony_mix" && enabled && (
+                        <div style={{ paddingLeft: 36, display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>Modo do Acorde:</span>
+                          <select
+                            value={controls.effects?.harmony_mode || "Major"}
+                            onChange={(e) => updateEffects({ harmony_mode: e.target.value })}
+                            style={{ padding: "4px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11, outline: "none" }}
+                          >
+                            <option value="Major">Major (Alegre)</option>
+                            <option value="Minor">Minor (Triste)</option>
+                            <option value="Space">Space (Espacial)</option>
+                            <option value="Octaves">Octaves (Oitavado)</option>
+                            <option value="Mystic">Mystic (Místico)</option>
+                          </select>
+                        </div>
+                      )}
+                      {valueKey === "drum_loop_volume" && enabled && (
+                        <div style={{ paddingLeft: 36, display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>Ritmo (BPM):</span>
+                            <span style={{ fontSize: 11, color: "var(--purple)", fontWeight: 800 }}>{controls.effects?.drum_loop_bpm ?? 90} BPM</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={40}
+                            max={240}
+                            step={5}
+                            value={controls.effects?.drum_loop_bpm ?? 90}
+                            onChange={(e) => updateEffects({ drum_loop_bpm: Number(e.target.value) })}
+                            style={{ width: "100%", height: 4, borderRadius: 2, background: "var(--border)", outline: "none", accentColor: "var(--purple)", cursor: "pointer" }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

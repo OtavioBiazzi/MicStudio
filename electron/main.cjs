@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray, clipboard } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -493,6 +493,11 @@ ipcMain.handle("system:open-mmsys", () => {
 
 ipcMain.handle("shortcuts:get-conflicts", () => {
   return Object.fromEntries(shortcutConflicts);
+});
+
+ipcMain.handle("clipboard:write", async (_event, text) => {
+  clipboard.writeText(text);
+  return true;
 });
 
 ipcMain.handle("app:get-version", () => {

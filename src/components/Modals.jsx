@@ -1002,7 +1002,7 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
       setReverseEnabled(!!fx.reverse_enabled);
       setReverseMix(fx.reverse_mix ?? 0.65);
     }
-  }, [selected?.id]);
+  }, []);
 
   const chooseCover = async () => {
     const path = await window.micfudiddo?.openImageFile?.();
@@ -1041,11 +1041,16 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
   const handleSave = async (replace) => {
     try {
+      const finalName = (draft.name !== undefined ? draft.name : selected.name).trim();
+      if (!finalName) {
+        setToast("O nome do som não pode ser vazio.");
+        return;
+      }
       const payload = {
         id: selected.id,
         replace,
-        name: draft.name || selected.name,
-        category: draft.category || "Geral",
+        name: finalName,
+        category: (draft.category !== undefined ? draft.category : selected.category || "Geral").trim() || "Geral",
         color: draft.color || selected.color || "#8B5CF6",
         volume: Number(draft.volume ?? 1.0),
         pitch_semitones: Number(draft.pitch_semitones ?? 0.0),
@@ -1064,6 +1069,8 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
         output_route: draft.output_route ?? "both",
         start: Number(startSec) || 0.0,
         end: endSec === "" ? null : Number(endSec),
+        clipVoiceEnabled: draft.clipVoiceEnabled !== undefined ? !!draft.clipVoiceEnabled : !!selected.clipVoiceEnabled,
+        clipPcEnabled: draft.clipPcEnabled !== undefined ? !!draft.clipPcEnabled : !!selected.clipPcEnabled,
         effects: getEffectsPayload()
       };
       await call("/api/sounds/save-edited", payload);
@@ -1087,9 +1094,14 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
   const handlePreview = async () => {
     try {
+      const finalName = (draft.name !== undefined ? draft.name : selected.name).trim();
+      if (!finalName) {
+        setToast("O nome do som não pode ser vazio.");
+        return;
+      }
       const payload = {
         id: selected.id,
-        name: draft.name || selected.name,
+        name: finalName,
         volume: Number(draft.volume ?? 1.0),
         pitch_semitones: Number(draft.pitch_semitones ?? 0.0),
         pitch_mode: draft.pitch_mode ?? "preserve",
@@ -1261,6 +1273,17 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                     <input type="checkbox" checked={!!draft.block_voice} onChange={(e) => setDraft({ ...draft, block_voice: e.target.checked })} /> Bloquear Minha Voz
                   </label>
                 </div>
+                {selected.isClip && (
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: "var(--purple)", textTransform: "uppercase" }}>Canais do Clipe</span>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
+                      <input type="checkbox" checked={draft.clipVoiceEnabled !== undefined ? !!draft.clipVoiceEnabled : !!selected.clipVoiceEnabled} onChange={(e) => setDraft({ ...draft, clipVoiceEnabled: e.target.checked })} /> Incluir Minha Voz
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
+                      <input type="checkbox" checked={draft.clipPcEnabled !== undefined ? !!draft.clipPcEnabled : !!selected.clipPcEnabled} onChange={(e) => setDraft({ ...draft, clipPcEnabled: e.target.checked })} /> Incluir Áudio do PC / Jogo
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1350,7 +1373,25 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.22": `### 🌟 Versão 0.5.22 (Versão Atual)
+  "v0.5.25": `### 🌟 Versão 0.5.25 (Versão Atual)
+* 🎵 **Ritmo & Harmonia**: Lançamento do harmonizador polifônico **Magic Chords** (escalas Major, Minor, Space, Octaves, Mystic) e da bateria procedural **Beatbox Jam** (bumbo, caixa e chimbal sintetizados em tempo real). Expostos controles de BPM e Modo no Modular Voice Lab e na edição de presets.
+* 🎛️ **Faders Mestres Globais**: Ganho do Microfone e Volume da Voz no Quick Mixer agora atuam de forma global, garantindo que presets e efeitos nunca desconfigurem ou silenciem seu volume configurado.
+* 🎬 **Separação de Faixas de Clipe**: Clipes gravados com Voz + PC agora salvam faixas brutas individuais. No editor avançado de som, você pode optar por isolar apenas a voz ou o PC a qualquer momento com remixagem automática.
+* ✍️ **Correção na Renomeação**: Resolvido o problema onde o campo de digitação de nome de som resetava a cada 700ms devido ao polling de atualização de estado.
+* 📋 **Cópia de Link Segura**: Correção na cópia de links mágicos de compartilhamento e códigos de voz através de roteamento IPC nativo do Electron.`,
+
+  "v0.5.24": `### 🌟 Versão 0.5.24
+* 🎬 **Gravação de Clipes Retroativos (Clipping)**: Salve momentos engraçados depois que eles acontecem! Configure a duração e o atalho nas Configurações do app.
+* 💾 **Medidor de Armazenamento**: Acompanhe o tamanho ocupado pela pasta de áudios e gravações diretamente na aba de Configurações.
+* ✍️ **Liberdade de Nomenclatura**: Os nomes e categorias dos áudios agora preservam perfeitamente letras maiúsculas, espaços e pontuações de acordo com o que você digitar.`,
+
+  "v0.5.23": `### 🌟 Versão 0.5.23
+* 🎙️ **Síntese de Voz (TTS) via Edge TTS**: Crie vozes realistas por IA e salve-as no seu Soundboard!
+* 📺 **Importação Assíncrona do YouTube**: Fechar a janela ou clicar fora não cancela mais o download. Ele continuará baixando em segundo plano e você verá o progresso em uma barra flutuante.
+* ⚙️ **Detecção Eficiente do VB-CABLE**: O instalador agora usa o registro do Windows nativo para checar o Cabo Virtual, eliminando falsos alertas demorados.
+* 🎹 **Registro de Atalhos Corrigido**: Atalhos de teclado da Soundboard migrados para o Python em segundo plano, evitando conflitos ou teclas travadas em jogos.`,
+
+  "v0.5.22": `### 🌟 Versão 0.5.22
 * 🐛 **Correção de Reprodução de Áudio**: Corrigido um bug interno (UnboundLocalError) no servidor que impedia a reprodução de efeitos locais e online (retornando status 500).`,
 
   "v0.5.21": `### 🌟 Versão 0.5.21
@@ -1475,10 +1516,11 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.25", tag_name: "v0.5.25", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.24", tag_name: "v0.5.24", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.23", tag_name: "v0.5.23", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.22", tag_name: "v0.5.22", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.21", tag_name: "v0.5.21", published_at: new Date().toISOString(), body: "" },
-  { id: "v0.5.20", tag_name: "v0.5.20", published_at: new Date().toISOString(), body: "" },
-  { id: "v0.5.19", tag_name: "v0.5.19", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.18", tag_name: "v0.5.18", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.17", tag_name: "v0.5.17", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.16", tag_name: "v0.5.16", published_at: "2026-06-06T19:45:00Z", body: "" },
@@ -1615,7 +1657,7 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
                     </div>
 
                     <div className="readme-container changelog-markdown" style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)", maxHeight: 150, overflowY: "auto", padding: "8px 10px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.02)" }}>
-                      {renderMarkdown(release.body || LOCAL_CHANGELOGS[release.tag_name] || "*Nenhuma nota de versão fornecida.*")}
+                      {renderMarkdown((release.body && release.body.trim()) || LOCAL_CHANGELOGS[release.tag_name] || "*Nenhuma nota de versão fornecida.*")}
                     </div>
 
                     {isNew && release.assets && release.assets.length > 0 && (

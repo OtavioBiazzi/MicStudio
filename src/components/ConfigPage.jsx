@@ -317,18 +317,32 @@ export function ConfigPage({
                     onChange={(v) => call("/api/settings", { clipEnabled: v })}
                   />
                   {state.settings?.clipEnabled && (
-                    <div style={{ marginTop: 12 }}>
-                      <Slider
-                        label="Duração do Clipe"
-                        value={Number(state.settings?.clipDuration ?? 30)}
-                        min={1}
-                        max={60}
-                        suffix="s"
-                        onChange={(v) => call("/api/settings", { clipDuration: String(v) })}
-                      />
-                      <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
-                        Define o tamanho em segundos do arquivo de áudio gerado quando você salvar um clipe (Máx: 60s).
-                      </small>
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div className="selectField">
+                        <label>Fonte de Áudio do Clipe</label>
+                        <select
+                          value={state.settings?.clipSource ?? "both"}
+                          onChange={(e) => call("/api/settings", { clipSource: e.target.value })}
+                        >
+                          <option value="both">Voz + Som do PC (Os dois)</option>
+                          <option value="voice">Apenas Voz (Só Voz)</option>
+                          <option value="pc">Apenas Som do PC (Só Monitoramento)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <Slider
+                          label="Duração do Clipe"
+                          value={Number(state.settings?.clipDuration ?? 30)}
+                          min={1}
+                          max={60}
+                          suffix="s"
+                          onChange={(v) => call("/api/settings", { clipDuration: String(v) })}
+                        />
+                        <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
+                          Define o tamanho em segundos do arquivo de áudio gerado quando você salvar um clipe (Máx: 60s).
+                        </small>
+                      </div>
                     </div>
                   )}
                 </div>

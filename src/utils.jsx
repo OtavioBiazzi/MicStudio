@@ -37,7 +37,9 @@ export const effectDefaults = {
   compressor_enabled: false, compressor_amount: 0.45,
   wobble_enabled: false, wobble_mix: 0.35,
   reverse_enabled: false, reverse_mix: 0.65,
-  alien_glitch_enabled: false, alien_glitch_mix: 0.62
+  alien_glitch_enabled: false, alien_glitch_mix: 0.62,
+  harmony_enabled: false, harmony_mode: "Major", harmony_mix: 0.5,
+  drum_loop_enabled: false, drum_loop_bpm: 90.0, drum_loop_volume: 0.3
 };
 
 export function makeDisabledEffects() {
@@ -331,6 +333,37 @@ export const effectGroups = [
       ["reverse_enabled", "reverse_mix", "Reverse estranho", "%", 0, 100],
       ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100]
     ]
+  },
+  {
+    title: "Ritmo & Harmonia",
+    items: [
+      ["harmony_enabled", "harmony_mix", "Magic Chords (Mix)", "%", 0, 100],
+      ["drum_loop_enabled", "drum_loop_volume", "Beatbox Jam (Vol)", "%", 0, 100]
+    ]
   }
 ];
+
+export function copyTextToClipboard(text) {
+  if (window.micfudiddo?.copyText) {
+    return Promise.resolve(window.micfudiddo.copyText(text));
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const input = document.createElement("textarea");
+      input.value = text;
+      input.style.position = "fixed";
+      document.body.appendChild(input);
+      input.select();
+      const result = document.execCommand("copy");
+      document.body.removeChild(input);
+      if (result) resolve();
+      else reject(new Error("Falha ao copiar"));
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 

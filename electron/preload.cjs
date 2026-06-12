@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils, clipboard } = require("electron");
 
 contextBridge.exposeInMainWorld("micfudiddo", {
-  copyText: (text) => clipboard.writeText(text),
+  copyText: (text) => ipcRenderer.invoke("clipboard:write", text),
   openAudioFiles: () => ipcRenderer.invoke("dialog:open-audio"),
   openMfsoundFile: () => ipcRenderer.invoke("dialog:open-mfsound"),
   saveMfsoundPath: (defaultName) => ipcRenderer.invoke("dialog:save-mfsound", defaultName),

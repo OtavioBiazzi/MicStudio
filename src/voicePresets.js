@@ -359,6 +359,31 @@ export const voicePresets = [
       robot_enabled: true, robot_rate_hz: 500.0,
       output_volume_enabled: true, output_volume: 100.0
     }
+  },
+  {
+    id: "beatbox_jam", label: "Beatbox Jam", description: "Voz com loop de beatbox/bateria procedural em segundo plano e acordes.",
+    emoji: "🥁", category: "Música", gradient: "linear-gradient(135deg, #1e1b4b, #311042)",
+    gain: 2.5, pitch: 0, effects: { drum_loop_enabled: true, drum_loop_bpm: 90, drum_loop_volume: 0.35, harmony_enabled: true, harmony_mode: "Major", harmony_mix: 0.3 }
+  },
+  {
+    id: "magic_chords_major", label: "Magic Chords Major", description: "Transforma sua voz em um coral afinado na escala maior.",
+    emoji: "🎵", category: "Música", gradient: "linear-gradient(135deg, #0d5880, #06b6d4)",
+    gain: 2.2, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Major", harmony_mix: 0.55, reverb_enabled: true, reverb_mix: 0.3 }
+  },
+  {
+    id: "magic_chords_minor", label: "Magic Chords Minor", description: "Transforma sua voz em um coral afinado na escala menor (melancólica).",
+    emoji: "🎶", category: "Música", gradient: "linear-gradient(135deg, #581c87, #701a75)",
+    gain: 2.2, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Minor", harmony_mix: 0.55, reverb_enabled: true, reverb_mix: 0.3 }
+  },
+  {
+    id: "space_harmony", label: "Harmonia Espacial", description: "Oitavas e quintas espaciais com reverb longo de catedral.",
+    emoji: "🌌", category: "Música", gradient: "linear-gradient(135deg, #0f172a, #1e1b4b)",
+    gain: 2.5, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Space", harmony_mix: 0.6, reverb_enabled: true, reverb_mix: 0.75 }
+  },
+  {
+    id: "divine_choir", label: "Coral Divino", description: "Harmonizador oitavado denso imitando um grande coral de igreja.",
+    emoji: "⛪", category: "Música", gradient: "linear-gradient(135deg, #4c1d95, #2e1065)",
+    gain: 2.5, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Octaves", harmony_mix: 0.65, reverb_enabled: true, reverb_mix: 0.6 }
   }
 ];
 

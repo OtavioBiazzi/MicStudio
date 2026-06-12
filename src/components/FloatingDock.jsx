@@ -309,16 +309,13 @@ export function FloatingDock({
                 onClick={() => {
                   updateControls({
                     gain: 1.0,
+                    masterMicGain: 1.0,
+                    masterVoiceVolume: 1.0,
                     monitor: true,
                     monitorVolume: 1.0,
                     soundboardMonitor: true,
                     soundboardMonitorVolume: 0.65,
-                    pitch: 0.0,
-                    effects: {
-                      ...state.controls?.effects,
-                      output_volume: 1.0,
-                      output_volume_enabled: false
-                    }
+                    pitch: 0.0
                   });
                 }}
               >
@@ -340,13 +337,13 @@ export function FloatingDock({
                 <input
                   type="range"
                   min={0}
-                  max={100}
-                  step={0.5}
-                  value={state.controls?.gain ?? 1}
-                  onChange={(e) => updateControls({ gain: Number(e.target.value) })}
+                  max={10}
+                  step={0.1}
+                  value={state.controls?.masterMicGain ?? 1}
+                  onChange={(e) => updateControls({ masterMicGain: Number(e.target.value) })}
                   className="mixer-slider"
                 />
-                <span className="slider-value">{(state.controls?.gain ?? 1)}x</span>
+                <span className="slider-value">{(state.controls?.masterMicGain ?? 1).toFixed(1)}x</span>
               </div>
             </div>
 
@@ -359,19 +356,13 @@ export function FloatingDock({
                 <input
                   type="range"
                   min={0}
-                  max={10000}
-                  step={50}
-                  value={Math.round((state.controls?.effects?.output_volume ?? 1) * 100)}
-                  onChange={(e) => updateControls({
-                    effects: {
-                      ...state.controls?.effects,
-                      output_volume: Number(e.target.value) / 100,
-                      output_volume_enabled: true
-                    }
-                  })}
+                  max={10}
+                  step={0.1}
+                  value={state.controls?.masterVoiceVolume ?? 1}
+                  onChange={(e) => updateControls({ masterVoiceVolume: Number(e.target.value) })}
                   className="mixer-slider"
                 />
-                <span className="slider-value">{(state.controls?.effects?.output_volume ?? 1.0).toFixed(1)}x</span>
+                <span className="slider-value">{(state.controls?.masterVoiceVolume ?? 1.0).toFixed(1)}x</span>
               </div>
             </div>
 

@@ -6,7 +6,7 @@ import {
   MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
   Scissors
 } from "@phosphor-icons/react";
-import { formatTime, formatLastUsed, filePathToUrl } from "../utils";
+import { formatTime, formatLastUsed, filePathToUrl, copyTextToClipboard } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
 
 export function SoundboardPage({
@@ -269,14 +269,7 @@ export function SoundboardPage({
                 .then(() => setToast(`🎬 Clipe de ${duration}s salvo!`))
                 .catch((e) => setToast("Erro ao clipar: " + e.message));
             }}
-            style={{
-              background: "linear-gradient(135deg, var(--cyan), var(--purple))",
-              color: "#fff",
-              border: "none",
-              fontWeight: "bold",
-              boxShadow: "0 0 10px rgba(139, 92, 246, 0.4)"
-            }}
-            title="Salvar os últimos segundos do áudio (Voz + PC) em segundo plano"
+            title="Salvar os últimos segundos do áudio em segundo plano"
           >
             <Scissors size={14} weight="bold" /> Clipar ({state.settings?.clipDuration || "30"}s)
           </button>
@@ -466,6 +459,8 @@ export function SoundboardPage({
                     call("/api/sounds/update", { id: currentSound.id, name: newName.trim() })
                       .then(() => setToast("Som renomeado!"))
                       .catch((err) => setToast("Erro: " + err.message));
+                  } else {
+                    setToast("O nome do som não pode ser vazio.");
                   }
                 }
               });
@@ -533,9 +528,9 @@ export function SoundboardPage({
                     confirmText: "Copiar Link",
                     closeOnConfirm: true,
                     onConfirm: (url) => {
-                      if (window.micfudiddo?.copyText) window.micfudiddo.copyText(url);
-                      else navigator.clipboard.writeText(url);
-                      setToast("Link copiado para a área de transferência!");
+                      copyTextToClipboard(url)
+                        .then(() => setToast("Link copiado para a área de transferência!"))
+                        .catch((err) => setToast("Erro ao copiar: " + err.message));
                     }
                   });
                 }
@@ -544,8 +539,9 @@ export function SoundboardPage({
               <CloudArrowUp size={14} /> Copiar Link de Compartilhamento
             </button>
             <button onClick={() => {
-              navigator.clipboard.writeText(contextMenu.sound.path);
-              setToast("Caminho do áudio copiado!");
+              copyTextToClipboard(contextMenu.sound.path)
+                .then(() => setToast("Caminho do áudio copiado!"))
+                .catch((err) => setToast("Erro ao copiar: " + err.message));
               setContextMenu(null);
             }}>
               <Sparkle size={14} /> Compartilhar (Copiar Path)
@@ -575,6 +571,7 @@ export function SoundboardQuickPanel({
   setCustomCategories,
   setPromptState
 }) {
+  const nameInputRef = React.useRef(null);
   const [name, setName] = useState(sound.name);
   const [category, setCategory] = useState(sound.category || "Geral");
   const [shortcut, setShortcut] = useState(sound.shortcut || "");
@@ -582,7 +579,9 @@ export function SoundboardQuickPanel({
   const [loop, setLoop] = useState(!!sound.loop);
 
   useEffect(() => {
-    setName(sound.name);
+    if (nameInputRef.current !== document.activeElement) {
+      setName(sound.name);
+    }
     setCategory(sound.category || "Geral");
     setShortcut(sound.shortcut || "");
     setVolume(sound.volume);
@@ -707,10 +706,16 @@ export function SoundboardQuickPanel({
           <div className="labField">
             <label>Nome do Som</label>
             <input
+              ref={nameInputRef}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => handleSaveField("name", name)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.target.blur();
+                }
+              }}
               style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
             />
           </div>

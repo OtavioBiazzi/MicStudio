@@ -42,6 +42,8 @@ class EngineConfig:
     soundboard_monitor_enabled: bool = False
     soundboard_monitor_volume: float = 0.65
     primary_outputs_monitor_mix: bool = False
+    master_mic_gain: float = 1.0
+    master_voice_volume: float = 1.0
 
 
 class AudioRingBuffer:
@@ -160,6 +162,8 @@ class AudioEngine:
         self._effects_processor = VoiceEffectsProcessor(48000)
         self._control_lock = threading.Lock()
         self._gain = 1.0
+        self._master_mic_gain = 1.0
+        self._master_voice_volume = 1.0
         self._pitch_semitones = 0.0
         self._effects = EffectsSettings()
         self._monitor_enabled = False
@@ -214,6 +218,8 @@ class AudioEngine:
         monitor_volume: float | None = None,
         soundboard_monitor_enabled: bool | None = None,
         soundboard_monitor_volume: float | None = None,
+        master_mic_gain: float | None = None,
+        master_voice_volume: float | None = None,
     ) -> None:
         with self._control_lock:
             self._gain = max(0.0, float(gain))
@@ -226,6 +232,10 @@ class AudioEngine:
                 self._soundboard_monitor_enabled = bool(soundboard_monitor_enabled)
             if soundboard_monitor_volume is not None:
                 self._soundboard_monitor_volume = max(0.0, min(3.0, float(soundboard_monitor_volume)))
+            if master_mic_gain is not None:
+                self._master_mic_gain = max(0.0, float(master_mic_gain))
+            if master_voice_volume is not None:
+                self._master_voice_volume = max(0.0, float(master_voice_volume))
 
     def play_sound(
         self,
@@ -426,6 +436,8 @@ class AudioEngine:
             monitor_volume=config.monitor_volume,
             soundboard_monitor_enabled=config.soundboard_monitor_enabled,
             soundboard_monitor_volume=config.soundboard_monitor_volume,
+            master_mic_gain=config.master_mic_gain,
+            master_voice_volume=config.master_voice_volume,
         )
         self._monitor_enabled = bool(config.monitor_enabled)
 
@@ -726,17 +738,19 @@ class AudioEngine:
     def _process_audio_block(self, mono: np.ndarray, frames: int) -> tuple[np.ndarray, np.ndarray]:
         try:
             with self._control_lock:
-                gain = self._gain
+                gain = self._gain * self._master_mic_gain
                 pitch_semitones = self._pitch_semitones
                 effects = self._effects
                 monitor_enabled = self._monitor_enabled
                 monitor_volume = self._monitor_volume
+                master_voice_volume = self._master_voice_volume
             soundboard_monitor_enabled = self._soundboard_monitor_enabled
             soundboard_monitor_volume = self._soundboard_monitor_volume
 
             self._pitch.set_pitch_semitones(pitch_semitones)
             gained = apply_gain(self._pitch.process(mono), gain)
             effected = self._effects_processor.process(gained, effects)
+            effected = apply_gain(effected, master_voice_volume)
             soundboard_mix, soundboard_local_mix, block_voice = self._read_soundboard_mix(frames)
             voice_bus = np.zeros_like(effected) if block_voice else effected
             mixed = voice_bus + soundboard_mix

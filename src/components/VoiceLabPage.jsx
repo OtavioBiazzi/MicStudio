@@ -166,6 +166,13 @@ export function VoiceLabPage({
         { key: "reverse_mix", label: "Reverse", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "reverse_enabled" },
         { key: "alien_glitch_mix", label: "Glitch", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "alien_glitch_enabled" }
       ]
+    },
+    {
+      title: "🎵 Música & Acompanhamento (Ritmo & Harmonia)",
+      items: [
+        { key: "harmony_mix", label: "Magic Chords (Harmonizador)", icon: WaveSine, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "harmony_enabled" },
+        { key: "drum_loop_volume", label: "Beatbox Jam (Volume)", icon: Megaphone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "drum_loop_enabled" }
+      ]
     }
   ];
 
@@ -314,6 +321,39 @@ export function VoiceLabPage({
                             }
                           </span>
                         </div>
+                        {item.key === "harmony_mix" && enabled && (
+                          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-xs)", display: "flex", alignItems: "center", gap: 12 }}>
+                            <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>Modo do Acorde:</span>
+                            <select
+                              value={state.controls?.effects?.harmony_mode || "Major"}
+                              onChange={(e) => updateEffects({ harmony_mode: e.target.value })}
+                              style={{ padding: "4px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11, outline: "none" }}
+                            >
+                              <option value="Major">Major (Alegre)</option>
+                              <option value="Minor">Minor (Triste)</option>
+                              <option value="Space">Space (Espacial)</option>
+                              <option value="Octaves">Octaves (Oitavado)</option>
+                              <option value="Mystic">Mystic (Místico)</option>
+                            </select>
+                          </div>
+                        )}
+                        {item.key === "drum_loop_volume" && enabled && (
+                          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: "var(--radius-xs)", display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>Ritmo (BPM):</span>
+                              <span style={{ fontSize: 11, color: "var(--cyan)", fontWeight: 800 }}>{state.controls?.effects?.drum_loop_bpm ?? 90} BPM</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={40}
+                              max={240}
+                              step={5}
+                              value={state.controls?.effects?.drum_loop_bpm ?? 90}
+                              onChange={(e) => updateEffects({ drum_loop_bpm: Number(e.target.value) })}
+                              style={{ width: "100%", height: 4, borderRadius: 2, background: "var(--border)", outline: "none", accentColor: "var(--cyan)", cursor: "pointer" }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -108,6 +108,12 @@ class EffectsSettings:
     reverse_mix: float = 0.65
     alien_glitch_enabled: bool = False
     alien_glitch_mix: float = 0.62
+    harmony_enabled: bool = False
+    harmony_mode: str = "Major"
+    harmony_mix: float = 0.5
+    drum_loop_enabled: bool = False
+    drum_loop_bpm: float = 90.0
+    drum_loop_volume: float = 0.3
 
 
 class VoiceEffectsProcessor:
@@ -120,6 +126,13 @@ class VoiceEffectsProcessor:
         self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
         self.echo_pos = 0
         self.noise_rng = np.random.default_rng()
+        self._harm_shifters = [
+            DualDelayPitchShifter(self.sample_rate),
+            DualDelayPitchShifter(self.sample_rate),
+            DualDelayPitchShifter(self.sample_rate),
+            DualDelayPitchShifter(self.sample_rate),
+        ]
+        self._drum_sample_index = 0
 
     def reset(self) -> None:
         self.robot_phase = 0.0
@@ -198,6 +211,12 @@ class VoiceEffectsProcessor:
 
         if settings.alien_glitch_enabled:
             y = self._alien_glitch(y, _finite_clamped(settings.alien_glitch_mix, 0.0, 1.0, 0.62))
+
+        if settings.harmony_enabled:
+            y = self._harmony(y, settings.harmony_mode, _finite_clamped(settings.harmony_mix, 0.0, 1.0, 0.5))
+
+        if settings.drum_loop_enabled:
+            y += self._drum_loop(y.size, settings.drum_loop_bpm, settings.drum_loop_volume)
 
         if settings.output_volume_enabled:
             y = apply_gain(y, _finite_clamped(settings.output_volume, 0.0, 100.0, 1.0))
@@ -384,6 +403,102 @@ class VoiceEffectsProcessor:
         high_pass = samples - previous * np.float32(0.94)
         kernel = np.array([0.18, 0.24, 0.24, 0.2, 0.14], dtype=np.float32)
         return np.convolve(high_pass, kernel, mode="same").astype(np.float32, copy=False)
+
+    def _harmony(self, x: np.ndarray, mode: str, mix: float) -> np.ndarray:
+        mix = max(0.0, min(1.0, float(mix)))
+        if mix <= 0.01:
+            return x
+            
+        mode = str(mode).capitalize()
+        if mode == "Major":
+            offsets = [4.0, 7.0, -12.0, 0.0]
+        elif mode == "Minor":
+            offsets = [3.0, 7.0, -12.0, 0.0]
+        elif mode == "Space":
+            offsets = [7.0, 12.0, 19.0, -12.0]
+        elif mode == "Octaves":
+            offsets = [12.0, -12.0, -24.0, 0.0]
+        elif mode == "Mystic":
+            offsets = [3.0, 6.0, 9.0, -12.0]
+        else:
+            offsets = [4.0, 7.0, -12.0, 0.0]
+            
+        harmony_signals = []
+        for i, offset in enumerate(offsets):
+            if offset == 0.0:
+                continue
+            self._harm_shifters[i].set_pitch_semitones(offset)
+            harmony_signals.append(self._harm_shifters[i].process(x))
+            
+        if not harmony_signals:
+            return x
+            
+        harm_sum = np.zeros_like(x)
+        for sig in harmony_signals:
+            harm_sum += sig
+        harm_sum /= len(harmony_signals)
+        
+        return (1.0 - mix) * x + mix * harm_sum
+
+    def _drum_loop(self, size: int, bpm: float, volume: float) -> np.ndarray:
+        bpm = max(40.0, min(240.0, float(bpm)))
+        volume = max(0.0, min(1.0, float(volume)))
+        
+        beat_samples = int((60.0 / bpm) * self.sample_rate)
+        measure_samples = 4 * beat_samples
+        
+        out = np.zeros(size, dtype=np.float32)
+        start_idx = self._drum_sample_index
+        end_idx = self._drum_sample_index + size
+        self._drum_sample_index += size
+        
+        kicks = [0, int(2 * beat_samples), int(2.5 * beat_samples)]
+        snares = [int(1 * beat_samples), int(3 * beat_samples)]
+        hats = [int(i * 0.5 * beat_samples) for i in range(8)]
+        
+        kick_len = int(0.2 * self.sample_rate)
+        snare_len = int(0.2 * self.sample_rate)
+        hat_len = int(0.04 * self.sample_rate)
+        
+        m_start = (start_idx - kick_len) // measure_samples
+        m_end = end_idx // measure_samples + 1
+        
+        for m in range(m_start, m_end):
+            for k in kicks:
+                trigger_abs = m * measure_samples + k
+                if start_idx - kick_len <= trigger_abs < end_idx:
+                    b_start = max(0, trigger_abs - start_idx)
+                    b_end = min(size, trigger_abs + kick_len - start_idx)
+                    if b_end > b_start:
+                        t_sec = (np.arange(b_start, b_end) + start_idx - trigger_abs) / self.sample_rate
+                        freq = 45.0 + 100.0 * np.exp(-t_sec * 45.0)
+                        phase = 2.0 * np.pi * freq * t_sec
+                        out[b_start:b_end] += np.sin(phase) * np.exp(-t_sec * 16.0)
+                        
+            for s in snares:
+                trigger_abs = m * measure_samples + s
+                if start_idx - snare_len <= trigger_abs < end_idx:
+                    b_start = max(0, trigger_abs - start_idx)
+                    b_end = min(size, trigger_abs + snare_len - start_idx)
+                    if b_end > b_start:
+                        t_sec = (np.arange(b_start, b_end) + start_idx - trigger_abs) / self.sample_rate
+                        n_samples = b_end - b_start
+                        noise = (np.random.rand(n_samples).astype(np.float32) * 2.0 - 1.0) * np.exp(-t_sec * 20.0)
+                        tone = np.sin(2.0 * np.pi * 180.0 * t_sec) * np.exp(-t_sec * 35.0)
+                        out[b_start:b_end] += (0.65 * noise + 0.35 * tone)
+                        
+            for h in hats:
+                trigger_abs = m * measure_samples + h
+                if start_idx - hat_len <= trigger_abs < end_idx:
+                    b_start = max(0, trigger_abs - start_idx)
+                    b_end = min(size, trigger_abs + hat_len - start_idx)
+                    if b_end > b_start:
+                        t_sec = (np.arange(b_start, b_end) + start_idx - trigger_abs) / self.sample_rate
+                        n_samples = b_end - b_start
+                        noise = (np.random.rand(n_samples).astype(np.float32) * 2.0 - 1.0) * np.exp(-t_sec * 75.0)
+                        out[b_start:b_end] += 0.45 * noise
+                        
+        return out * np.float32(volume)
 
 
 def _finite_clamped(value: float, minimum: float, maximum: float, fallback: float) -> float:

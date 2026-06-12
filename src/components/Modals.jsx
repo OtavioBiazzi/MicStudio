@@ -1781,7 +1781,6 @@ export function TTSModal({ onClose, call, setToast }) {
   const [speaking, setSpeaking] = useState(false);
   const [pinHover, setPinHover] = useState(false);
   const [unlimited, setUnlimited] = useState(false);
-  const [keepText, setKeepText] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1789,7 +1788,6 @@ export function TTSModal({ onClose, call, setToast }) {
         const res = await call("/api/state");
         if (res && res.settings) {
           setUnlimited(res.settings.unlimitedTts === true);
-          setKeepText(res.settings.keepTtsTextAfterSpeak === true);
         }
       } catch (err) {
         console.error("Error fetching state:", err);
@@ -1829,6 +1827,11 @@ export function TTSModal({ onClose, call, setToast }) {
       setToast("Digite algum texto para falar.");
       return;
     }
+    const lineCount = text.split('\n').length;
+    if (lineCount >= 5000) {
+      const confirm = window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
+      if (!confirm) return;
+    }
     setSpeaking(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
@@ -1838,7 +1841,6 @@ export function TTSModal({ onClose, call, setToast }) {
         rate: formattedRate
       });
       setToast("📢 Falando...");
-      if (!keepText) setText("");
     } catch (err) {
       setToast("Erro ao falar: " + err.message);
     } finally {
@@ -1851,6 +1853,11 @@ export function TTSModal({ onClose, call, setToast }) {
       setToast("Digite algum texto antes de salvar.");
       return;
     }
+    const lineCount = text.split('\n').length;
+    if (lineCount >= 5000) {
+      const confirm = window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
+      if (!confirm) return;
+    }
     setLoading(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
@@ -1861,7 +1868,6 @@ export function TTSModal({ onClose, call, setToast }) {
         name: soundName.trim()
       });
       setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
-      if (!keepText) setText("");
       onClose();
     } catch (err) {
       setToast("Erro ao salvar: " + err.message);
@@ -1940,6 +1946,12 @@ export function TTSModal({ onClose, call, setToast }) {
               placeholder="Digite aqui o que você quer que o robô fale..."
               value={text}
               onChange={handleTextChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSpeak();
+                }
+              }}
               disabled={isWorking}
               maxLength={unlimited ? undefined : 10000}
               autoFocus

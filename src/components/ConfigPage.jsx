@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   MicrophoneStage, Palette, Keyboard, Lightning, MicrophoneSlash,
   ArrowClockwise, FadersHorizontal, XCircle, MusicNotes, Record, ChartBar,
-  SlidersHorizontal, DownloadSimple, UploadSimple, User, ChatText, DeviceMobile
+  SlidersHorizontal, DownloadSimple, UploadSimple, User, ChatText, SpeakerHigh, CaretDown, CaretUp
 } from "@phosphor-icons/react";
 import { Slider, deviceName } from "../utils";
 
@@ -103,9 +103,10 @@ export function ConfigPage({
   setPrefDockOpacity
 }) {
   const [tab, setTab] = useState("audio");
+  const [recordDevicesExpanded, setRecordDevicesExpanded] = useState(false);
 
   const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
-  const storagePercentage = Math.min((storageMB / 500) * 100, 100);
+  const storageLimitMB = Number(state.settings?.maxSoundboardStorage ?? 0);
 
   return (
     <div>
@@ -335,6 +336,13 @@ export function ConfigPage({
                     onChange={(v) => call("/api/settings", { showTtsWidgetSpeed: v })}
                   />
 
+                  <ToggleSetting
+                    label="Mostrar volume no Widget TTS"
+                    description="Exibir controle de volume de fala (0% a 200%) diretamente no painel flutuante"
+                    checked={state.settings?.showTtsWidgetVolume !== false}
+                    onChange={(v) => call("/api/settings", { showTtsWidgetVolume: v })}
+                  />
+
                   <div style={{ padding: "6px 0" }}>
                     <Slider
                       label="Opacidade do Widget TTS"
@@ -503,44 +511,69 @@ export function ConfigPage({
                 <div className="disk-usage-container">
                   <div className="disk-usage-info">
                     <span style={{ fontWeight: 600, color: "var(--text)" }}>Espaço do Soundboard:</span>
-                    <span style={{ fontWeight: 700, color: "var(--purple)" }}>{storageMB.toFixed(2)} MB / 500 MB</span>
+                    <span style={{ fontWeight: 700, color: storageLimitMB > 0 && storageMB >= storageLimitMB ? "var(--danger)" : "var(--purple)" }}>
+                      {storageMB.toFixed(2)} MB{storageLimitMB > 0 ? ` / ${storageLimitMB} MB` : " (Sem limite)"}
+                    </span>
                   </div>
-                  <div className="disk-usage-bar-bg">
-                    <div className="disk-usage-bar-fill" style={{ width: `${storagePercentage}%` }} />
-                  </div>
+                  {storageLimitMB > 0 && (
+                    <div className="disk-usage-bar-bg">
+                      <div className="disk-usage-bar-fill" style={{ width: `${Math.min((storageMB / storageLimitMB) * 100, 100)}%` }} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ padding: "6px 0" }}>
+                  <Slider
+                    label="Limite de armazenamento do Soundboard"
+                    value={Number(state.settings?.maxSoundboardStorage ?? 0)}
+                    min={0}
+                    max={5000}
+                    suffix=" MB"
+                    onChange={(v) => call("/api/settings", { maxSoundboardStorage: v })}
+                  />
+                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                    Defina o limite máximo em MB para os sons do Soundboard. Coloque 0 para sem limite.
+                  </small>
                 </div>
 
                 <div style={{ marginTop: 10 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 10 }}>
-                    Capturar saídas de áudio do Windows (Para Gravação de PC):
-                  </span>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ width: "100%", justifyContent: "space-between", border: "1px solid var(--border)", padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}
+                    onClick={() => setRecordDevicesExpanded(!recordDevicesExpanded)}
+                  >
+                    <span>Capturar saídas de áudio do Windows ({(state.recordDevices || []).length} dispositivos)</span>
+                    {recordDevicesExpanded ? <CaretUp size={16} /> : <CaretDown size={16} />}
+                  </button>
                   
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {(state.recordDevices || []).map((device) => (
-                      <div key={device.index} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div className="settingInfo">
-                          <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{device.name}</div>
-                          <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{device.is_loopback ? "Loopback (Saída)" : "Entrada (Captura)"}</div>
+                  {recordDevicesExpanded && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                      {(state.recordDevices || []).map((device) => (
+                        <div key={device.index} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div className="settingInfo">
+                            <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{device.name}</div>
+                            <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{device.is_loopback ? "Loopback (Saída)" : "Entrada (Captura)"}</div>
+                          </div>
+                          <div className="settingControl">
+                            <label className="toggleSwitch">
+                              <input
+                                type="checkbox"
+                                checked={selectedRecordDevices.includes(device.index)}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...selectedRecordDevices, device.index]
+                                    : selectedRecordDevices.filter((i) => i !== device.index);
+                                  setSelectedRecordDevices(next);
+                                  call("/api/record/selection", { indexes: next });
+                                }}
+                              />
+                              <span className="toggleTrack" />
+                            </label>
+                          </div>
                         </div>
-                        <div className="settingControl">
-                          <label className="toggleSwitch">
-                            <input
-                              type="checkbox"
-                              checked={selectedRecordDevices.includes(device.index)}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...selectedRecordDevices, device.index]
-                                  : selectedRecordDevices.filter((i) => i !== device.index);
-                                setSelectedRecordDevices(next);
-                                call("/api/record/selection", { indexes: next });
-                              }}
-                            />
-                            <span className="toggleTrack" />
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </>

@@ -213,11 +213,13 @@ DEFAULT_APP_SETTINGS = {
     "shortcutClip": "",
     "clipSource": "both",
     "showTtsWidgetSpeed": True,
+    "showTtsWidgetVolume": True,
     "unlimitedTts": False,
     "ttsWidgetOpacity": 82,
     "shortcutFocusTtsWidget": "",
     "keepTtsTextAfterSpeak": False,
     "ttsVolume": 100,
+    "maxSoundboardStorage": 0,
 }
 
 DEFAULT_PROFILE = {

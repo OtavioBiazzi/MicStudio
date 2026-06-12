@@ -1197,6 +1197,8 @@ function TTSWidget() {
   });
   const [speaking, setSpeaking] = useState(false);
   const [showSpeed, setShowSpeed] = useState(true);
+  const [showVolume, setShowVolume] = useState(true);
+  const [volume, setVolume] = useState(100);
   const [unlimited, setUnlimited] = useState(false);
   const [opacity, setOpacity] = useState(0.82);
   const [keepText, setKeepText] = useState(false);
@@ -1206,6 +1208,7 @@ function TTSWidget() {
   });
 
   const inputRef = useRef(null);
+  const volumeDraggingRef = useRef(false);
 
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
@@ -1230,16 +1233,22 @@ function TTSWidget() {
         const json = await res.json();
         if (json && json.settings) {
           setShowSpeed(json.settings.showTtsWidgetSpeed !== false);
+          setShowVolume(json.settings.showTtsWidgetVolume !== false);
           setUnlimited(json.settings.unlimitedTts === true);
           setOpacity((json.settings.ttsWidgetOpacity ?? 82) / 100);
           setKeepText(json.settings.keepTtsTextAfterSpeak === true);
           setFocusShortcut(json.settings.shortcutFocusTtsWidget || "");
+          if (!volumeDraggingRef.current) {
+            setVolume(Number(json.settings.ttsVolume ?? 100));
+          }
         }
       } catch (err) {
         console.error("Error fetching state:", err);
       }
     };
     fetchSettings();
+    const interval = setInterval(fetchSettings, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1255,6 +1264,13 @@ function TTSWidget() {
 
   const handleSpeak = async () => {
     if (!text.trim() || speaking) return;
+
+    const lineCount = text.split('\n').length;
+    if (lineCount >= 5000) {
+      const confirm = window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
+      if (!confirm) return;
+    }
+
     setSpeaking(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
@@ -1267,7 +1283,13 @@ function TTSWidget() {
           rate: formattedRate
         })
       });
-      if (!keepText) setText("");
+      if (!keepText) {
+        setText("");
+      } else {
+        if (inputRef.current) {
+          inputRef.current.setSelectionRange(text.length, text.length);
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -1286,6 +1308,19 @@ function TTSWidget() {
     localStorage.setItem("tts_default_rate", val);
   };
 
+  const handleVolumeChange = async (val) => {
+    setVolume(val);
+    try {
+      await fetch(`${API}/api/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ttsVolume: val })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div style={{
       display: "flex",
@@ -1293,7 +1328,7 @@ function TTSWidget() {
       alignItems: "center",
       justifyContent: "center",
       padding: "8px 12px",
-      height: showSpeed ? "88px" : "60px",
+      height: (showSpeed || showVolume) ? "88px" : "60px",
       width: "100vw",
       borderRadius: "16px",
       background: `rgba(10, 18, 30, ${opacity})`,
@@ -1368,7 +1403,13 @@ function TTSWidget() {
             placeholder={focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSpeak(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSpeak();
+              } else if (e.key === "Escape") {
+                window.micfudiddo?.closeTtsWidget();
+              }
+            }}
             maxLength={unlimited ? undefined : 10000}
             style={{
               width: "100%",
@@ -1440,42 +1481,77 @@ function TTSWidget() {
         </button>
       </div>
 
-      {/* Row 2: Speed Slider */}
-      {showSpeed && (
+      {/* Row 2: Speed and Volume Sliders */}
+      {(showSpeed || showVolume) && (
         <div style={{
           display: "flex",
           flexDirection: "row",
           alignItems: "center",
           width: "100%",
-          gap: "10px",
+          gap: "16px",
           paddingLeft: "26px",
           paddingRight: "32px",
           height: "24px",
           WebkitAppRegion: "no-drag"
         }}>
-          <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", whiteSpace: "nowrap" }}>
-            Velocidade:
-          </span>
-          <input
-            type="range"
-            min={-50}
-            max={50}
-            step={5}
-            value={rate}
-            onChange={(e) => handleRateChange(Number(e.target.value))}
-            style={{
-              flex: 1,
-              height: "4px",
-              accentColor: "#a855f7",
-              cursor: "pointer",
-              background: "rgba(255,255,255,0.1)",
-              border: "none",
-              outline: "none"
-            }}
-          />
-          <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.7)", minWidth: "35px", textAlign: "right" }}>
-            {rate >= 0 ? `+${rate}%` : `${rate}%`}
-          </span>
+          {showSpeed && (
+            <div style={{ display: "flex", flex: 1, flexDirection: "row", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", whiteSpace: "nowrap" }}>
+                Velocidade:
+              </span>
+              <input
+                type="range"
+                min={-50}
+                max={50}
+                step={5}
+                value={rate}
+                onChange={(e) => handleRateChange(Number(e.target.value))}
+                style={{
+                  flex: 1,
+                  height: "4px",
+                  accentColor: "#a855f7",
+                  cursor: "pointer",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "none",
+                  outline: "none"
+                }}
+              />
+              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.7)", minWidth: "35px", textAlign: "right" }}>
+                {rate >= 0 ? `+${rate}%` : `${rate}%`}
+              </span>
+            </div>
+          )}
+          {showVolume && (
+            <div style={{ display: "flex", flex: 1, flexDirection: "row", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", whiteSpace: "nowrap" }}>
+                Volume:
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={200}
+                step={5}
+                value={volume}
+                onMouseDown={() => { volumeDraggingRef.current = true; }}
+                onMouseUp={() => { volumeDraggingRef.current = false; }}
+                onTouchStart={() => { volumeDraggingRef.current = true; }}
+                onTouchEnd={() => { volumeDraggingRef.current = false; }}
+                onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                style={{
+                  flex: 1,
+                  height: "4px",
+                  accentColor: "#a855f7",
+                  cursor: "pointer",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "none",
+                  outline: "none"
+                }}
+              />
+              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.7)", minWidth: "35px", textAlign: "right" }}>
+                {volume}%
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

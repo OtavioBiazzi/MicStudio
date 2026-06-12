@@ -232,19 +232,29 @@ export function Slider({ label, value, min, max, suffix, onChange, enabled, onTo
 
   const [localValue, setLocalValue] = useState(() => toSlider(value));
   const draggingRef = useRef(false);
+  const commitTimerRef = useRef(null);
 
   useEffect(() => {
     if (!draggingRef.current) setLocalValue(toSlider(value));
   }, [value]);
 
-  const commit = (v) => {
-    onChange(fromSlider(v));
-  };
+  useEffect(() => {
+    return () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current); };
+  }, []);
 
   const handleChange = (e) => {
     const v = Number(e.target.value);
     setLocalValue(v);
-    commit(v);
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(() => {
+      onChange(fromSlider(v));
+    }, 80);
+  };
+
+  const handlePointerUp = () => {
+    draggingRef.current = false;
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    onChange(fromSlider(localValue));
   };
 
   const displayVal = fromSlider(localValue);
@@ -267,9 +277,9 @@ export function Slider({ label, value, min, max, suffix, onChange, enabled, onTo
           value={localValue}
           onChange={handleChange}
           onMouseDown={() => { draggingRef.current = true; }}
-          onMouseUp={() => { draggingRef.current = false; }}
+          onMouseUp={handlePointerUp}
           onTouchStart={() => { draggingRef.current = true; }}
-          onTouchEnd={() => { draggingRef.current = false; }}
+          onTouchEnd={handlePointerUp}
         />
       </div>
       <span className="sliderRowValue">{formattedText}</span>

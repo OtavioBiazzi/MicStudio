@@ -213,6 +213,7 @@ DEFAULT_APP_SETTINGS = {
     "shortcutClip": "",
     "clipSource": "both",
     "showTtsWidgetSpeed": True,
+    "unlimitedTts": False,
 }
 
 DEFAULT_PROFILE = {

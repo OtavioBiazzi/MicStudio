@@ -274,6 +274,12 @@ export function ConfigPage({
                   checked={state.settings?.showTtsWidgetSpeed !== false}
                   onChange={(v) => call("/api/settings", { showTtsWidgetSpeed: v })}
                 />
+                <ToggleSetting
+                  label="Remover limite de caracteres no TTS"
+                  description="Desativar o limite máximo de 10.000 caracteres no TTS (pode causar lentidão ao sintetizar textos gigantes)"
+                  checked={state.settings?.unlimitedTts === true}
+                  onChange={(v) => call("/api/settings", { unlimitedTts: v })}
+                />
                 {state.settings?.restoreOnDisable && (
                   <div className="selectField" style={{ marginTop: 12 }}>
                     <label>Microfone padrão ao fechar o app</label>

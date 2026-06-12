@@ -1743,6 +1743,21 @@ export function TTSModal({ onClose, call, setToast }) {
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [pinHover, setPinHover] = useState(false);
+  const [unlimited, setUnlimited] = useState(false);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await call("/api/state");
+        if (res && res.settings) {
+          setUnlimited(res.settings.unlimitedTts === true);
+        }
+      } catch (err) {
+        console.error("Error fetching state:", err);
+      }
+    };
+    fetchSettings();
+  }, [call]);
 
   // Auto-fill soundName when text changes
   const handleTextChange = (e) => {
@@ -1878,14 +1893,14 @@ export function TTSModal({ onClose, call, setToast }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}/10000</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}{unlimited ? "" : "/10000"}</span>
             </div>
             <textarea
               placeholder="Digite aqui o que você quer que o robô fale..."
               value={text}
               onChange={handleTextChange}
               disabled={isWorking}
-              maxLength={10000}
+              maxLength={unlimited ? undefined : 10000}
               autoFocus
               rows={3}
               style={{

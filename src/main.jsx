@@ -1195,6 +1195,7 @@ function TTSWidget() {
   });
   const [speaking, setSpeaking] = useState(false);
   const [showSpeed, setShowSpeed] = useState(true);
+  const [unlimited, setUnlimited] = useState(false);
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   });
@@ -1222,9 +1223,10 @@ function TTSWidget() {
         const json = await res.json();
         if (json && json.settings) {
           setShowSpeed(json.settings.showTtsWidgetSpeed !== false);
+          setUnlimited(json.settings.unlimitedTts === true);
         }
       } catch (err) {
-        console.error("Erro ao carregar configuracoes do widget:", err);
+        console.error("Error fetching state:", err);
       }
     };
     fetchSettings();
@@ -1368,7 +1370,7 @@ function TTSWidget() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSpeak(); }}
-          maxLength={10000}
+          maxLength={unlimited ? undefined : 10000}
           style={{
             width: "100%",
             background: "rgba(255, 255, 255, 0.05)",
@@ -1387,7 +1389,7 @@ function TTSWidget() {
           color: "rgba(255, 255, 255, 0.4)",
           pointerEvents: "none"
         }}>
-          {text.length}/10000
+          {text.length}{unlimited ? "" : "/10000"}
         </span>
       </div>
 

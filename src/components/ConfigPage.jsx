@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   MicrophoneStage, Palette, Keyboard, Lightning, MicrophoneSlash,
   ArrowClockwise, FadersHorizontal, XCircle, MusicNotes, Record, ChartBar,
-  SlidersHorizontal, DownloadSimple, UploadSimple, User
+  SlidersHorizontal, DownloadSimple, UploadSimple, User, ChatText, DeviceMobile
 } from "@phosphor-icons/react";
 import { Slider, deviceName } from "../utils";
 
@@ -103,139 +103,152 @@ export function ConfigPage({
   setPrefDockOpacity
 }) {
   const [tab, setTab] = useState("audio");
-  const [selectedTheme, setSelectedTheme] = useState(appTheme);
-  const [selectedColor, setSelectedColor] = useState(accentColor);
-  const [tempCustomColor, setTempCustomColor] = useState(customAccentColor);
 
-  const handleSaveVisualSettings = () => {
-    setAppTheme(selectedTheme);
-    setAccentColor(selectedColor);
-    setCustomAccentColor(tempCustomColor);
-    localStorage.setItem("micfudiddo.theme", selectedTheme);
-    localStorage.setItem("micfudiddo.accentColor", selectedColor);
-    localStorage.setItem("micfudiddo.customAccentColor", tempCustomColor);
-    setToast?.("Configurações visuais salvas com sucesso!");
-  };
+  const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
+  const storagePercentage = Math.min((storageMB / 500) * 100, 100);
 
   return (
     <div>
       <div className="labHeader">
         <h2>⚙️ Configurações</h2>
-        <p>Gerencie dispositivos, aparência, atalhos e manutenção</p>
+        <p>Gerencie dispositivos, atalhos, aparência e manutenção do MicFudiddo Studio</p>
       </div>
 
       <div className="config-layout">
+        {/* Navigation Sidebar */}
         <div className="config-sidebar">
           <button
             className={`config-sidebar-btn ${tab === "audio" ? "active" : ""}`}
             onClick={() => setTab("audio")}
           >
             <MicrophoneStage size={18} weight="duotone" />
-            <span>Áudio e Mic</span>
+            <span>Áudio e Dispositivos</span>
           </button>
           <button
-            className={`config-sidebar-btn ${tab === "aparencia" ? "active" : ""}`}
-            onClick={() => setTab("aparencia")}
+            className={`config-sidebar-btn ${tab === "tts" ? "active" : ""}`}
+            onClick={() => setTab("tts")}
           >
-            <Palette size={18} weight="duotone" />
-            <span>Aparência</span>
+            <ChatText size={18} weight="duotone" />
+            <span>Voz e TTS</span>
           </button>
           <button
-            className={`config-sidebar-btn ${tab === "avancado" ? "active" : ""}`}
-            onClick={() => setTab("avancado")}
+            className={`config-sidebar-btn ${tab === "soundboard" ? "active" : ""}`}
+            onClick={() => setTab("soundboard")}
           >
-            <SlidersHorizontal size={18} weight="duotone" />
-            <span>Avançado</span>
+            <MusicNotes size={18} weight="duotone" />
+            <span>Soundboard e Clipes</span>
           </button>
           <button
             className={`config-sidebar-btn ${tab === "atalhos" ? "active" : ""}`}
             onClick={() => setTab("atalhos")}
           >
             <Keyboard size={18} weight="duotone" />
-            <span>Atalhos</span>
+            <span>Atalhos Globais</span>
+          </button>
+          <button
+            className={`config-sidebar-btn ${tab === "aparencia" ? "active" : ""}`}
+            onClick={() => setTab("aparencia")}
+          >
+            <Palette size={18} weight="duotone" />
+            <span>Personalização</span>
           </button>
           <button
             className={`config-sidebar-btn ${tab === "manutencao" ? "active" : ""}`}
             onClick={() => setTab("manutencao")}
           >
             <Lightning size={18} weight="duotone" />
-            <span>Manutenção</span>
+            <span>Sistema e Manutenção</span>
           </button>
         </div>
 
-        <div className="config-content" style={{ flex: 1 }}>
+        {/* Configurations Content */}
+        <div className="config-content" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
+          
+          {/* TAB 1: AUDIO AND DEVICES */}
           {tab === "audio" && (
-            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="labCardTitle">
-                <MicrophoneStage size={18} />
-                <span>Dispositivos de Entrada e Saída</span>
-              </div>
-
-              {!state.virtualCableDetected && (
-                <div style={{
-                  background: "rgba(239, 68, 68, 0.08)",
-                  border: "1px solid rgba(239, 68, 68, 0.25)",
-                  borderRadius: "var(--radius-sm)",
-                  padding: 12,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--danger)", fontWeight: 700, fontSize: 13 }}>
-                    <span>⚠️ Cabo Virtual Não Detectado!</span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                    O driver de cabo de áudio virtual (VB-CABLE) não foi encontrado no sistema. Para usar o voice changer e o soundboard no Discord, você precisa dele instalado.
-                  </p>
-                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                    <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 11, background: "var(--danger)", textDecoration: "none", color: "#fff", display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
-                      📥 Baixar VB-CABLE
-                    </a>
-                  </div>
+            <>
+              {/* Card 1: Main Audio Hardware */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <MicrophoneStage size={18} />
+                  <span>Dispositivos de Entrada e Saída</span>
                 </div>
-              )}
+                <div className="settingCardDesc">
+                  Selecione os dispositivos físicos de áudio para capturar o microfone e transmitir para as salas virtuais.
+                </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <SelectField
-                  label="Microfone (Dispositivo de Entrada)"
-                  value={state.selected?.input}
-                  items={state.devices?.inputs || []}
-                  onChange={(v) => call("/api/selection", { input: v })}
-                />
-                <SelectField
-                  label="Cabo Virtual (VB-CABLE / Saída de Áudio)"
-                  value={state.selected?.output}
-                  items={state.devices?.outputs || []}
-                  onChange={(v) => call("/api/selection", { output: v })}
-                />
-                <SelectField
-                  label="Fone de Ouvido / Auto-falante (Para você se ouvir / Monitoramento)"
-                  value={state.selected?.monitor}
-                  items={state.devices?.outputs || []}
-                  onChange={(v) => call("/api/selection", { monitor: v })}
-                  allowNone
-                />
+                {!state.virtualCableDetected && (
+                  <div style={{
+                    background: "rgba(239, 68, 68, 0.08)",
+                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--danger)", fontWeight: 700, fontSize: 13 }}>
+                      <span>⚠️ Cabo Virtual Não Detectado!</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                      O driver de cabo de áudio virtual (VB-CABLE) não foi encontrado no sistema. Para usar o voice changer e o soundboard no Discord, você precisa dele instalado.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 11, background: "var(--danger)", textDecoration: "none", color: "#fff", display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
+                        📥 Baixar VB-CABLE
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <SelectField
+                    label="Microfone (Dispositivo de Entrada)"
+                    value={state.selected?.input}
+                    items={state.devices?.inputs || []}
+                    onChange={(v) => call("/api/selection", { input: v })}
+                  />
+                  <SelectField
+                    label="Cabo Virtual (VB-CABLE / Saída de Áudio)"
+                    value={state.selected?.output}
+                    items={state.devices?.outputs || []}
+                    onChange={(v) => call("/api/selection", { output: v })}
+                  />
+                  <SelectField
+                    label="Fone de Ouvido / Auto-falante (Para você se ouvir / Monitoramento)"
+                    value={state.selected?.monitor}
+                    items={state.devices?.outputs || []}
+                    onChange={(v) => call("/api/selection", { monitor: v })}
+                    allowNone
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)" }} onClick={() => call("/api/devices/refresh").then(() => setToast("Dispositivos atualizados!"))}>
+                    <ArrowClockwise size={14} /> Atualizar lista de dispositivos
+                  </button>
+                </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button className="btn btn-ghost" onClick={() => call("/api/devices/refresh").then(() => setToast("Dispositivos atualizados!"))}>
-                  <ArrowClockwise size={14} /> Atualizar dispositivos
-                </button>
-              </div>
-
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
+              {/* Card 2: Noise Gate */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
                   <MicrophoneSlash size={18} />
                   <span>Redução de Ruído (Noise Gate)</span>
                 </div>
+                <div className="settingCardDesc">
+                  Filtre o áudio de entrada para impedir a transmissão de ruídos de teclado, ventilador ou de fundo quando você estiver calado.
+                </div>
+                
                 <ToggleSetting
                   label="Ativar Noise Gate"
-                  description="Impede a transmissão de ruídos de fundo quando você não está falando"
+                  description="Silenciar microfone dinamicamente quando a captação estiver abaixo do limite definido"
                   checked={state.controls?.effects?.noise_gate_enabled}
                   onChange={(v) => updateEffects({ noise_gate_enabled: v })}
                 />
+                
                 {state.controls?.effects?.noise_gate_enabled && (
-                  <div style={{ marginTop: 12 }}>
+                  <div style={{ marginTop: 4 }}>
                     <Slider
                       label="Sensibilidade do Gate"
                       value={state.controls?.effects?.noise_gate_threshold * 100}
@@ -244,246 +257,460 @@ export function ConfigPage({
                       suffix="%"
                       onChange={(v) => updateEffects({ noise_gate_threshold: v / 100 })}
                     />
-                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
-                      Valores maiores silenciam ruídos mais altos, mas podem cortar palavras sussurradas.
+                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                      Valores maiores barram barulhos mais altos, mas podem mascarar sussurros ou finais de frases.
                     </small>
                   </div>
                 )}
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
+              {/* Card 3: Advanced Audio Parameters */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
                   <FadersHorizontal size={18} />
-                  <span>Configurações Adicionais</span>
+                  <span>Parâmetros Avançados do Driver</span>
                 </div>
-                <ToggleSetting
-                  label="Iniciar rota automaticamente"
-                  description="Ativar rota de áudio virtual ao iniciar o MicFudido"
-                  checked={state.settings?.autoStartVirtual}
-                  onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
-                />
-                <ToggleSetting
-                  label="Restaurar microfone original"
-                  description="Restaurar o microfone padrão do Windows ao fechar o app"
-                  checked={state.settings?.restoreOnDisable}
-                  onChange={(v) => call("/api/settings", { restoreOnDisable: v })}
-                />
-                <ToggleSetting
-                  label="Mostrar velocidade no Widget TTS"
-                  description="Exibir controle de velocidade de fala diretamente na barra flutuante (TTSWidget)"
-                  checked={state.settings?.showTtsWidgetSpeed !== false}
-                  onChange={(v) => call("/api/settings", { showTtsWidgetSpeed: v })}
-                />
-                <ToggleSetting
-                  label="Remover limite de caracteres no TTS"
-                  description="Desativar o limite máximo de 10.000 caracteres no TTS (pode causar lentidão ao sintetizar textos gigantes)"
-                  checked={state.settings?.unlimitedTts === true}
-                  onChange={(v) => call("/api/settings", { unlimitedTts: v })}
-                />
-                <ToggleSetting
-                  label="Manter texto após falar no TTS"
-                  description="Não apagar o texto digitado no TTS após reproduzir a voz ou pressionar Enter"
-                  checked={state.settings?.keepTtsTextAfterSpeak === true}
-                  onChange={(v) => call("/api/settings", { keepTtsTextAfterSpeak: v })}
-                />
-                <div style={{ padding: "8px 0", marginTop: 8 }}>
-                  <Slider
-                    label="Opacidade do Widget TTS"
-                    value={Number(state.settings?.ttsWidgetOpacity ?? 82)}
-                    min={10}
-                    max={100}
-                    suffix="%"
-                    onChange={(v) => call("/api/settings", { ttsWidgetOpacity: v })}
-                  />
-                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
-                    Ajusta o nível de transparência da janela flutuante do TTS (padrão: 82%).
-                  </small>
+                <div className="settingCardDesc">
+                  Configure as regras técnicas de processamento de áudio interno. (Modificar apenas se houver cliques ou lags).
                 </div>
-                {state.settings?.restoreOnDisable && (
-                  <div className="selectField" style={{ marginTop: 12 }}>
-                    <label>Microfone padrão ao fechar o app</label>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="selectField">
+                    <label>Taxa de Amostragem Interna (Sample Rate)</label>
                     <select
-                      value={state.settings?.defaultMicOnClose || "restore"}
-                      onChange={(e) => call("/api/settings", { defaultMicOnClose: e.target.value })}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        background: "var(--bg-input)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text)",
-                        outline: "none",
-                        fontSize: 12
-                      }}
+                      value={state.sampleRate || 44100}
+                      onChange={(e) => call("/api/settings", { sampleRate: Number(e.target.value) }).then(() => setToast?.("Taxa de amostragem alterada!"))}
                     >
-                      <option value="restore">Restaurar microfone anterior (Recomendado)</option>
-                      <option value="keep">Manter microfone atual</option>
-                      <option value="choose">Escolher microfone ao fechar</option>
-                      {(state.windowsCaptureEndpoints || []).map((ep) => (
-                        <option key={ep.id} value={ep.id}>{ep.name}</option>
-                      ))}
+                      <option value={44100}>44100 Hz (CD - Padrão)</option>
+                      <option value={48000}>48000 Hz (Estúdio / Profissional)</option>
                     </select>
                   </div>
-                )}
-                
-                <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-                  <Slider
-                    label="Volume máximo dos sons"
-                    value={Number(state.settings?.maxSoundVolume ?? 1.0) * 100}
-                    min={0}
-                    max={200}
-                    suffix="%"
-                    onChange={(v) => call("/api/settings", { maxSoundVolume: String(v / 100) })}
-                  />
-                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
-                    Define um limite máximo global para o volume de reprodução de todos os sons do soundboard.
-                  </small>
+
+                  <div className="selectField">
+                    <label>Tamanho do Buffer de Áudio (Latência)</label>
+                    <select
+                      value={state.settings?.bufferSize || 512}
+                      onChange={(e) => call("/api/settings", { bufferSize: String(e.target.value) }).then(() => setToast?.("Tamanho do buffer alterado!"))}
+                    >
+                      <option value="128">128 frames (Latência ultra baixa - Exige CPU rápida)</option>
+                      <option value="256">256 frames (Latência baixa - Recomendado)</option>
+                      <option value="512">512 frames (Balanceado - Padrão)</option>
+                      <option value="1024">1024 frames (Estável - Ideal para computadores lentos)</option>
+                    </select>
+                  </div>
+
+                  <div className="selectField">
+                    <label>Canais de Entrada do Microfone</label>
+                    <select
+                      value={state.settings?.inputChannels || "mono"}
+                      onChange={(e) => call("/api/settings", { inputChannels: e.target.value }).then(() => setToast?.("Canais de entrada configurados!"))}
+                    >
+                      <option value="mono">Forçar canal monofônico (Recomendado)</option>
+                      <option value="stereo">Estéreo nativo / Downmix</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* TAB 2: VOICE AND TTS */}
+          {tab === "tts" && (
+            <>
+              {/* Card 1: TTS Widget */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <SlidersHorizontal size={18} />
+                  <span>Comportamento do Widget TTS Flutuante</span>
+                </div>
+                <div className="settingCardDesc">
+                  Configure o design, a exibição e os atalhos para a janela flutuante que fica sobreposta aos seus jogos.
                 </div>
 
-                <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <ToggleSetting
-                    label="Ativar Gravação de Clipes (Clipping)"
-                    description="Mantém um buffer circular de áudio em segundo plano para capturar momentos retroativamente"
-                    checked={state.settings?.clipEnabled}
-                    onChange={(v) => call("/api/settings", { clipEnabled: v })}
+                    label="Mostrar velocidade no Widget TTS"
+                    description="Exibir controle de velocidade de fala (-50% a +50%) diretamente no painel flutuante"
+                    checked={state.settings?.showTtsWidgetSpeed !== false}
+                    onChange={(v) => call("/api/settings", { showTtsWidgetSpeed: v })}
+                  />
+
+                  <div style={{ padding: "6px 0" }}>
+                    <Slider
+                      label="Opacidade do Widget TTS"
+                      value={Number(state.settings?.ttsWidgetOpacity ?? 82)}
+                      min={10}
+                      max={100}
+                      suffix="%"
+                      onChange={(v) => call("/api/settings", { ttsWidgetOpacity: v })}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                      Define a opacidade do fundo (glassmorphic blur) do widget flutuante (padrão: 82%).
+                    </small>
+                  </div>
+
+                  <HotkeyInput
+                    label="Atalho para Focar Digitação"
+                    value={state.settings?.shortcutFocusTtsWidget}
+                    onChange={(val) => call("/api/settings", { shortcutFocusTtsWidget: val })}
+                    onClear={() => call("/api/settings", { shortcutFocusTtsWidget: "" })}
+                  />
+                  <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: -6 }}>
+                    Combinação global que abre o widget (se fechado) e seleciona instantaneamente o input de digitação para você falar rápido.
+                  </small>
+                </div>
+              </div>
+
+              {/* Card 2: TTS Engine Options */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <User size={18} />
+                  <span>Configurações da Síntese de Voz (TTS)</span>
+                </div>
+                <div className="settingCardDesc">
+                  Ajustes para a conversão de texto para voz (Text-to-Speech) integrada.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <ToggleSetting
+                    label="Remover limite de caracteres"
+                    description="Permite digitar blocos de texto maiores que 10.000 caracteres no TTS (pode demorar para processar)"
+                    checked={state.settings?.unlimitedTts === true}
+                    onChange={(v) => call("/api/settings", { unlimitedTts: v })}
+                  />
+
+                  <ToggleSetting
+                    label="Manter texto digitado após falar"
+                    description="Mantém as palavras escritas no input após você dar play ou apertar Enter (por padrão, o texto é limpo)"
+                    checked={state.settings?.keepTtsTextAfterSpeak === true}
+                    onChange={(v) => call("/api/settings", { keepTtsTextAfterSpeak: v })}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* TAB 3: SOUNDBOARD AND RECORDING */}
+          {tab === "soundboard" && (
+            <>
+              {/* Card 1: Playback Behavior */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <MusicNotes size={18} />
+                  <span>Reprodução do Soundboard</span>
+                </div>
+                <div className="settingCardDesc">
+                  Configure limites e comportamento geral do mixer de sons.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <ToggleSetting
+                    label="Sobrepor reprodução de sons"
+                    description="Permite que múltiplos áudios sejam executados simultaneamente de forma sobreposta"
+                    checked={state.settings?.allowMultipleSounds}
+                    onChange={(v) => call("/api/settings", { allowMultipleSounds: v })}
+                  />
+
+                  <div style={{ padding: "6px 0" }}>
+                    <Slider
+                      label="Volume máximo global de sons"
+                      value={Number(state.settings?.maxSoundVolume ?? 1.0) * 100}
+                      min={0}
+                      max={200}
+                      suffix="%"
+                      onChange={(v) => call("/api/settings", { maxSoundVolume: String(v / 100) })}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                      Teto máximo de volume permitido para todos os sons do Soundboard (padrão: 100%).
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Clipping Retroativo */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <Record size={18} />
+                  <span>Gravação de Clipes Retroativos (Clipping)</span>
+                </div>
+                <div className="settingCardDesc">
+                  Grave os últimos segundos ocorridos da sua voz ou som do PC a qualquer momento apertando um atalho global.
+                </div>
+
+                <ToggleSetting
+                  label="Ativar Buffer de Clipes (Clipping)"
+                  description="Mantém o buffer circular de áudio em segundo plano na memória RAM"
+                  checked={state.settings?.clipEnabled}
+                  onChange={(v) => call("/api/settings", { clipEnabled: v })}
+                />
+
+                {state.settings?.clipEnabled && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 4 }}>
+                    <div className="selectField">
+                      <label>Fonte de Áudio do Clipe</label>
+                      <select
+                        value={state.settings?.clipSource ?? "both"}
+                        onChange={(e) => call("/api/settings", { clipSource: e.target.value })}
+                      >
+                        <option value="both">Voz + Som do PC (Os dois em canais separados)</option>
+                        <option value="voice">Apenas Voz (Grava só o seu microfone)</option>
+                        <option value="pc">Apenas Som do PC (Grava só o som dos jogos/aplicativos)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <Slider
+                        label="Duração do Clipe"
+                        value={Number(state.settings?.clipDuration ?? 30)}
+                        min={1}
+                        max={60}
+                        suffix="s"
+                        onChange={(v) => call("/api/settings", { clipDuration: String(v) })}
+                      />
+                      <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                        Define quantos segundos serão capturados retroativamente ao salvar o arquivo (máx: 60s).
+                      </small>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 3: Storage and Channels */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <ChartBar size={18} />
+                  <span>Canais do PC e Armazenamento em Disco</span>
+                </div>
+                <div className="settingCardDesc">
+                  Selecione as saídas de aplicativos e verifique a quantidade de armazenamento consumida no disco.
+                </div>
+
+                {/* Storage Linear Progress Bar */}
+                <div className="disk-usage-container">
+                  <div className="disk-usage-info">
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>Espaço do Soundboard:</span>
+                    <span style={{ fontWeight: 700, color: "var(--purple)" }}>{storageMB.toFixed(2)} MB / 500 MB</span>
+                  </div>
+                  <div className="disk-usage-bar-bg">
+                    <div className="disk-usage-bar-fill" style={{ width: `${storagePercentage}%` }} />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 10 }}>
+                    Capturar saídas de áudio do Windows (Para Gravação de PC):
+                  </span>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {(state.recordDevices || []).map((device) => (
+                      <div key={device.index} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div className="settingInfo">
+                          <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{device.name}</div>
+                          <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{device.is_loopback ? "Loopback (Saída)" : "Entrada (Captura)"}</div>
+                        </div>
+                        <div className="settingControl">
+                          <label className="toggleSwitch">
+                            <input
+                              type="checkbox"
+                              checked={selectedRecordDevices.includes(device.index)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...selectedRecordDevices, device.index]
+                                  : selectedRecordDevices.filter((i) => i !== device.index);
+                                setSelectedRecordDevices(next);
+                                call("/api/record/selection", { indexes: next });
+                              }}
+                            />
+                            <span className="toggleTrack" />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* TAB 4: GLOBAL HOTKEYS */}
+          {tab === "atalhos" && (
+            <>
+              {/* Card 1: App Hotkeys */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <Keyboard size={18} />
+                  <span>Atalhos Globais do Sistema</span>
+                </div>
+                <div className="settingCardDesc">
+                  Configure atalhos que funcionam de dentro de qualquer jogo ou aplicação em segundo plano.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <HotkeyInput
+                    label="Mutar Microfone"
+                    value={state.settings?.shortcutMuteMic}
+                    onChange={(val) => call("/api/settings", { shortcutMuteMic: val })}
+                    onClear={() => call("/api/settings", { shortcutMuteMic: "" })}
+                  />
+                  <HotkeyInput
+                    label="Ativar/Desativar Efeitos (Bypass)"
+                    value={state.settings?.shortcutToggleBypass}
+                    onChange={(val) => call("/api/settings", { shortcutToggleBypass: val })}
+                    onClear={() => call("/api/settings", { shortcutToggleBypass: "" })}
+                  />
+                  <HotkeyInput
+                    label="Ativar/Desativar Retorno do Soundboard"
+                    value={state.settings?.shortcutToggleSoundboard}
+                    onChange={(val) => call("/api/settings", { shortcutToggleSoundboard: val })}
+                    onClear={() => call("/api/settings", { shortcutToggleSoundboard: "" })}
+                  />
+                  <HotkeyInput
+                    label="Ativar/Desativar Voice Changer"
+                    value={state.settings?.shortcutToggleVoiceChanger}
+                    onChange={(val) => call("/api/settings", { shortcutToggleVoiceChanger: val })}
+                    onClear={() => call("/api/settings", { shortcutToggleVoiceChanger: "" })}
+                  />
+                  <HotkeyInput
+                    label="Gravar Voz (Iniciar/Parar)"
+                    value={state.settings?.shortcutRecordVoice}
+                    onChange={(val) => call("/api/settings", { shortcutRecordVoice: val })}
+                    onClear={() => call("/api/settings", { shortcutRecordVoice: "" })}
+                  />
+                  <HotkeyInput
+                    label="Gravar Som do PC (Iniciar/Parar)"
+                    value={state.settings?.shortcutRecordPC}
+                    onChange={(val) => call("/api/settings", { shortcutRecordPC: val })}
+                    onClear={() => call("/api/settings", { shortcutRecordPC: "" })}
+                  />
+                  <HotkeyInput
+                    label="Gravar Voz + Som do PC (Iniciar/Parar)"
+                    value={state.settings?.shortcutRecordCombo}
+                    onChange={(val) => call("/api/settings", { shortcutRecordCombo: val })}
+                    onClear={() => call("/api/settings", { shortcutRecordCombo: "" })}
+                  />
+                  <HotkeyInput
+                    label="Focar Digitação (Widget TTS)"
+                    value={state.settings?.shortcutFocusTtsWidget}
+                    onChange={(val) => call("/api/settings", { shortcutFocusTtsWidget: val })}
+                    onClear={() => call("/api/settings", { shortcutFocusTtsWidget: "" })}
                   />
                   {state.settings?.clipEnabled && (
-                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div className="selectField">
-                        <label>Fonte de Áudio do Clipe</label>
-                        <select
-                          value={state.settings?.clipSource ?? "both"}
-                          onChange={(e) => call("/api/settings", { clipSource: e.target.value })}
-                        >
-                          <option value="both">Voz + Som do PC (Os dois)</option>
-                          <option value="voice">Apenas Voz (Só Voz)</option>
-                          <option value="pc">Apenas Som do PC (Só Monitoramento)</option>
-                        </select>
-                      </div>
+                    <HotkeyInput
+                      label="Gerar Clipe (Salvar últimos segundos)"
+                      value={state.settings?.shortcutClip}
+                      onChange={(val) => call("/api/settings", { shortcutClip: val })}
+                      onClear={() => call("/api/settings", { shortcutClip: "" })}
+                    />
+                  )}
+                </div>
+              </div>
 
-                      <div>
-                        <Slider
-                          label="Duração do Clipe"
-                          value={Number(state.settings?.clipDuration ?? 30)}
-                          min={1}
-                          max={60}
-                          suffix="s"
-                          onChange={(v) => call("/api/settings", { clipDuration: String(v) })}
-                        />
-                        <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
-                          Define o tamanho em segundos do arquivo de áudio gerado quando você salvar um clipe (Máx: 60s).
-                        </small>
+              {/* Card 2: Soundboard Shortcuts */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <MusicNotes size={18} />
+                  <span>Atalhos Registrados do Soundboard</span>
+                </div>
+                <div className="settingCardDesc">
+                  Para alterar ou definir um atalho de áudio, acesse a aba Soundboard, selecione o som e grave a tecla no card de edição.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {(state.sounds || []).filter((s) => s.shortcut).map((sound) => (
+                    <div key={sound.id} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div className="settingInfo">
+                        <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{sound.name}</div>
+                        <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{sound.category || "Soundboard"}</div>
                       </div>
+                      <div className="settingControl">
+                        <span style={{ fontSize: 11, padding: "4px 10px", background: "var(--purple-soft)", border: "1px solid var(--purple)", borderRadius: 6, color: "var(--purple)", fontWeight: 800, textTransform: "uppercase" }}>
+                          {sound.shortcut}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {!(state.sounds || []).some((s) => s.shortcut) && (
+                    <div style={{ color: "var(--text-muted)", textAlign: "center", padding: "24px 0", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
+                      Nenhum atalho configurado para áudios até agora.
                     </div>
                   )}
                 </div>
-
-                <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Armazenamento Ocupado:</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--cyan)", textShadow: "0 0 8px var(--cyan-glow)" }}>
-                    {state.storageUsed ? (state.storageUsed / (1024 * 1024)).toFixed(2) + " MB" : "0.00 MB"}
-                  </span>
-                </div>
               </div>
-
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
-                  <XCircle size={18} />
-                  <span>Fechamento do Aplicativo</span>
-                </div>
-                <ToggleSetting
-                  label="Confirmar fechamento"
-                  description="Exibir confirmação com opções ao tentar fechar o aplicativo"
-                  checked={state.settings?.confirmClose !== false}
-                  onChange={(v) => call("/api/settings", { confirmClose: v })}
-                />
-                <div className="selectField" style={{ marginTop: 12 }}>
-                  <label>Ação padrão ao fechar o app</label>
-                  <select
-                    value={state.settings?.closeBehavior || "ask"}
-                    onChange={(e) => call("/api/settings", { closeBehavior: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "var(--bg-input)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text)",
-                      outline: "none",
-                      fontSize: 12
-                    }}
-                  >
-                    <option value="ask">Perguntar toda vez (Padrão)</option>
-                    <option value="tray">Minimizar para a bandeja / sistema</option>
-                    <option value="quit">Encerrar o aplicativo totalmente</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+            </>
           )}
 
+          {/* TAB 5: APPEARANCE AND THEMING */}
           {tab === "aparencia" && (
-            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="labCardTitle">
-                <Palette size={18} />
-                <span>Personalização Visual</span>
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-                Escolha a paleta de cores para os realces, neon e botões do MicFudido Studio:
-              </p>
+            <>
+              {/* Card 1: Colors and Theme (Auto-saved) */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <Palette size={18} />
+                  <span>Temas e Paleta de Cores (Destaque)</span>
+                </div>
+                <div className="settingCardDesc">
+                  Escolha o visual geral da interface. Suas alterações são aplicadas e salvas na hora em todo o aplicativo!
+                </div>
 
-              <div className="palette-grid">
-                {Object.entries(colorPalettes).map(([key, item]) => (
+                <div className="palette-grid" style={{ marginBottom: 6 }}>
+                  {Object.entries(colorPalettes).map(([key, item]) => (
+                    <button
+                      key={key}
+                      className={`palette-btn ${accentColor === key ? "active" : ""}`}
+                      style={{ "--palette-color": item.primary }}
+                      onClick={() => setAccentColor(key)}
+                    >
+                      <span className="palette-color-dot" style={{ backgroundColor: item.primary }} />
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{item.label}</span>
+                    </button>
+                  ))}
                   <button
-                    key={key}
-                    className={`palette-btn ${selectedColor === key ? "active" : ""}`}
-                    style={{ "--palette-color": item.primary }}
-                    onClick={() => setSelectedColor(key)}
+                    className={`palette-btn ${accentColor === "custom" ? "active" : ""}`}
+                    style={{ "--palette-color": customAccentColor }}
+                    onClick={() => setAccentColor("custom")}
                   >
-                    <span className="palette-color-dot" style={{ backgroundColor: item.primary }} />
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>{item.label}</span>
+                    <span className="palette-color-dot" style={{ backgroundColor: customAccentColor }} />
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>Personalizada</span>
                   </button>
-                ))}
-                <button
-                  className={`palette-btn ${selectedColor === "custom" ? "active" : ""}`}
-                  style={{ "--palette-color": tempCustomColor }}
-                  onClick={() => setSelectedColor("custom")}
-                >
-                  <span className="palette-color-dot" style={{ backgroundColor: tempCustomColor }} />
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>Personalizada</span>
-                </button>
-              </div>
-
-              {selectedColor === "custom" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, background: "var(--bg-input)", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                  <label style={{ fontSize: 12, fontWeight: "bold", color: "var(--text-secondary)" }}>Escolha a cor personalizada:</label>
-                  <input
-                    type="color"
-                    value={tempCustomColor}
-                    onChange={(e) => setTempCustomColor(e.target.value)}
-                    style={{ width: "42px", height: "26px", border: "none", borderRadius: "4px", background: "none", cursor: "pointer" }}
-                  />
-                  <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text)" }}>{tempCustomColor.toUpperCase()}</span>
                 </div>
-              )}
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Tema da Interface</span>
-                <div className="selectField" style={{ marginTop: 8 }}>
-                  <label>Selecione o tema geral do aplicativo:</label>
-                  <select value={selectedTheme} onChange={(e) => setSelectedTheme(e.target.value)}>
-                    <option value="theme-cyberpunk">Cyberpunk Escuro (Padrão)</option>
-                    <option value="theme-dracula">Dracula Vamp</option>
-                    <option value="theme-vampire">Vampire Red</option>
-                    <option value="theme-neon">Neon Green</option>
-                    <option value="theme-synthwave">Synthwave Retrowave</option>
-                  </select>
+                {accentColor === "custom" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-input)", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                    <label style={{ fontSize: 12, fontWeight: "bold", color: "var(--text-secondary)" }}>Escolha a cor personalizada:</label>
+                    <input
+                      type="color"
+                      value={customAccentColor}
+                      onChange={(e) => setCustomAccentColor(e.target.value)}
+                      style={{ width: "42px", height: "26px", border: "none", borderRadius: "4px", background: "none", cursor: "pointer" }}
+                    />
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text)" }}>{customAccentColor.toUpperCase()}</span>
+                  </div>
+                )}
+
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                  <div className="selectField">
+                    <label>Selecione o tema geral do aplicativo:</label>
+                    <select value={appTheme} onChange={(e) => setAppTheme(e.target.value)}>
+                      <option value="theme-cyberpunk">Cyberpunk Escuro (Padrão)</option>
+                      <option value="theme-dracula">Dracula Vamp</option>
+                      <option value="theme-vampire">Vampire Red</option>
+                      <option value="theme-neon">Neon Green</option>
+                      <option value="theme-synthwave">Synthwave Retrowave</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 10 }}>Configurações de Layout</span>
-                
+              {/* Card 2: Layout Tuning (Auto-saved) */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <SlidersHorizontal size={18} />
+                  <span>Ajustes de Renderização e Layout</span>
+                </div>
+                <div className="settingCardDesc">
+                  Adapte a densidade, intensidade e os efeitos da tela de acordo com a sua preferência.
+                </div>
+
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div className="selectField">
                     <label>Tamanho da Fonte da Interface</label>
@@ -527,209 +754,123 @@ export function ConfigPage({
                   <div style={{ marginTop: 4 }}>
                     <ToggleSetting
                       label="Efeito de Vidro (Glassmorphism)"
-                      description="Aplica desfoque (blur) no fundo do painel flutuante"
+                      description="Aplica desfoque translúcido (backdrop-filter: blur) no fundo dos painéis e docks"
                       checked={prefGlass}
                       onChange={(v) => setPrefGlass(v)}
                     />
                   </div>
-                </div>
-              </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-                <button className="btn btn-primary" onClick={handleSaveVisualSettings} style={{ padding: "8px 24px" }}>
-                  Salvar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {tab === "avancado" && (
-            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="labCardTitle">
-                <FadersHorizontal size={18} />
-                <span>Parâmetros de Áudio e Desempenho</span>
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-                Ajuste os parâmetros avançados de processamento do servidor de áudio local e otimize o consumo de hardware.
-              </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 4 }}>
-                <div className="selectField">
-                  <label>Taxa de Amostragem Interna (Sample Rate)</label>
-                  <select
-                    value={state.sampleRate || 44100}
-                    onChange={(e) => call("/api/settings", { sampleRate: Number(e.target.value) }).then(() => setToast?.("Taxa de amostragem alterada!"))}
-                  >
-                    <option value={44100}>44100 Hz (CD - Padrão)</option>
-                    <option value={48000}>48000 Hz (Estúdio / Profissional)</option>
-                  </select>
-                </div>
-
-                <div className="selectField">
-                  <label>Tamanho do Buffer de Áudio (Latência)</label>
-                  <select
-                    value={state.settings?.bufferSize || 512}
-                    onChange={(e) => call("/api/settings", { bufferSize: String(e.target.value) }).then(() => setToast?.("Tamanho do buffer alterado!"))}
-                  >
-                    <option value="128">128 frames (Latência ultra baixa - Exige CPU rápida)</option>
-                    <option value="256">256 frames (Latência baixa - Recomendado)</option>
-                    <option value="512">512 frames (Balanceado - Padrão)</option>
-                    <option value="1024">1024 frames (Estável - Ideal para computadores lentos)</option>
-                  </select>
-                </div>
-
-                <div className="selectField">
-                  <label>Canais de Entrada do Microfone</label>
-                  <select
-                    value={state.settings?.inputChannels || "mono"}
-                    onChange={(e) => call("/api/settings", { inputChannels: e.target.value }).then(() => setToast?.("Canais de entrada configurados!"))}
-                  >
-                    <option value="mono">Forçar canal monofônico (Recomendado)</option>
-                    <option value="stereo">Estéreo nativo / Downmix</option>
-                  </select>
-                </div>
-
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 6 }}>
-                  <ToggleSetting
-                    label="Modo Gamer / Baixo Consumo CPU"
-                    description="Desativa sombras neon, desfoques e transições pesadas para maximizar o FPS nos jogos."
-                    checked={prefGamerMode}
-                    onChange={(v) => setPrefGamerMode(v)}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === "atalhos" && (
-            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="labCardTitle">
-                <Keyboard size={18} />
-                <span>Atalhos Globais do Sistema</span>
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-                Configure atalhos globais de sistema para acionar funções rápidas mesmo com o aplicativo em segundo plano.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-                <HotkeyInput
-                  label="Mutar Microfone"
-                  value={state.settings?.shortcutMuteMic}
-                  onChange={(val) => call("/api/settings", { shortcutMuteMic: val })}
-                  onClear={() => call("/api/settings", { shortcutMuteMic: "" })}
-                />
-                <HotkeyInput
-                  label="Ativar/Desativar Efeitos (Bypass)"
-                  value={state.settings?.shortcutToggleBypass}
-                  onChange={(val) => call("/api/settings", { shortcutToggleBypass: val })}
-                  onClear={() => call("/api/settings", { shortcutToggleBypass: "" })}
-                />
-                <HotkeyInput
-                  label="Ativar/Desativar Retorno do Soundboard"
-                  value={state.settings?.shortcutToggleSoundboard}
-                  onChange={(val) => call("/api/settings", { shortcutToggleSoundboard: val })}
-                  onClear={() => call("/api/settings", { shortcutToggleSoundboard: "" })}
-                />
-                <HotkeyInput
-                  label="Ativar/Desativar Voice Changer"
-                  value={state.settings?.shortcutToggleVoiceChanger}
-                  onChange={(val) => call("/api/settings", { shortcutToggleVoiceChanger: val })}
-                  onClear={() => call("/api/settings", { shortcutToggleVoiceChanger: "" })}
-                />
-                <HotkeyInput
-                  label="Gravar Voz (Iniciar/Parar)"
-                  value={state.settings?.shortcutRecordVoice}
-                  onChange={(val) => call("/api/settings", { shortcutRecordVoice: val })}
-                  onClear={() => call("/api/settings", { shortcutRecordVoice: "" })}
-                />
-                <HotkeyInput
-                  label="Gravar Som do PC (Iniciar/Parar)"
-                  value={state.settings?.shortcutRecordPC}
-                  onChange={(val) => call("/api/settings", { shortcutRecordPC: val })}
-                  onClear={() => call("/api/settings", { shortcutRecordPC: "" })}
-                />
-                <HotkeyInput
-                  label="Gravar Voz + Som do PC (Iniciar/Parar)"
-                  value={state.settings?.shortcutRecordCombo}
-                  onChange={(val) => call("/api/settings", { shortcutRecordCombo: val })}
-                  onClear={() => call("/api/settings", { shortcutRecordCombo: "" })}
-                />
-                <HotkeyInput
-                  label="Focar Digitação (Widget TTS)"
-                  value={state.settings?.shortcutFocusTtsWidget}
-                  onChange={(val) => call("/api/settings", { shortcutFocusTtsWidget: val })}
-                  onClear={() => call("/api/settings", { shortcutFocusTtsWidget: "" })}
-                />
-                {state.settings?.clipEnabled && (
-                  <HotkeyInput
-                    label="Gerar Clipe (Salvar últimos segundos)"
-                    value={state.settings?.shortcutClip}
-                    onChange={(val) => call("/api/settings", { shortcutClip: val })}
-                    onClear={() => call("/api/settings", { shortcutClip: "" })}
-                  />
-                )}
-              </div>
-
-              <div className="labCardTitle" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                <MusicNotes size={18} />
-                <span>Atalhos do Soundboard Cadastrados</span>
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-                Para adicionar ou modificar um atalho de áudio, abra a aba Soundboard, selecione o som desejado e pressione as teclas no campo de atalho.
-              </p>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-                {(state.sounds || []).filter((s) => s.shortcut).map((sound) => (
-                  <div key={sound.id} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div className="settingInfo">
-                      <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{sound.name}</div>
-                      <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{sound.category || "Soundboard"}</div>
-                    </div>
-                    <div className="settingControl">
-                      <span style={{ fontSize: 11, padding: "4px 10px", background: "var(--purple-soft)", border: "1px solid var(--purple)", borderRadius: 6, color: "var(--purple)", fontWeight: 800, textTransform: "uppercase" }}>
-                        {sound.shortcut}
-                      </span>
-                    </div>
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
+                    <ToggleSetting
+                      label="Modo Gamer / Otimização de CPU"
+                      description="Desativa sombras neon dinâmicas e transições complexas para reduzir o uso do hardware durante jogos."
+                      checked={prefGamerMode}
+                      onChange={(v) => setPrefGamerMode(v)}
+                    />
                   </div>
-                ))}
-                {!(state.sounds || []).some((s) => s.shortcut) && (
-                  <div style={{ color: "var(--text-muted)", textAlign: "center", padding: "32px 0", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)" }}>
-                    Nenhum atalho configurado até o momento.
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
+            </>
           )}
 
+          {/* TAB 6: MAINTENANCE AND LIFECYCLE */}
           {tab === "manutencao" && (
-            <div className="labCard" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="labCardTitle">
-                <Lightning size={18} />
-                <span>Manutenção do Sistema</span>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "voice" }).then(() => setToast("Configurações de voz restauradas!"))}>
-                  Restaurar voz padrão
-                </button>
-                <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "effects" }).then(() => setToast("Efeitos de voz limpos!"))}>
-                  Restaurar efeitos
-                </button>
-                <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "soundboard" }).then(() => setToast("Sons restaurados!"))}>
-                  Restaurar soundboard
-                </button>
-                <button className="btn btn-danger" style={{ justifyContent: "center" }} onClick={() => { if(confirm("Deseja realmente apagar todas as configurações e presets?")) call("/api/reset").then(() => setToast("Reset completo efetuado!")); }}>
-                  Reset de fábrica completo
-                </button>
+            <>
+              {/* Card 1: Initialization & Closing */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <XCircle size={18} />
+                  <span>Inicialização e Fechamento</span>
+                </div>
+                <div className="settingCardDesc">
+                  Configure o comportamento do MicFudiddo ao ser aberto ou quando você clicar para fechar a tela.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <ToggleSetting
+                    label="Iniciar rota automaticamente"
+                    description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo"
+                    checked={state.settings?.autoStartVirtual}
+                    onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
+                  />
+
+                  <ToggleSetting
+                    label="Restaurar microfone original"
+                    description="Redefine o microfone padrão do Windows ao fechar o app para que você não precise alterar manualmente"
+                    checked={state.settings?.restoreOnDisable}
+                    onChange={(v) => call("/api/settings", { restoreOnDisable: v })}
+                  />
+
+                  {state.settings?.restoreOnDisable && (
+                    <div className="selectField">
+                      <label>Microfone padrão ao fechar o app</label>
+                      <select
+                        value={state.settings?.defaultMicOnClose || "restore"}
+                        onChange={(e) => call("/api/settings", { defaultMicOnClose: e.target.value })}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          background: "var(--bg-input)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          color: "var(--text)",
+                          outline: "none",
+                          fontSize: 12
+                        }}
+                      >
+                        <option value="restore">Restaurar microfone anterior (Recomendado)</option>
+                        <option value="keep">Manter microfone atual</option>
+                        <option value="choose">Escolher microfone ao fechar</option>
+                        {(state.windowsCaptureEndpoints || []).map((ep) => (
+                          <option key={ep.id} value={ep.id}>{ep.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+                    <ToggleSetting
+                      label="Confirmar fechamento"
+                      description="Exibe caixa de diálogo confirmando se deseja ir para a bandeja ou fechar o app"
+                      checked={state.settings?.confirmClose !== false}
+                      onChange={(v) => call("/api/settings", { confirmClose: v })}
+                    />
+                  </div>
+
+                  <div className="selectField">
+                    <label>Ação padrão ao fechar o app</label>
+                    <select
+                      value={state.settings?.closeBehavior || "ask"}
+                      onChange={(e) => call("/api/settings", { closeBehavior: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text)",
+                        outline: "none",
+                        fontSize: 12
+                      }}
+                    >
+                      <option value="ask">Perguntar toda vez (Padrão)</option>
+                      <option value="tray">Minimizar para a bandeja / sistema</option>
+                      <option value="quit">Encerrar o aplicativo totalmente</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
+              {/* Card 2: Profiles & Backups */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
                   <Lightning size={18} />
                   <span>Backup de Perfis e Configurações</span>
                 </div>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
-                  Salve todas as suas predefinições de som, vozes customizadas, favoritos e configurações visuais em um único arquivo de backup, ou redefina o seu perfil.
-                </p>
+                <div className="settingCardDesc">
+                  Exporte e importe suas predefinições de som, vozes customizadas, favoritos e regras visuais em arquivos locais.
+                </div>
+
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", fontSize: 11 }} onClick={() => {
                     const backup = {};
@@ -746,7 +887,7 @@ export function ConfigPage({
                     dlAnchorElem.click();
                     setToast("Backup do perfil exportado!");
                   }}>
-                    📥 Exportar Perfil de Configurações
+                    📥 Exportar Configurações
                   </button>
                   <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", fontSize: 11 }} onClick={() => {
                     const input = document.createElement("input");
@@ -769,7 +910,7 @@ export function ConfigPage({
                     };
                     input.click();
                   }}>
-                    📤 Importar Perfil de Configurações
+                    📤 Importar Configurações
                   </button>
                   <button className="btn btn-danger" style={{ fontSize: 11, background: "rgba(239,68,68,0.08)", border: "1px solid var(--danger)", color: "var(--danger)" }} onClick={() => {
                     if (confirm("Deseja realmente redefinir o seu perfil de usuário (nome, avatar, bio, readme) para o padrão?")) {
@@ -784,66 +925,48 @@ export function ConfigPage({
                       setTimeout(() => window.location.reload(), 1500);
                     }
                   }}>
-                    👤 Redefinir Perfil do Usuário
+                    👤 Redefinir Cadastro de Perfil
                   </button>
                 </div>
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
-                  <MusicNotes size={18} />
-                  <span>Comportamento do Soundboard</span>
+              {/* Card 3: Database Factory Reset */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <Lightning size={18} />
+                  <span>Limpeza e Restauração de Fábrica</span>
                 </div>
-                <ToggleSetting
-                  label="Sobrepor reprodução de sons"
-                  description="Permite tocar múltiplos sons simultaneamente no soundboard"
-                  checked={state.settings?.allowMultipleSounds}
-                  onChange={(v) => call("/api/settings", { allowMultipleSounds: v })}
-                />
-              </div>
+                <div className="settingCardDesc">
+                  Redefina as tabelas internas do banco de dados para os valores padrão de fábrica caso note instabilidades.
+                </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 8 }}>
-                  <Record size={18} />
-                  <span>Fontes para Gravação de Som do PC</span>
-                </div>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
-                  Selecione os canais de áudio que deseja capturar ao clicar em "Gravar PC".
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {(state.recordDevices || []).map((device) => (
-                    <div key={device.index} className="settingItem" style={{ background: "rgba(255,255,255,0.01)", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div className="settingInfo">
-                        <div className="settingLabel" style={{ fontSize: 13, fontWeight: 700 }}>{device.name}</div>
-                        <div className="settingDesc" style={{ fontSize: 11, color: "var(--text-muted)" }}>{device.is_loopback ? "Loopback (Saída)" : "Entrada (Captura)"}</div>
-                      </div>
-                      <div className="settingControl">
-                        <label className="toggleSwitch">
-                          <input
-                            type="checkbox"
-                            checked={selectedRecordDevices.includes(device.index)}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...selectedRecordDevices, device.index]
-                                : selectedRecordDevices.filter((i) => i !== device.index);
-                              setSelectedRecordDevices(next);
-                              call("/api/record/selection", { indexes: next });
-                            }}
-                          />
-                          <span className="toggleTrack" />
-                        </label>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "voice" }).then(() => setToast("Configurações de voz restauradas!"))}>
+                    Restaurar vozes padrão
+                  </button>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "effects" }).then(() => setToast("Efeitos de voz limpos!"))}>
+                    Restaurar efeitos padrão
+                  </button>
+                  <button className="btn btn-ghost" style={{ border: "1px solid var(--border)", justifyContent: "center" }} onClick={() => call("/api/reset-section", { section: "soundboard" }).then(() => setToast("Sons do soundboard restaurados!"))}>
+                    Restaurar sons padrão
+                  </button>
+                  <button className="btn btn-danger" style={{ justifyContent: "center" }} onClick={() => { if(confirm("Deseja realmente apagar todas as configurações, sons e presets?")) call("/api/reset").then(() => setToast("Reset completo efetuado!")); }}>
+                    Redefinir tudo de fábrica
+                  </button>
                 </div>
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-                <div className="labCardTitle" style={{ marginBottom: 12 }}>
+              {/* Card 4: Audio Diagnostics */}
+              <div className="settingCard">
+                <div className="settingCardTitle">
                   <ChartBar size={18} />
-                  <span>Diagnósticos de Áudio</span>
+                  <span>Diagnósticos de Áudio em Tempo Real</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="settingCardDesc">
+                  Verifique o estado de conexão com os serviços internos e dispositivos ativos.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <StatusLine label="Serviço de Processamento" value={state.running ? "ONLINE" : "OFFLINE"} active={state.running} />
                   <StatusLine label="Integração Virtual Windows" value={state.virtualMode ? "ONLINE" : "OFFLINE"} active={state.virtualMode} />
                   <StatusLine label="Hardware de Entrada (Mic)" value={deviceName(state.devices?.inputs, state.selected?.input)} />
@@ -852,8 +975,9 @@ export function ConfigPage({
                   {state.sampleRate && <StatusLine label="Taxa de Amostragem do Driver" value={`${state.sampleRate} Hz`} />}
                 </div>
               </div>
-            </div>
+            </>
           )}
+
         </div>
       </div>
     </div>

@@ -354,6 +354,8 @@ function App() {
   // Persistence hooks
   useEffect(() => { localStorage.setItem("micfudiddo.page", page); }, [page]);
   useEffect(() => { localStorage.setItem("micfudiddo.accentColor", accentColor); }, [accentColor]);
+  useEffect(() => { localStorage.setItem("micfudiddo.theme", appTheme); }, [appTheme]);
+  useEffect(() => { localStorage.setItem("micfudiddo.customAccentColor", customAccentColor); }, [customAccentColor]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileName", profileName); }, [profileName]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileSub", profileSub); }, [profileSub]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileImage", profileImage); }, [profileImage]);

@@ -3986,6 +3986,201 @@ body.gamer-mode-active * {
   --bg-bottom-bar: #020208;
   --bg-input: #060615;
   --text: #ffffff;
+  background: var(--purple);
+  cursor: pointer;
+}
+
+.audioPlayerCard .sliderValue {
+  font-size: 9px;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+  font-weight: 800;
+}
+
+/* Category row in modal */
+.category-row-hover:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Premium Import Button Group */
+.importButtonGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.importButtonGroup:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+}
+
+.importButtonGroup button.btn {
+  border: none !important;
+  border-radius: 0 !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  margin: 0 !important;
+  padding: 8px 14px !important;
+  font-weight: 700 !important;
+  transition: background-color 0.18s ease, color 0.18s ease !important;
+}
+
+.importButtonGroup button.btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text) !important;
+}
+
+/* Collapsible YouTube Import Panel */
+.collapsible-youtube-panel {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  transition: all 0.2s ease;
+}
+
+.collapsible-youtube-panel input::placeholder {
+  color: var(--text-muted);
+}
+
+.collapsible-youtube-panel input:focus {
+  border-color: var(--purple-soft) !important;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+/* Glassmorphic Sticky Audio Player (Always Active When Visible) */
+.audioPlayerSection.pinned {
+  position: sticky !important;
+  top: 0px !important;
+  z-index: 100 !important;
+  background: rgba(11, 17, 26, 0.82) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(139, 92, 246, 0.25) !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  border-radius: var(--radius-md) !important;
+  margin-left: -8px !important;
+  margin-right: -8px !important;
+  padding: 14px 24px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Extra grid responsiveness rules for notebook, 1080p, 1440p, 4K */
+@media (min-width: 1920px) {
+  .soundGrid {
+    grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)) !important;
+    gap: 12px !important;
+  }
+}
+
+@media (min-width: 2560px) {
+  .soundGrid {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
+    gap: 16px !important;
+  }
+  .soundCard {
+    padding: 16px !important;
+    min-height: 100px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .soundGrid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .soundCard {
+    padding: 10px !important;
+    min-height: 70px !important;
+  }
+}
+
+/* Estilo para Renderização de Listas Markdown */
+.readme-container ul, .changelog-markdown ul, .readme-rendered ul {
+  list-style-type: disc !important;
+  margin-left: 20px !important;
+  margin-bottom: 12px !important;
+  padding-left: 4px !important;
+  list-style-position: outside !important;
+}
+
+.readme-container ol, .changelog-markdown ol, .readme-rendered ol {
+  list-style-type: decimal !important;
+  margin-left: 20px !important;
+  margin-bottom: 12px !important;
+  padding-left: 4px !important;
+  list-style-position: outside !important;
+}
+
+.readme-container li, .changelog-markdown li, .readme-rendered li {
+  margin-bottom: 6px !important;
+  padding-left: 4px !important;
+  line-height: 1.6 !important;
+  display: list-item !important;
+}
+
+/* Modo Gamer / Desempenho (Low CPU) */
+body.gamer-mode-active * {
+  transition: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Temas personalizados */
+:root.theme-cyberpunk {
+  --bg-base: #0F1117;
+  --bg-sidebar: #0B0E15;
+  --bg-card: #161A23;
+  --bg-card-hover: #1C2030;
+  --bg-card-secondary: #202532;
+  --bg-bottom-bar: #0D1019;
+  --bg-input: #111420;
+  --text: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --border: rgba(255, 255, 255, .06);
+}
+
+:root.theme-dracula {
+  --bg-base: #282a36;
+  --bg-sidebar: #21222c;
+  --bg-card: #1e1f29;
+  --bg-card-hover: #44475a;
+  --bg-card-secondary: #2d3748;
+  --bg-bottom-bar: #1d1f27;
+  --bg-input: #191a21;
+  --text: #f8f8f2;
+  --text-secondary: #6272a4;
+  --text-muted: #8be9fd;
+  --border: rgba(189, 147, 249, 0.15);
+}
+
+:root.theme-vampire {
+  --bg-base: #140404;
+  --bg-sidebar: #0c0202;
+  --bg-card: #200808;
+  --bg-card-hover: #2d0b0b;
+  --bg-card-secondary: #3b0e0e;
+  --bg-bottom-bar: #090202;
+  --bg-input: #1b0707;
+  --text: #f5c2c2;
+  --text-secondary: #ea6b6b;
+  --text-muted: #ff3333;
+  --border: rgba(239, 68, 68, 0.12);
+}
+
+:root.theme-neon {
+  --bg-base: #03030b;
+  --bg-sidebar: #010105;
+  --bg-card: #08081a;
+  --bg-card-hover: #0c0c2a;
+  --bg-card-secondary: #101035;
+  --bg-bottom-bar: #020208;
+  --bg-input: #060615;
+  --text: #ffffff;
   --text-secondary: #bcfe00;
   --text-muted: #00ffcc;
   --border: rgba(0, 229, 255, 0.12);
@@ -4003,4 +4198,129 @@ body.gamer-mode-active * {
   --text-secondary: #ff007f;
   --text-muted: #00f0ff;
   --border: rgba(255, 0, 127, 0.15);
+}
+
+/* Redesigned Settings Styles */
+.settingCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.settingCard:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2), 0 0 12px var(--purple-soft);
+}
+
+.settingCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--purple);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settingCardTitle svg {
+  color: var(--purple);
+}
+
+.settingCardDesc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: -6px;
+  margin-bottom: 4px;
+}
+
+/* Sidebar floating cards */
+.config-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 28px;
+  margin-top: 20px;
+}
+
+.config-sidebar {
+  background: rgba(22, 26, 35, 0.45);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-sm);
+  align-self: start;
+}
+
+.config-sidebar-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+}
+
+.config-sidebar-btn:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.config-sidebar-btn.active {
+  background: var(--purple-soft);
+  border-color: var(--purple);
+  color: var(--text);
+  box-shadow: 0 0 14px var(--purple-soft);
+  font-weight: 700;
+}
+
+.disk-usage-container {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.disk-usage-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.disk-usage-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.disk-usage-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple), var(--cyan));
+  box-shadow: 0 0 8px var(--purple-glow);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
 }

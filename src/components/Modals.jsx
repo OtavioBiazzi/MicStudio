@@ -1373,12 +1373,20 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.25": `### 🌟 Versão 0.5.25 (Versão Atual)
+  "v0.5.26": `### 🌟 Versão 0.5.26 (Versão Atual)
+* 🐛 **Correção de Inicialização e Conexão**: Resolvidos problemas críticos de colisão de porta e falhas de inicialização do backend que causavam erro de conexão ao abrir o aplicativo.
 * 🎵 **Ritmo & Harmonia**: Lançamento do harmonizador polifônico **Magic Chords** (escalas Major, Minor, Space, Octaves, Mystic) e da bateria procedural **Beatbox Jam** (bumbo, caixa e chimbal sintetizados em tempo real). Expostos controles de BPM e Modo no Modular Voice Lab e na edição de presets.
 * 🎛️ **Faders Mestres Globais**: Ganho do Microfone e Volume da Voz no Quick Mixer agora atuam de forma global, garantindo que presets e efeitos nunca desconfigurem ou silenciem seu volume configurado.
 * 🎬 **Separação de Faixas de Clipe**: Clipes gravados com Voz + PC agora salvam faixas brutas individuais. No editor avançado de som, você pode optar por isolar apenas a voz ou o PC a qualquer momento com remixagem automática.
 * ✍️ **Correção na Renomeação**: Resolvido o problema onde o campo de digitação de nome de som resetava a cada 700ms devido ao polling de atualização de estado.
 * 📋 **Cópia de Link Segura**: Correção na cópia de links mágicos de compartilhamento e códigos de voz através de roteamento IPC nativo do Electron.`,
+
+  "v0.5.25": `### 🌟 Versão 0.5.25
+* 🎵 **Ritmo & Harmonia**: Lançamento do harmonizador polifônico Magic Chords e Beatbox Jam.
+* 🎛️ **Faders Mestres Globais**: Ganho do Microfone e Volume da Voz no Quick Mixer agora atuam de forma global.
+* 🎬 **Separação de Faixas de Clipe**: Suporte para isolar apenas a voz ou o PC a qualquer momento com remixagem automática.
+* ✍️ **Correção na Renomeação**: Resolvido o problema onde o campo de digitação de nome de som resetava.
+* 📋 **Cópia de Link Segura**: Correção na cópia de links de compartilhamento.`,
 
   "v0.5.24": `### 🌟 Versão 0.5.24
 * 🎬 **Gravação de Clipes Retroativos (Clipping)**: Salve momentos engraçados depois que eles acontecem! Configure a duração e o atalho nas Configurações do app.
@@ -1516,6 +1524,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.26", tag_name: "v0.5.26", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.25", tag_name: "v0.5.25", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.24", tag_name: "v0.5.24", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.23", tag_name: "v0.5.23", published_at: new Date().toISOString(), body: "" },

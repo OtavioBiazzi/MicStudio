@@ -2426,90 +2426,6 @@ class Handler(BaseHTTPRequestHandler):
             STATE.status = f"Categoria '{category_to_delete}' excluída, {modified} som(ns) movidos para Geral."
             return STATE.snapshot()
 
-def remix_clip(clip_path_str: str) -> None:
-    clip_path = Path(clip_path_str)
-    base_dir = clip_path.parent
-    stem = clip_path.stem
-    
-    voice_path = base_dir / f"{stem}.voice.wav"
-    pc_path = base_dir / f"{stem}.pc.wav"
-    
-    voice_disabled = (base_dir / f"{stem}.voice.disabled").exists()
-    pc_disabled = (base_dir / f"{stem}.pc.disabled").exists()
-    
-    import soundfile as sf
-    import numpy as np
-    
-    voice_audio = np.zeros(0, dtype=np.float32)
-    if voice_path.exists() and not voice_disabled:
-        try:
-            voice_audio, _ = sf.read(str(voice_path), dtype="float32")
-        except Exception:
-            pass
-            
-    pc_audio = np.zeros(0, dtype=np.float32)
-    if pc_path.exists() and not pc_disabled:
-        try:
-            pc_audio, _ = sf.read(str(pc_path), dtype="float32")
-        except Exception:
-            pass
-            
-    max_len = max(voice_audio.size, pc_audio.size)
-    if max_len == 0:
-        sf.write(str(clip_path), np.zeros(1024, dtype=np.float32), 48000)
-        return
-        
-    mixed = np.zeros(max_len, dtype=np.float32)
-    if voice_audio.size > 0:
-        mixed[:voice_audio.size] += voice_audio
-    if pc_audio.size > 0:
-        mixed[:pc_audio.size] += pc_audio
-        
-    if voice_audio.size > 0 and pc_audio.size > 0:
-        mixed /= 2.0
-        
-    sf.write(str(clip_path), mixed, 48000)
-
-
-def handle_clip_remix_payload(item, data):
-    if not item or not item.path:
-        return
-    clip_path = Path(item.path)
-    if not clip_path.name.startswith("clip_"):
-        return
-    
-    stem = clip_path.stem
-    base_dir = clip_path.parent
-    changed = False
-    
-    if "clipVoiceEnabled" in data:
-        enabled = bool(data["clipVoiceEnabled"])
-        sentinel = base_dir / f"{stem}.voice.disabled"
-        if enabled:
-            if sentinel.exists():
-                sentinel.unlink(missing_ok=True)
-                changed = True
-        else:
-            if not sentinel.exists():
-                sentinel.write_text("disabled")
-                changed = True
-                
-    if "clipPcEnabled" in data:
-        enabled = bool(data["clipPcEnabled"])
-        sentinel = base_dir / f"{stem}.pc.disabled"
-        if enabled:
-            if sentinel.exists():
-                sentinel.unlink(missing_ok=True)
-                changed = True
-        else:
-            if not sentinel.exists():
-                sentinel.write_text("disabled")
-                changed = True
-                
-    if changed:
-        remix_clip(item.path)
-
-
         if path == "/api/sounds/delete":
             removed = STATE.library.detach(str(data["id"]))
             if removed:
@@ -2961,6 +2877,90 @@ def handle_clip_remix_payload(item, data):
 
     def log_message(self, _format: str, *_args) -> None:
         return
+
+
+def remix_clip(clip_path_str: str) -> None:
+    clip_path = Path(clip_path_str)
+    base_dir = clip_path.parent
+    stem = clip_path.stem
+    
+    voice_path = base_dir / f"{stem}.voice.wav"
+    pc_path = base_dir / f"{stem}.pc.wav"
+    
+    voice_disabled = (base_dir / f"{stem}.voice.disabled").exists()
+    pc_disabled = (base_dir / f"{stem}.pc.disabled").exists()
+    
+    import soundfile as sf
+    import numpy as np
+    
+    voice_audio = np.zeros(0, dtype=np.float32)
+    if voice_path.exists() and not voice_disabled:
+        try:
+            voice_audio, _ = sf.read(str(voice_path), dtype="float32")
+        except Exception:
+            pass
+            
+    pc_audio = np.zeros(0, dtype=np.float32)
+    if pc_path.exists() and not pc_disabled:
+        try:
+            pc_audio, _ = sf.read(str(pc_path), dtype="float32")
+        except Exception:
+            pass
+            
+    max_len = max(voice_audio.size, pc_audio.size)
+    if max_len == 0:
+        sf.write(str(clip_path), np.zeros(1024, dtype=np.float32), 48000)
+        return
+        
+    mixed = np.zeros(max_len, dtype=np.float32)
+    if voice_audio.size > 0:
+        mixed[:voice_audio.size] += voice_audio
+    if pc_audio.size > 0:
+        mixed[:pc_audio.size] += pc_audio
+        
+    if voice_audio.size > 0 and pc_audio.size > 0:
+        mixed /= 2.0
+        
+    sf.write(str(clip_path), mixed, 48000)
+
+
+def handle_clip_remix_payload(item, data):
+    if not item or not item.path:
+        return
+    clip_path = Path(item.path)
+    if not clip_path.name.startswith("clip_"):
+        return
+    
+    stem = clip_path.stem
+    base_dir = clip_path.parent
+    changed = False
+    
+    if "clipVoiceEnabled" in data:
+        enabled = bool(data["clipVoiceEnabled"])
+        sentinel = base_dir / f"{stem}.voice.disabled"
+        if enabled:
+            if sentinel.exists():
+                sentinel.unlink(missing_ok=True)
+                changed = True
+        else:
+            if not sentinel.exists():
+                sentinel.write_text("disabled")
+                changed = True
+                
+    if "clipPcEnabled" in data:
+        enabled = bool(data["clipPcEnabled"])
+        sentinel = base_dir / f"{stem}.pc.disabled"
+        if enabled:
+            if sentinel.exists():
+                sentinel.unlink(missing_ok=True)
+                changed = True
+        else:
+            if not sentinel.exists():
+                sentinel.write_text("disabled")
+                changed = True
+                
+    if changed:
+        remix_clip(item.path)
 
 
 def watch_parent_process() -> None:

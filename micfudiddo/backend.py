@@ -212,6 +212,7 @@ DEFAULT_APP_SETTINGS = {
     "clipDuration": "30",
     "shortcutClip": "",
     "clipSource": "both",
+    "showTtsWidgetSpeed": True,
 }
 
 DEFAULT_PROFILE = {

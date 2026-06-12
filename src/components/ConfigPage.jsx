@@ -268,6 +268,12 @@ export function ConfigPage({
                   checked={state.settings?.restoreOnDisable}
                   onChange={(v) => call("/api/settings", { restoreOnDisable: v })}
                 />
+                <ToggleSetting
+                  label="Mostrar velocidade no Widget TTS"
+                  description="Exibir controle de velocidade de fala diretamente na barra flutuante (TTSWidget)"
+                  checked={state.settings?.showTtsWidgetSpeed !== false}
+                  onChange={(v) => call("/api/settings", { showTtsWidgetSpeed: v })}
+                />
                 {state.settings?.restoreOnDisable && (
                   <div className="selectField" style={{ marginTop: 12 }}>
                     <label>Microfone padrão ao fechar o app</label>

@@ -1736,7 +1736,9 @@ export function TTSModal({ onClose, call, setToast }) {
   const [selectedVoice, setSelectedVoice] = useState(() => {
     return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
   });
-  const [rate, setRate] = useState(0); // Slider: -50 to +50
+  const [rate, setRate] = useState(() => {
+    return Number(localStorage.getItem("tts_default_rate") || 0);
+  }); // Slider: -50 to +50
   const [soundName, setSoundName] = useState("");
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -1761,6 +1763,11 @@ export function TTSModal({ onClose, call, setToast }) {
     const val = e.target.value;
     setSelectedVoice(val);
     localStorage.setItem("tts_default_voice", val);
+  };
+
+  const handleRateChange = (val) => {
+    setRate(val);
+    localStorage.setItem("tts_default_rate", val);
   };
 
   const handleSpeak = async () => {
@@ -1816,8 +1823,11 @@ export function TTSModal({ onClose, call, setToast }) {
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
+    { id: "pt-BR-ValerioNeural", name: "Valerio (Masculina - BR)" },
+    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-PT-FernandaNeural", name: "Fernanda (Feminina - PT)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
@@ -1935,7 +1945,7 @@ export function TTSModal({ onClose, call, setToast }) {
                 max={50}
                 step={5}
                 value={rate}
-                onChange={(e) => setRate(Number(e.target.value))}
+                onChange={(e) => handleRateChange(Number(e.target.value))}
                 disabled={isWorking}
                 style={{
                   width: "100%",

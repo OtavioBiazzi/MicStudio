@@ -1194,12 +1194,19 @@ function TTSWidget() {
     return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
   });
   const [speaking, setSpeaking] = useState(false);
+  const [showSpeed, setShowSpeed] = useState(true);
+  const [rate, setRate] = useState(() => {
+    return Number(localStorage.getItem("tts_default_rate") || 0);
+  });
 
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
     { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
+    { id: "pt-BR-ValerioNeural", name: "Valerio (Masculina - BR)" },
+    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
     { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
     { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
+    { id: "pt-PT-FernandaNeural", name: "Fernanda (Feminina - PT)" },
     { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
     { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
     { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
@@ -1210,9 +1217,25 @@ function TTSWidget() {
     { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
   ];
 
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API}/api/state`);
+        const json = await res.json();
+        if (json && json.settings) {
+          setShowSpeed(json.settings.showTtsWidgetSpeed !== false);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar configuracoes do widget:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   const handleSpeak = async () => {
     if (!text.trim() || speaking) return;
     setSpeaking(true);
+    const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
       await fetch(`${API}/api/tts/speak`, {
         method: "POST",
@@ -1220,7 +1243,7 @@ function TTSWidget() {
         body: JSON.stringify({
           text: text.trim(),
           voice: selectedVoice,
-          rate: "+0%"
+          rate: formattedRate
         })
       });
       setText("");
@@ -1235,6 +1258,11 @@ function TTSWidget() {
     const val = e.target.value;
     setSelectedVoice(val);
     localStorage.setItem("tts_default_voice", val);
+  };
+
+  const handleRateChange = (val) => {
+    setRate(val);
+    localStorage.setItem("tts_default_rate", val);
   };
 
   return (
@@ -1289,7 +1317,7 @@ function TTSWidget() {
           color: "#fff",
           padding: "6px 8px",
           fontSize: "12px",
-          maxWidth: "130px",
+          maxWidth: "110px",
           cursor: "pointer",
           outline: "none"
         }}
@@ -1300,6 +1328,39 @@ function TTSWidget() {
           </option>
         ))}
       </select>
+
+      {/* Speed Slider in Widget */}
+      {showSpeed && (
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "2px",
+          width: "70px",
+          WebkitAppRegion: "no-drag"
+        }}>
+          <span style={{ fontSize: "9px", color: "rgba(255, 255, 255, 0.4)", fontWeight: "bold" }}>
+            Vel: {rate >= 0 ? `+${rate}%` : `${rate}%`}
+          </span>
+          <input
+            type="range"
+            min={-50}
+            max={50}
+            step={5}
+            value={rate}
+            onChange={(e) => handleRateChange(Number(e.target.value))}
+            style={{
+              width: "100%",
+              height: "4px",
+              accentColor: "#a855f7",
+              cursor: "pointer",
+              background: "rgba(255,255,255,0.1)",
+              border: "none",
+              outline: "none"
+            }}
+          />
+        </div>
+      )}
 
       {/* Input Field with Character Limit & Counter */}
       <div style={{ display: "flex", flex: 1, alignItems: "center", position: "relative", WebkitAppRegion: "no-drag" }}>

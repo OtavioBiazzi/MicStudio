@@ -244,17 +244,7 @@ async function refreshSoundHotkeys() {
       try {
         const ok = globalShortcut.register(accelerator, () => {
           if (actionName === "focus_tts_widget") {
-            if (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed()) {
-              createTtsWidgetWindow();
-              ttsWidgetWindow.webContents.on("did-finish-load", () => {
-                setTimeout(() => {
-                  if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
-                    ttsWidgetWindow.focus();
-                    ttsWidgetWindow.webContents.send("tts-widget:focus-input");
-                  }
-                }, 400);
-              });
-            } else {
+            if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
               ttsWidgetWindow.focus();
               ttsWidgetWindow.webContents.send("tts-widget:focus-input");
             }

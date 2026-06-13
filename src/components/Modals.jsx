@@ -1373,7 +1373,39 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.33": `### 🌟 Versão 0.5.33 (Versão Atual)
+  "v0.5.40": `### 🌟 Versão 0.5.40 (Versão Atual)
+* 🎯 **Atalho de Digitação Inteligente**: O atalho global para focar a digitação (Widget TTS) agora só foca o input se o widget já estiver aberto ou fixado na tela. Ele não abre mais a janela flutuante acidentalmente caso ela esteja fechada.
+* 📜 **Changelog Atualizado**: Histórico de notas de atualização exibindo informações completas desde a versão v0.5.34 em diante.`,
+
+  "v0.5.39": `### 🌟 Versão 0.5.39
+* ⚡ **Sem Lag no Mixer**: Implementado debouncing inteligente nas chamadas de controle do mixer rápido. O pitch e volumes atualizam visualmente na hora e enviam as requisições ao backend de forma suave sem causar resvalos ou fazer o controle pular ao soltá-lo.
+* 🔄 **Reset por Aba**: Adicionado botão no rodapé das Configurações que permite restaurar de fábrica as definições exclusivamente da aba ativa.
+* 🛑 **Bloqueio de Soundboard Cheio**: Validação de segurança que bloqueia importações quando o limite do Soundboard é atingido, exibindo indicador vermelho de alerta.`,
+
+  "v0.5.38": `### 🌟 Versão 0.5.38
+* 🧹 **Limpeza Snappy**: Deseleção e limpeza do campo de digitação do Widget TTS ocorrem instantaneamente ao apertar Enter, sem aguardar o retorno da rede.
+* 🔊 **Volume no Widget**: Mini slider de volume (0% a 200%) embutido na segunda linha do painel flutuante, ativado por padrão.
+* 🚪 **Atalho Esc**: Pressione Esc na barra de digitação rápida para fechar o widget imediatamente.
+* ⚠️ **Aviso de Textos Longos**: Confirmação visual obrigatória antes de processar ou salvar textos gigantes com 5.000 ou mais linhas.
+* ⌨️ **Enter no TTS Modal**: Pressione Enter na janela normal de digitação do TTS para reproduzir a voz diretamente (Shift+Enter para pular linha).`,
+
+  "v0.5.37": `### 🌟 Versão 0.5.37
+* 🔊 **Ajuste de Volume do TTS**: Adicionada opção de volume padrão (0% a 200%) nas configurações de síntese de voz, afetando a geração dos áudios e previews.`,
+
+  "v0.5.36": `### 🌟 Versão 0.5.36
+* ⚙️ **Redesign das Configurações**: Interface reorganizada em 6 abas temáticas modernas (Áudio, TTS, Soundboard, Atalhos, Personalização, Sistema).
+* 🔮 **Salvamento Automático**: Opções estéticas e de tema salvam dinamicamente sem necessidade de botão salvar.
+* 📊 **Barra de Armazenamento**: Gráfico linear que indica o espaço consumido pelos áudios salvos na pasta da soundboard.`,
+
+  "v0.5.35": `### 🌟 Versão 0.5.35
+* 🎯 **Atalho Focar Digitação**: Atalho global para abrir/focar a barra rápida de digitação instantaneamente.
+* 💾 **Manter Texto**: Configuração para impedir que a escrita do widget limpe após falar.
+* 🧹 **Auto-Limpeza de Cache**: Otimização do cache de reprodução de TTS para excluir arquivos temporários antigos.`,
+
+  "v0.5.34": `### 🌟 Versão 0.5.34
+* 📜 **Fallback de Changelogs**: Histórico detalhado de notas de lançamentos integrada localmente para exibição offline e consultas rápidas.`,
+
+  "v0.5.33": `### 🌟 Versão 0.5.33
 * 🎛️ **Novo Layout do Widget TTS**: Redesenhamos o widget de TTS flutuante com uma estrutura de duas linhas. Os controles principais ficam no topo e o slider de velocidade horizontal estende-se por toda a largura na linha inferior para maior precisão e design elegante. A altura da janela foi aumentada para 90px.
 * 🗂️ **Agrupamento de Vozes por Região**: Vozes em português agrupadas por região (todas as BR primeiro: Antonio, Francisca, Thalita; seguidas das de Portugal: Duarte, Raquel).`,
 
@@ -1554,6 +1586,13 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.40", tag_name: "v0.5.40", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.39", tag_name: "v0.5.39", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.38", tag_name: "v0.5.38", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.37", tag_name: "v0.5.37", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.36", tag_name: "v0.5.36", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.35", tag_name: "v0.5.35", published_at: new Date().toISOString(), body: "" },
+  { id: "v0.5.34", tag_name: "v0.5.34", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.33", tag_name: "v0.5.33", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.32", tag_name: "v0.5.32", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.31", tag_name: "v0.5.31", published_at: new Date().toISOString(), body: "" },

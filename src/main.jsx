@@ -1535,8 +1535,8 @@ function TTSWidget() {
               </span>
               <input
                 type="range"
-                min={-50}
-                max={50}
+                min={-100}
+                max={200}
                 step={5}
                 value={rate}
                 onChange={(e) => handleRateChange(Number(e.target.value))}

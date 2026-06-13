@@ -1373,7 +1373,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.40": `### 🌟 Versão 0.5.40 (Versão Atual)
+  "v0.5.41": `### 🌟 Versão 0.5.41 (Versão Atual)
+* 🎨 **Sincronização de Temas no Widget TTS**: O Widget flutuante de TTS agora responde instantaneamente à mudança de temas nas configurações, aplicando a paleta de cores selecionada (Cyberpunk, Dracula, Vampire, Neon, Synthwave) de forma síncrona.`,
+
+  "v0.5.40": `### 🌟 Versão 0.5.40
 * 🎯 **Atalho de Digitação Inteligente**: O atalho global para focar a digitação (Widget TTS) agora só foca o input se o widget já estiver aberto ou fixado na tela. Ele não abre mais a janela flutuante acidentalmente caso ela esteja fechada.
 * 📜 **Changelog Atualizado**: Histórico de notas de atualização exibindo informações completas desde a versão v0.5.34 em diante.`,
 
@@ -1586,6 +1589,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.41", tag_name: "v0.5.41", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.40", tag_name: "v0.5.40", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.39", tag_name: "v0.5.39", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.38", tag_name: "v0.5.38", published_at: new Date().toISOString(), body: "" },

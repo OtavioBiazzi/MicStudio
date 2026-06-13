@@ -1215,9 +1215,30 @@ function TTSWidget() {
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   });
+  const [appTheme, setAppTheme] = useState(() => {
+    return localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
+  });
 
   const inputRef = useRef(null);
   const volumeDraggingRef = useRef(false);
+
+  // Apply theme class to widget root
+  useEffect(() => {
+    const r = document.documentElement;
+    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon", "theme-synthwave");
+    r.classList.add(appTheme);
+  }, [appTheme]);
+
+  // Sync theme when localStorage updates
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === "micfudiddo.theme" && e.newValue) {
+        setAppTheme(e.newValue);
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   const voicesList = [
     { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
@@ -1254,6 +1275,8 @@ function TTSWidget() {
       } catch (err) {
         console.error("Error fetching state:", err);
       }
+      const currentTheme = localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
+      setAppTheme(currentTheme);
     };
     fetchSettings();
     const interval = setInterval(fetchSettings, 300);

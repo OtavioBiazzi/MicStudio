@@ -1247,7 +1247,7 @@ function TTSWidget() {
       }
     };
     fetchSettings();
-    const interval = setInterval(fetchSettings, 1000);
+    const interval = setInterval(fetchSettings, 300);
     return () => clearInterval(interval);
   }, []);
 
@@ -1271,6 +1271,15 @@ function TTSWidget() {
       if (!confirm) return;
     }
 
+    const ttsText = text.trim();
+    if (!keepText) {
+      setText("");
+    } else {
+      if (inputRef.current) {
+        inputRef.current.setSelectionRange(text.length, text.length);
+      }
+    }
+
     setSpeaking(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
@@ -1278,18 +1287,11 @@ function TTSWidget() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: text.trim(),
+          text: ttsText,
           voice: selectedVoice,
           rate: formattedRate
         })
       });
-      if (!keepText) {
-        setText("");
-      } else {
-        if (inputRef.current) {
-          inputRef.current.setSelectionRange(text.length, text.length);
-        }
-      }
     } catch (err) {
       console.error(err);
     } finally {

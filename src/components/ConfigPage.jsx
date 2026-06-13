@@ -108,6 +108,89 @@ export function ConfigPage({
   const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
   const storageLimitMB = Number(state.settings?.maxSoundboardStorage ?? 0);
 
+  const resetTabSettings = async (tabName) => {
+    const tabNamesMap = {
+      audio: "Áudio e Dispositivos",
+      tts: "Voz e TTS",
+      soundboard: "Soundboard e Clipes",
+      shortcuts: "Atalhos Globais",
+      aparencia: "Personalização",
+      manutencao: "Sistema e Manutenção"
+    };
+    
+    const friendlyName = tabNamesMap[tabName] || tabName;
+    if (!confirm(`Deseja realmente redefinir as configurações da aba "${friendlyName}" para os padrões?`)) {
+      return;
+    }
+    
+    try {
+      if (tabName === "audio") {
+        await call("/api/settings", {
+          autoStartVirtual: true,
+          restoreOnDisable: true,
+          defaultMicOnClose: "restore"
+        });
+        setToast("Configurações de Áudio redefinidas para o padrão!");
+      } else if (tabName === "tts") {
+        await call("/api/settings", {
+          showTtsWidgetSpeed: true,
+          showTtsWidgetVolume: true,
+          unlimitedTts: false,
+          ttsWidgetOpacity: 82,
+          keepTtsTextAfterSpeak: false,
+          ttsVolume: 100
+        });
+        localStorage.setItem("tts_default_voice", "pt-BR-AntonioNeural");
+        localStorage.setItem("tts_default_rate", "0");
+        setToast("Configurações de TTS redefinidas para o padrão!");
+      } else if (tabName === "soundboard") {
+        await call("/api/settings", {
+          allowMultipleSounds: false,
+          onlinePlaybackRoute: "both",
+          maxSoundVolume: "1.0",
+          clipEnabled: false,
+          clipDuration: "30",
+          clipSource: "both",
+          maxSoundboardStorage: 0
+        });
+        setToast("Configurações de Soundboard redefinidas para o padrão!");
+      } else if (tabName === "shortcuts") {
+        await call("/api/settings", {
+          shortcutMuteMic: "",
+          shortcutToggleBypass: "",
+          shortcutToggleSoundboard: "",
+          shortcutToggleVoiceChanger: "",
+          shortcutRecordVoice: "",
+          shortcutRecordPC: "",
+          shortcutRecordCombo: "",
+          shortcutClip: "",
+          shortcutFocusTtsWidget: ""
+        });
+        setToast("Atalhos globais limpos e redefinidos!");
+      } else if (tabName === "aparencia") {
+        setAccentColor("purple");
+        setCustomAccentColor("");
+        setAppTheme("theme-cyberpunk");
+        setPrefFontSize("normal");
+        setPrefGlow("true");
+        setPrefRadius("normal");
+        setPrefGlass("normal");
+        setPrefGamerMode("false");
+        setPrefDockOpacity("80");
+        setToast("Aparência e temas restaurados para o padrão!");
+      } else if (tabName === "manutencao") {
+        await call("/api/settings", {
+          minimizeToTray: true,
+          confirmClose: true,
+          closeBehavior: "ask"
+        });
+        setToast("Configurações de Manutenção e Sistema redefinidas!");
+      }
+    } catch (err) {
+      setToast("Erro ao redefinir configurações: " + err.message);
+    }
+  };
+
   return (
     <div>
       <div className="labHeader">
@@ -388,8 +471,8 @@ export function ConfigPage({
                   />
 
                   <ToggleSetting
-                    label="Manter texto digitado após falar"
-                    description="Mantém as palavras escritas no input após você dar play ou apertar Enter (por padrão, o texto é limpo)"
+                    label="Manter texto após falar no Widget TTS"
+                    description="Mantém o texto digitado na barra rápida/widget após enviar a fala (o modal padrão de TTS sempre mantém o texto)"
                     checked={state.settings?.keepTtsTextAfterSpeak === true}
                     onChange={(v) => call("/api/settings", { keepTtsTextAfterSpeak: v })}
                   />
@@ -1024,6 +1107,23 @@ export function ConfigPage({
               </div>
             </>
           )}
+          {/* Reset Tab Button */}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <button
+              className="btn btn-ghost"
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6
+              }}
+              onClick={() => resetTabSettings(tab)}
+            >
+              🔄 Redefinir Configurações desta Aba
+            </button>
+          </div>
 
         </div>
       </div>
@@ -1046,12 +1146,23 @@ export function HotkeyInput({ label, value, onChange, onClear }) {
     if (e.metaKey) keys.push("Win");
     
     const key = e.key.toUpperCase();
-    if (key !== "CONTROL" && key !== "SHIFT" && key !== "ALT" && key !== "META") {
-      keys.push(key);
-    }
+    const isModifier = key === "CONTROL" || key === "SHIFT" || key === "ALT" || key === "META";
     
-    const nextVal = keys.join("+");
-    if (nextVal) {
+    if (!isModifier) {
+      let keyName = key;
+      if (keyName === " ") keyName = "Space";
+      else if (keyName === "ARROWUP") keyName = "Up";
+      else if (keyName === "ARROWDOWN") keyName = "Down";
+      else if (keyName === "ARROWLEFT") keyName = "Left";
+      else if (keyName === "ARROWRIGHT") keyName = "Right";
+      else {
+        if (keyName.length > 1) {
+          keyName = keyName.charAt(0) + keyName.slice(1).toLowerCase();
+        }
+      }
+      keys.push(keyName);
+      
+      const nextVal = keys.join("+");
       onChange(nextVal);
       setIsRecording(false);
     }

@@ -289,6 +289,33 @@ export function Slider({ label, value, min, max, suffix, onChange, enabled, onTo
 
 export function EffectSliderRow({ label, enabled, value, min, max, suffix, onToggle, onChange }) {
   const Icon = effectIconFor(label);
+  const [localValue, setLocalValue] = useState(value);
+  const draggingRef = useRef(false);
+  const commitTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!draggingRef.current) setLocalValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    return () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current); };
+  }, []);
+
+  const handleChange = (e) => {
+    const v = Number(e.target.value);
+    setLocalValue(v);
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(() => {
+      onChange(v);
+    }, 80);
+  };
+
+  const handlePointerUp = () => {
+    draggingRef.current = false;
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    onChange(localValue);
+  };
+
   return (
     <div className="sliderRow">
       <label className="effectToggle">
@@ -300,9 +327,17 @@ export function EffectSliderRow({ label, enabled, value, min, max, suffix, onTog
         {label}
       </span>
       <div className="sliderTrack">
-        <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+        <input
+          type="range" min={min} max={max} step={1}
+          value={localValue}
+          onChange={handleChange}
+          onMouseDown={() => { draggingRef.current = true; }}
+          onMouseUp={handlePointerUp}
+          onTouchStart={() => { draggingRef.current = true; }}
+          onTouchEnd={handlePointerUp}
+        />
       </div>
-      <span className="sliderRowValue">{formatValue(value, suffix)}</span>
+      <span className="sliderRowValue">{formatValue(localValue, suffix)}</span>
     </div>
   );
 }

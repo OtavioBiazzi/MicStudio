@@ -35,6 +35,9 @@ export function SoundboardPage({
   const [editingSoundId, setEditingSoundId] = useState(null);
 
   const sounds = state.sounds || [];
+  const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
+  const storageLimitMB = Number(state.settings?.maxSoundboardStorage ?? 0);
+  const isLimitReached = storageLimitMB > 0 && storageMB >= storageLimitMB;
   const categories = useMemo(() => {
     const cats = new Set([...sounds.map((s) => s.category).filter(Boolean), ...customCategories]);
     return ["Todos", "Favoritos", ...Array.from(cats).sort()];
@@ -64,6 +67,10 @@ export function SoundboardPage({
   }, [state.players]);
 
   const addSounds = async () => {
+    if (isLimitReached) {
+      setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
+      return;
+    }
     const paths = await window.micfudiddo?.openAudioFiles?.();
     if (paths?.length) {
       const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
@@ -89,6 +96,10 @@ export function SoundboardPage({
   };
 
   const addFolders = async () => {
+    if (isLimitReached) {
+      setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
+      return;
+    }
     const folder = await window.micfudiddo?.openAudioFolders?.();
     if (folder && folder.length) { await call("/api/sounds/add-folder", { paths: folder }); }
   };
@@ -96,6 +107,10 @@ export function SoundboardPage({
   const importDropped = async (e) => {
     e.preventDefault();
     setDragActive(false);
+    if (isLimitReached) {
+      setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
+      return;
+    }
     const files = e.dataTransfer?.files;
     if (!files?.length) return;
     const paths = window.micfudiddo?.audioPathsFromDrop?.(files) || [];
@@ -168,9 +183,28 @@ export function SoundboardPage({
       onDrop={importDropped}
       style={{ position: "relative" }}
     >
-      <div className="labHeader">
-        <h2>🔊 Soundboard Studio</h2>
-        <p>Organize, edite e dispare seus efeitos sonoros, áudios e memes favoritos instantaneamente</p>
+      <div className="labHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
+        <div>
+          <h2>🔊 Soundboard Studio</h2>
+          <p>Organize, edite e dispare seus efeitos sonoros, áudios e memes favoritos instantaneamente</p>
+        </div>
+        {isLimitReached && (
+          <div style={{
+            background: "rgba(239, 68, 68, 0.12)",
+            border: "1px solid rgba(239, 68, 68, 0.25)",
+            color: "#ef4444",
+            borderRadius: "6px",
+            padding: "8px 12px",
+            fontSize: "11px",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            marginTop: 10
+          }}>
+            <span>⚠️ Limite de Armazenamento Atingido ({storageMB.toFixed(1)} MB / {storageLimitMB} MB)</span>
+          </div>
+        )}
       </div>
 
       <div className="pageToolbar">
@@ -215,6 +249,10 @@ export function SoundboardPage({
           )}
           <div className="importButtonGroup">
             <button className="btn btn-ghost" onClick={() => {
+              if (isLimitReached) {
+                setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
+                return;
+              }
               setPromptState({
                 title: "Importar Link de Pacote",
                 value: "",

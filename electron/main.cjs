@@ -263,15 +263,11 @@ async function refreshSoundHotkeys() {
               createTtsWidgetWindow();
               ttsWidgetWindow.webContents.on("did-finish-load", () => {
                 setTimeout(() => {
-                  if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
-                    ttsWidgetWindow.focus();
-                    ttsWidgetWindow.webContents.send("tts-widget:focus-input");
-                  }
+                  focusTtsWidgetWindow();
                 }, 400);
               });
             } else {
-              ttsWidgetWindow.focus();
-              ttsWidgetWindow.webContents.send("tts-widget:focus-input");
+              focusTtsWidgetWindow();
             }
           } else {
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -554,9 +550,23 @@ ipcMain.handle("clipboard:write", async (_event, text) => {
   return true;
 });
 
+function focusTtsWidgetWindow() {
+  if (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed()) return;
+  if (ttsWidgetWindow.isMinimized()) {
+    ttsWidgetWindow.restore();
+  }
+  // Toggle alwaysOnTop style to force Windows OS focus
+  ttsWidgetWindow.setAlwaysOnTop(false);
+  ttsWidgetWindow.setAlwaysOnTop(true, "screen-saver");
+  ttsWidgetWindow.show();
+  ttsWidgetWindow.focus();
+  app.focus({ steal: true });
+  ttsWidgetWindow.webContents.send("tts-widget:focus-input");
+}
+
 function createTtsWidgetWindow() {
   if (ttsWidgetWindow) {
-    ttsWidgetWindow.focus();
+    focusTtsWidgetWindow();
     return true;
   }
   
@@ -566,6 +576,7 @@ function createTtsWidgetWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: true,
+    focusable: true,
     resizable: false,
     skipTaskbar: true,
     webPreferences: {

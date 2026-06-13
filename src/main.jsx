@@ -1286,10 +1286,15 @@ function TTSWidget() {
   useEffect(() => {
     if (window.micfudiddo?.onTtsWidgetFocusInput) {
       return window.micfudiddo.onTtsWidgetFocusInput(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.select();
-        }
+        const focusInput = () => {
+          if (inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+          }
+        };
+        focusInput();
+        setTimeout(focusInput, 50);
+        setTimeout(focusInput, 150);
       });
     }
   }, []);
@@ -1434,6 +1439,7 @@ function TTSWidget() {
           <input 
             ref={inputRef}
             type="text" 
+            autoFocus
             placeholder={focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
             value={text}
             onChange={(e) => setText(e.target.value)}

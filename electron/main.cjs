@@ -180,6 +180,9 @@ async function refreshSoundHotkeys() {
     if (!res.ok) return;
     const data = await res.json();
     
+    // Clear old global shortcut conflicts before re-evaluation
+    shortcutConflicts.clear();
+    
     // 1. Refresh Sound Hotkeys
     const nextSounds = new Map();
     for (const sound of data.sounds || []) {
@@ -226,6 +229,21 @@ async function refreshSoundHotkeys() {
       const shortcutValue = settings[settingsKey];
       const accelerator = normalizeAccelerator(shortcutValue);
       if (!accelerator) continue;
+
+      // Skip registration if functionality is disabled/closed
+      if (actionName === "focus_tts_widget" && (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed())) {
+        continue;
+      }
+      if (actionName === "clip" && !settings.clipEnabled) {
+        continue;
+      }
+
+      // Check if hotkey combination is safe
+      if (!isSafeGlobalShortcut(accelerator)) {
+        shortcutConflicts.set(accelerator, `Bloqueado: requer Ctrl/Alt/Shift ou F1-F12`);
+        continue;
+      }
+
       nextGlobals.set(accelerator, actionName);
     }
 
@@ -299,6 +317,25 @@ function normalizeAccelerator(value) {
     .replace(/ctrl/ig, "Ctrl")
     .replace(/shift/ig, "Shift")
     .replace(/alt/ig, "Alt");
+}
+
+function isSafeGlobalShortcut(accelerator) {
+  if (!accelerator) return false;
+  const lower = accelerator.toLowerCase();
+  
+  // If it contains any modifier, it's safe
+  const hasModifier = lower.includes("ctrl") || lower.includes("control") || lower.includes("shift") || lower.includes("alt") || lower.includes("win") || lower.includes("super") || lower.includes("meta") || lower.includes("cmd") || lower.includes("command");
+  if (hasModifier) return true;
+  
+  // If it's a function key (F1 - F24), it's safe
+  const isFunctionKey = /^f(1[0-9]|2[0-4]|[1-9])$/i.test(accelerator);
+  if (isFunctionKey) return true;
+  
+  // If it's a media or special navigation/action key, it's safe
+  const isSpecialKey = /media|volume|mute|play|pause|next|prev|stop|insert|delete|home|end|pageup|pagedown|escape|esc|num|printscreen|scrolllock|pause/i.test(accelerator);
+  if (isSpecialKey) return true;
+  
+  return false;
 }
 
 async function readAppSettings() {
@@ -545,7 +582,12 @@ function createTtsWidgetWindow() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("tts-widget:closed");
     }
+    // Immediately unregister widget-related hotkeys
+    refreshSoundHotkeys().catch(() => {});
   });
+  
+  // Immediately register widget-related hotkeys
+  refreshSoundHotkeys().catch(() => {});
   
   return true;
 }
@@ -559,6 +601,8 @@ ipcMain.handle("window:close-tts-widget", () => {
     ttsWidgetWindow.close();
     ttsWidgetWindow = null;
   }
+  // Immediately unregister widget-related hotkeys
+  refreshSoundHotkeys().catch(() => {});
   return true;
 });
 

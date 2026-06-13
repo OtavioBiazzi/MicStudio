@@ -1373,7 +1373,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.41": `### 🌟 Versão 0.5.41 (Versão Atual)
+  "v0.5.42": `### 🌟 Versão 0.5.42 (Versão Atual)
+* 🛡️ **Segurança e Proteção de Atalhos**: Os atalhos globais agora possuem validação inteligente contra sequestro de teclado. Atalhos de tecla simples (como letras/números isolados) são bloqueados e marcados como inseguros, exigindo modificadores (Ctrl, Alt, Shift) ou teclas de função (F1-F12) para evitar o travamento do sistema.
+* 🚪 **Ativação Dinâmica**: O atalho global do Widget TTS é desregistrado imediatamente assim que a janela do widget é fechada, devolvendo o controle da tecla inteiramente ao Windows e outros programas.
+* 🔌 **Atalhos Otimizados**: Atalhos de recursos desativados (como clipes de retrocesso com clipping desligado) não são mais registrados em background.`,
+
+  "v0.5.41": `### 🌟 Versão 0.5.41
 * 🎨 **Sincronização de Temas no Widget TTS**: O Widget flutuante de TTS agora responde instantaneamente à mudança de temas nas configurações, aplicando a paleta de cores selecionada (Cyberpunk, Dracula, Vampire, Neon, Synthwave) de forma síncrona.`,
 
   "v0.5.40": `### 🌟 Versão 0.5.40
@@ -1589,6 +1594,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.42", tag_name: "v0.5.42", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.41", tag_name: "v0.5.41", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.40", tag_name: "v0.5.40", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.39", tag_name: "v0.5.39", published_at: new Date().toISOString(), body: "" },

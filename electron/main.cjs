@@ -230,10 +230,7 @@ async function refreshSoundHotkeys() {
       const accelerator = normalizeAccelerator(shortcutValue);
       if (!accelerator) continue;
 
-      // Skip registration if functionality is disabled/closed
-      if (actionName === "focus_tts_widget" && (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed())) {
-        continue;
-      }
+      // Skip registration if functionality is disabled
       if (actionName === "clip" && !settings.clipEnabled) {
         continue;
       }
@@ -262,7 +259,17 @@ async function refreshSoundHotkeys() {
       try {
         const ok = globalShortcut.register(accelerator, () => {
           if (actionName === "focus_tts_widget") {
-            if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
+            if (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed()) {
+              createTtsWidgetWindow();
+              ttsWidgetWindow.webContents.on("did-finish-load", () => {
+                setTimeout(() => {
+                  if (ttsWidgetWindow && !ttsWidgetWindow.isDestroyed()) {
+                    ttsWidgetWindow.focus();
+                    ttsWidgetWindow.webContents.send("tts-widget:focus-input");
+                  }
+                }, 400);
+              });
+            } else {
               ttsWidgetWindow.focus();
               ttsWidgetWindow.webContents.send("tts-widget:focus-input");
             }

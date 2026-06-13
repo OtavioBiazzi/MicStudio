@@ -447,7 +447,7 @@ export function ConfigPage({
                     onClear={() => call("/api/settings", { shortcutFocusTtsWidget: "" })}
                   />
                   <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: -6 }}>
-                    Combinação global que foca e seleciona instantaneamente o campo de digitação do Widget TTS (apenas se o widget estiver aberto ou fixado).
+                    Combinação global que abre o Widget TTS (se fechado) e foca/seleciona o campo de digitação para você falar rapidamente.
                   </small>
                 </div>
               </div>

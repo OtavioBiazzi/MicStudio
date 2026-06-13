@@ -1373,7 +1373,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.44": `### 🌟 Versão 0.5.44 (Versão Atual)
+  "v0.5.45": `### 🌟 Versão 0.5.45 (Versão Atual)
+* 🎯 **Abertura por Atalho Restaurada**: O atalho global para focar a digitação (Widget TTS) agora pode abrir novamente a janela flutuante quando ela estiver fechada. A segurança contra bloqueio do teclado continua ativa, exigindo chaves com modificadores para evitar conflito.`,
+
+  "v0.5.44": `### 🌟 Versão 0.5.44
 * ⚡ **Segurança de Limite TTS**: Ajuste da velocidade mínima do TTS para -95% em vez de -100%. Com step de 5, isso garante que o valor 0% (velocidade normal) continue perfeitamente selecionável no slider, além de evitar travamentos ou silêncio absoluto gerados pelo limite físico do motor de voz.`,
 
   "v0.5.43": `### 🌟 Versão 0.5.43
@@ -1601,6 +1604,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.45", tag_name: "v0.5.45", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.44", tag_name: "v0.5.44", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.43", tag_name: "v0.5.43", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.42", tag_name: "v0.5.42", published_at: new Date().toISOString(), body: "" },

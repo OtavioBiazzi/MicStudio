@@ -96,6 +96,8 @@ function App() {
   const [bootError, setBootError] = useState(null);
   const controlsOptimisticRef = useRef(null);
   const lastYoutubeStatusRef = useRef("");
+  const controlsTimerRef = useRef(null);
+  const latestControlsRef = useRef(null);
 
   const [bypassActive, setBypassActive] = useState(false);
   const [lastActivePresetId, setLastActivePresetId] = useState(null);
@@ -474,10 +476,16 @@ function App() {
       }));
     }
 
-    call("/api/controls", { controls }).catch((e) => {
-      controlsOptimisticRef.current = null;
-      setToast(e.message);
-    });
+    latestControlsRef.current = controls;
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    
+    controlsTimerRef.current = setTimeout(() => {
+      const controlsToSend = latestControlsRef.current;
+      call("/api/controls", { controls: controlsToSend }).catch((e) => {
+        controlsOptimisticRef.current = null;
+        setToast(e.message);
+      });
+    }, 60);
   };
 
   const toggleMute = () => {
@@ -636,6 +644,7 @@ function App() {
       active = false;
       clearTimeout(timeoutId);
       clearInterval(intervalId);
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     };
   }, []);
 

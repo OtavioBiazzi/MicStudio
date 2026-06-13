@@ -1535,7 +1535,7 @@ function TTSWidget() {
               </span>
               <input
                 type="range"
-                min={-100}
+                min={-95}
                 max={200}
                 step={5}
                 value={rate}

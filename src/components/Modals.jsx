@@ -1373,8 +1373,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.43": `### 🌟 Versão 0.5.43 (Versão Atual)
-* ⚡ **Velocidade do TTS Ampliada**: Limite de velocidade da síntese de voz estendido para a faixa de -100% a +200% tanto no modal normal de TTS quanto no Widget TTS flutuante, ideal para quem precisa ler/falar de forma super lenta ou super ágil.
+  "v0.5.44": `### 🌟 Versão 0.5.44 (Versão Atual)
+* ⚡ **Segurança de Limite TTS**: Ajuste da velocidade mínima do TTS para -95% em vez de -100%. Com step de 5, isso garante que o valor 0% (velocidade normal) continue perfeitamente selecionável no slider, além de evitar travamentos ou silêncio absoluto gerados pelo limite físico do motor de voz.`,
+
+  "v0.5.43": `### 🌟 Versão 0.5.43
+* ⚡ **Velocidade do TTS Ampliada**: Limite de velocidade da síntese de voz estendido para até +200% tanto no modal normal de TTS quanto no Widget TTS flutuante, ideal para quem precisa ler/falar de forma super lenta ou super ágil.
 * 🔊 **Feedback de Volume**: Confirmação visual de que o indicador da porcentagem de volume está sempre visível na barra de digitação rápida.`,
 
   "v0.5.42": `### 🌟 Versão 0.5.42
@@ -1598,6 +1601,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.44", tag_name: "v0.5.44", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.43", tag_name: "v0.5.43", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.42", tag_name: "v0.5.42", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.41", tag_name: "v0.5.41", published_at: new Date().toISOString(), body: "" },
@@ -2061,7 +2065,7 @@ export function TTSModal({ onClose, call, setToast }) {
               </span>
               <input
                 type="range"
-                min={-100}
+                min={-95}
                 max={200}
                 step={5}
                 value={rate}

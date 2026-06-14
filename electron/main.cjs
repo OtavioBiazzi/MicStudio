@@ -235,6 +235,11 @@ async function refreshSoundHotkeys() {
         continue;
       }
 
+      // Skip focus_tts_widget registration if widget is closed
+      if (actionName === "focus_tts_widget" && (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed())) {
+        continue;
+      }
+
       // Check if hotkey combination is safe
       if (!isSafeGlobalShortcut(accelerator)) {
         shortcutConflicts.set(accelerator, `Bloqueado: requer Ctrl/Alt/Shift ou F1-F12`);
@@ -555,9 +560,8 @@ function focusTtsWidgetWindow() {
   if (ttsWidgetWindow.isMinimized()) {
     ttsWidgetWindow.restore();
   }
-  // Toggle alwaysOnTop style to force Windows OS focus
-  ttsWidgetWindow.setAlwaysOnTop(false);
-  ttsWidgetWindow.setAlwaysOnTop(true, "screen-saver");
+  // Hide and show to force Windows OS focus activation
+  ttsWidgetWindow.hide();
   ttsWidgetWindow.show();
   ttsWidgetWindow.focus();
   app.focus({ steal: true });

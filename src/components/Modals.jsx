@@ -1373,7 +1373,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
-  "v0.5.46": `### 🌟 Versão 0.5.46 (Versão Atual)
+  "v0.5.47": `### 🌟 Versão 0.5.47 (Versão Atual)
+* 🎯 **Foco e Escopo Definidos do Atalho**: Correção robusta para o atalho global do Widget TTS. Usando uma transição rápida de visibilidade da janela (\`hide\`/\`show\`), o Windows agora é forçado a conceder o foco de digitação de forma imediata à janela flutuante ao acionar o atalho a partir de outros programas. Além disso, o atalho passa a ficar ativo e interceptar teclas **apenas quando o widget estiver aberto** na tela, respeitando o uso geral do teclado no PC.`,
+
+  "v0.5.46": `### 🌟 Versão 0.5.46
 * 🎯 **Foco de Digitação Forçado**: Ajuste fino no atalho global para contornar a prevenção de roubo de foco do Windows. Agora, ao pressionar o atalho a partir de qualquer aplicativo ou jogo, o campo de texto ganha foco e teclado automaticamente, sem a necessidade de clicar manualmente na janela do widget.`,
 
   "v0.5.45": `### 🌟 Versão 0.5.45
@@ -1607,6 +1610,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v0.5.47", tag_name: "v0.5.47", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.46", tag_name: "v0.5.46", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.45", tag_name: "v0.5.45", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.44", tag_name: "v0.5.44", published_at: new Date().toISOString(), body: "" },

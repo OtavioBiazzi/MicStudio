@@ -13,9 +13,9 @@ if (-not $isAdmin) {
     exit
 }
 
-Write-Host "==================================================" -ForegroundColor Purple
-Write-Host "         Instalador do MicFudiddo Studio" -ForegroundColor Purple
-Write-Host "==================================================" -ForegroundColor Purple
+Write-Host "==================================================" -ForegroundColor Magenta
+Write-Host "         Instalador do MicFudiddo Studio" -ForegroundColor Magenta
+Write-Host "==================================================" -ForegroundColor Magenta
 Write-Host ""
 Write-Host ""
 
@@ -86,7 +86,7 @@ $code = @"
 [System.Runtime.InteropServices.DllImport("shell32.dll")]
 public static extern void SHChangeNotify(int wEventId, int uFlags, System.IntPtr dwItem1, System.IntPtr dwItem2);
 "@
-Add-Type -TypeDefinition $code -Namespace Shell32 -Name NativeMethods
+Add-Type -MemberDefinition $code -Namespace Shell32 -Name NativeMethods
 [Shell32.NativeMethods]::SHChangeNotify(0x08000000, 0, [System.IntPtr]::Zero, [System.IntPtr]::Zero)
 
 Write-Host "Instalação concluída com sucesso!" -ForegroundColor Green

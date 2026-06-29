@@ -29,6 +29,28 @@ def _sanitize_output_route(value: str) -> str:
     return "both"
 
 
+def block_size_candidates(preferred_block_size: int | None = None) -> list[int]:
+    values = []
+    if preferred_block_size is not None:
+        values.append(int(preferred_block_size))
+    values.extend([1024, 512, 256, 128])
+
+    unique: list[int] = []
+    for value in values:
+        if 64 <= value <= 4096 and value not in unique:
+            unique.append(value)
+    return unique
+
+
+def input_channel_count(input_device: AudioDevice, requested_channels: int | None = None) -> int:
+    try:
+        requested = int(requested_channels or 1)
+    except (TypeError, ValueError):
+        requested = 1
+    available = max(1, int(input_device.max_input_channels or 1))
+    return max(1, min(requested, available))
+
+
 @dataclass
 class EngineConfig:
     input_device: AudioDevice
@@ -46,6 +68,9 @@ class EngineConfig:
     master_voice_volume: float = 1.0
     master_pitch: float = 0.0
     master_mute: bool = False
+    preferred_sample_rate: int | None = None
+    preferred_block_size: int | None = None
+    input_channels: int = 1
 
 
 class AudioRingBuffer:
@@ -65,15 +90,21 @@ class AudioRingBuffer:
         if chunk.size == 0:
             return
 
-        with self._lock:
+        if not self._lock.acquire(blocking=False):
+            return
+        try:
             self._chunks.append(chunk)
             self._available += chunk.size
             self._trim_unlocked()
+        finally:
+            self._lock.release()
 
     def read(self, frames: int) -> np.ndarray:
         out = np.zeros(int(frames), dtype=np.float32)
         offset = 0
-        with self._lock:
+        if not self._lock.acquire(blocking=False):
+            return out
+        try:
             # If backlog exceeds 8 * frames (~40ms), proactively discard the oldest samples to keep a safe, low-latency buffer of 3 * frames.
             if self._available > 8 * frames:
                 to_discard = self._available - 3 * frames
@@ -97,6 +128,8 @@ class AudioRingBuffer:
                     self._chunks[0] = first[take:].copy()
                 self._available -= take
                 offset += take
+        finally:
+            self._lock.release()
         return out
 
     def _trim_unlocked(self) -> None:
@@ -462,7 +495,13 @@ class AudioEngine:
 
         self._primary_output_device = primary_output
         try:
-            self._stream = self._open_primary_stream(config.input_device, primary_output)
+            self._stream = self._open_primary_stream(
+                config.input_device,
+                primary_output,
+                preferred_sample_rate=config.preferred_sample_rate,
+                preferred_block_size=config.preferred_block_size,
+                input_channels=config.input_channels,
+            )
             self._stream.start()
         except Exception:
             stream = self._stream
@@ -556,12 +595,21 @@ class AudioEngine:
         if self._monitor_stream is None:
             self._start_monitor_stream(self._monitor_device)
 
-    def _open_primary_stream(self, input_device: AudioDevice, output_device: AudioDevice):
+    def _open_primary_stream(
+        self,
+        input_device: AudioDevice,
+        output_device: AudioDevice,
+        *,
+        preferred_sample_rate: int | None = None,
+        preferred_block_size: int | None = None,
+        input_channels: int = 1,
+    ):
         import sounddevice as sd
         import sys
 
         errors: list[str] = []
         candidates: list[tuple[int, int]] = []
+        input_channels = input_channel_count(input_device, input_channels)
         
         # No Windows, usar um unico stream duplex (sd.Stream) com dispositivos de hardware diferentes
         # (como um microfone USB e um cabo virtual) no host API WASAPI causa desorganização de clock
@@ -571,16 +619,23 @@ class AudioEngine:
         is_different_device = input_device.index != output_device.index
         
         if is_windows and is_different_device:
-            for sample_rate in sample_rate_candidates(input_device, output_device):
-                for block_size in (1024, 512, 256):
+            for sample_rate in sample_rate_candidates(input_device, output_device, preferred_sample_rate):
+                for block_size in block_size_candidates(preferred_block_size):
                     candidates.append((sample_rate, block_size))
                     try:
-                        return self._open_split_primary_stream(sd, input_device, output_device, sample_rate, block_size)
+                        return self._open_split_primary_stream(
+                            sd,
+                            input_device,
+                            output_device,
+                            sample_rate,
+                            block_size,
+                            input_channels,
+                        )
                     except Exception as exc:
                         errors.append(f"{sample_rate} Hz / bloco {block_size} separado: {exc}")
 
-        for sample_rate in sample_rate_candidates(input_device, output_device):
-            for block_size in (1024, 512, 256):
+        for sample_rate in sample_rate_candidates(input_device, output_device, preferred_sample_rate):
+            for block_size in block_size_candidates(preferred_block_size):
                 if (sample_rate, block_size) not in candidates:
                     candidates.append((sample_rate, block_size))
                 try:
@@ -593,7 +648,7 @@ class AudioEngine:
                         device=(input_device.index, output_device.index),
                         samplerate=sample_rate,
                         blocksize=block_size,
-                        channels=(1, 1),
+                        channels=(input_channels, 1),
                         dtype="float32",
                         latency=latency_val,
                         callback=self._audio_callback,
@@ -606,14 +661,29 @@ class AudioEngine:
         if not (is_windows and is_different_device):
             for sample_rate, block_size in candidates:
                 try:
-                    return self._open_split_primary_stream(sd, input_device, output_device, sample_rate, block_size)
+                    return self._open_split_primary_stream(
+                        sd,
+                        input_device,
+                        output_device,
+                        sample_rate,
+                        block_size,
+                        input_channels,
+                    )
                 except Exception as exc:
                     errors.append(f"{sample_rate} Hz / bloco {block_size} separado: {exc}")
 
         joined = "\n".join(errors[-6:])
         raise AudioEngineError(f"Nao foi possivel abrir o fluxo de audio.\n{joined}")
 
-    def _open_split_primary_stream(self, sd, input_device: AudioDevice, output_device: AudioDevice, sample_rate: int, block_size: int):
+    def _open_split_primary_stream(
+        self,
+        sd,
+        input_device: AudioDevice,
+        output_device: AudioDevice,
+        sample_rate: int,
+        block_size: int,
+        input_channels: int = 1,
+    ):
         self._sample_rate = sample_rate
         self._block_size = block_size
         self._pitch = DualDelayPitchShifter(sample_rate)
@@ -638,7 +708,7 @@ class AudioEngine:
                 device=input_device.index,
                 samplerate=sample_rate,
                 blocksize=block_size,
-                channels=1,
+                channels=input_channels,
                 dtype="float32",
                 latency=latency_val,
                 callback=self._split_input_callback,
@@ -698,12 +768,20 @@ class AudioEngine:
             self._monitor_buffer.clear()
         self._monitor_buffer = None
 
+    def _input_to_mono(self, indata) -> np.ndarray:
+        block = np.asarray(indata, dtype=np.float32)
+        if block.ndim == 1:
+            return block
+        if block.shape[1] <= 1:
+            return np.asarray(block[:, 0], dtype=np.float32)
+        return block.mean(axis=1).astype(np.float32, copy=False)
+
     def _audio_callback(self, indata, outdata, frames, _time, status) -> None:
         try:
             if status:
                 self._last_callback_status = str(status)
 
-            mono = np.asarray(indata[:, 0], dtype=np.float32)
+            mono = self._input_to_mono(indata)
             processed, monitor_mix = self._process_audio_block(mono, frames)
 
             outdata.fill(0.0)
@@ -723,7 +801,7 @@ class AudioEngine:
         try:
             if status:
                 self._last_callback_status = str(status)
-            mono = np.asarray(indata[:, 0], dtype=np.float32)
+            mono = self._input_to_mono(indata)
             processed, monitor_mix = self._process_audio_block(mono, frames)
             primary = hard_clip_for_output(monitor_mix) if self._primary_outputs_monitor_mix else processed
             if self._primary_output_buffer is not None:

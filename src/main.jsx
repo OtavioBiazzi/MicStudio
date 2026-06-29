@@ -18,6 +18,8 @@ import { voicePresets } from "./voicePresets";
 // API Client
 import { API } from "./apiClient";
 
+const TTS_CHARACTER_LIMIT = 10000;
+
 // Layout Components
 import { Sidebar } from "./components/Sidebar";
 import { WindowControls } from "./components/WindowControls";
@@ -636,7 +638,7 @@ function App() {
       if (active && !stateRef.current) {
         setBootError("Não foi possível conectar ao backend. Verifique se outra instância do MicFudiddo está em execução ou se há um conflito de porta (38717).");
       }
-    }, 5000);
+    }, 20000);
 
     const intervalId = setInterval(runRefresh, 700);
     
@@ -1450,7 +1452,7 @@ function TTSWidget() {
                 window.micfudiddo?.closeTtsWidget();
               }
             }}
-            maxLength={unlimited ? undefined : 10000}
+            {...(!unlimited ? { maxLength: TTS_CHARACTER_LIMIT } : {})}
             style={{
               width: "100%",
               background: "rgba(255, 255, 255, 0.05)",
@@ -1469,7 +1471,7 @@ function TTSWidget() {
             color: "rgba(255, 255, 255, 0.4)",
             pointerEvents: "none"
           }}>
-            {text.length}{unlimited ? "" : "/10000"}
+            {text.length}{unlimited ? "" : `/${TTS_CHARACTER_LIMIT}`}
           </span>
         </div>
 

@@ -123,7 +123,10 @@ export function VoiceLabPage({
         reverse_enabled: true,
         reverse_mix: 1.0,
         alien_glitch_enabled: true,
-        alien_glitch_mix: 1.0
+        alien_glitch_mix: 1.0,
+        glitch_enabled: true,
+        glitch_mix: 1.0,
+        glitch_rate_hz: 60
       }
     };
     updateControls(maxControls);
@@ -164,7 +167,9 @@ export function VoiceLabPage({
         { key: "compressor_amount", label: "Compressor / Limiter", icon: SlidersHorizontal, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "compressor_enabled" },
         { key: "wobble_mix", label: "Vibrato Wobble", icon: Sparkle, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "wobble_enabled" },
         { key: "reverse_mix", label: "Reverse", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "reverse_enabled" },
-        { key: "alien_glitch_mix", label: "Glitch", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "alien_glitch_enabled" }
+        { key: "alien_glitch_mix", label: "Glitch Alien", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "alien_glitch_enabled" },
+        { key: "glitch_mix", label: "Glitch Digital", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "glitch_enabled" },
+        { key: "glitch_rate_hz", label: "Velocidade Glitch", icon: Circuitry, min: 4, max: 60, step: 1, suffix: "Hz", isControl: false, enableKey: "glitch_enabled" }
       ]
     },
     {

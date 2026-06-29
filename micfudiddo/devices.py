@@ -195,8 +195,15 @@ def likely_recording_pair_name(output_device_name: str) -> str:
     return "o dispositivo virtual de gravacao correspondente"
 
 
-def sample_rate_candidates(input_device: AudioDevice, output_device: AudioDevice | None) -> list[int]:
-    values = [48000, 44100, int(round(input_device.default_samplerate))]
+def sample_rate_candidates(
+    input_device: AudioDevice,
+    output_device: AudioDevice | None,
+    preferred_sample_rate: int | None = None,
+) -> list[int]:
+    values = []
+    if preferred_sample_rate is not None:
+        values.append(int(preferred_sample_rate))
+    values.extend([48000, 44100, int(round(input_device.default_samplerate))])
     if output_device is not None:
         values.append(int(round(output_device.default_samplerate)))
 

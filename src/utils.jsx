@@ -38,6 +38,7 @@ export const effectDefaults = {
   wobble_enabled: false, wobble_mix: 0.35,
   reverse_enabled: false, reverse_mix: 0.65,
   alien_glitch_enabled: false, alien_glitch_mix: 0.62,
+  glitch_enabled: false, glitch_mix: 0.55, glitch_rate_hz: 18,
   harmony_enabled: false, harmony_mode: "Major", harmony_mix: 0.5,
   drum_loop_enabled: false, drum_loop_bpm: 90.0, drum_loop_volume: 0.3
 };
@@ -377,7 +378,8 @@ export const effectGroups = [
       ["compressor_enabled", "compressor_amount", "Compressor", "%", 0, 100],
       ["wobble_enabled", "wobble_mix", "Vibrato estranho", "%", 0, 90],
       ["reverse_enabled", "reverse_mix", "Reverse estranho", "%", 0, 100],
-      ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100]
+      ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100],
+      ["glitch_enabled", "glitch_mix", "Glitch digital", "%", 0, 100]
     ]
   },
   {
@@ -412,4 +414,3 @@ export function copyTextToClipboard(text) {
     }
   });
 }
-

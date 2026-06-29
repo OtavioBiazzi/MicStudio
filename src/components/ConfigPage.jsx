@@ -128,7 +128,10 @@ export function ConfigPage({
         await call("/api/settings", {
           autoStartVirtual: true,
           restoreOnDisable: true,
-          defaultMicOnClose: "restore"
+          defaultMicOnClose: "restore",
+          audioSampleRate: "48000",
+          audioBufferSize: "1024",
+          inputChannels: "mono"
         });
         setToast("Configurações de Áudio redefinidas para o padrão!");
       } else if (tabName === "tts") {
@@ -362,8 +365,8 @@ export function ConfigPage({
                   <div className="selectField">
                     <label>Taxa de Amostragem Interna (Sample Rate)</label>
                     <select
-                      value={state.sampleRate || 44100}
-                      onChange={(e) => call("/api/settings", { sampleRate: Number(e.target.value) }).then(() => setToast?.("Taxa de amostragem alterada!"))}
+                      value={state.settings?.audioSampleRate || "auto"}
+                      onChange={(e) => call("/api/settings", { audioSampleRate: e.target.value }).then(() => setToast?.("Taxa de amostragem alterada!"))}
                     >
                       <option value={44100}>44100 Hz (CD - Padrão)</option>
                       <option value={48000}>48000 Hz (Estúdio / Profissional)</option>
@@ -373,8 +376,8 @@ export function ConfigPage({
                   <div className="selectField">
                     <label>Tamanho do Buffer de Áudio (Latência)</label>
                     <select
-                      value={state.settings?.bufferSize || 512}
-                      onChange={(e) => call("/api/settings", { bufferSize: String(e.target.value) }).then(() => setToast?.("Tamanho do buffer alterado!"))}
+                      value={state.settings?.audioBufferSize || "1024"}
+                      onChange={(e) => call("/api/settings", { audioBufferSize: String(e.target.value) }).then(() => setToast?.("Tamanho do buffer alterado!"))}
                     >
                       <option value="128">128 frames (Latência ultra baixa - Exige CPU rápida)</option>
                       <option value="256">256 frames (Latência baixa - Recomendado)</option>

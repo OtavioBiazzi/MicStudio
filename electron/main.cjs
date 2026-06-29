@@ -94,6 +94,30 @@ function pingHealth(port) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForBackendHealth(port, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await pingHealth(port)) return true;
+    await sleep(350);
+  }
+  return false;
+}
+
+function readLogExcerpt(logFile) {
+  const fs = require("fs");
+  try {
+    if (fs.existsSync(logFile)) {
+      const lines = fs.readFileSync(logFile, "utf8").split("\n");
+      return lines.slice(-20).join("\n");
+    }
+  } catch (_) {}
+  return "";
+}
+
 async function startBackend() {
   if (backend) return;
   
@@ -143,13 +167,7 @@ async function startBackend() {
     });
     backend.on("exit", (code) => {
       if (code !== 0 && !quitting && !STATE_BACKEND_RUNNING_EXTERNALLY) {
-        let logExcerpt = "";
-        try {
-          if (fs.existsSync(logFile)) {
-            const lines = fs.readFileSync(logFile, "utf8").split("\n");
-            logExcerpt = lines.slice(-15).join("\n");
-          }
-        } catch (_) {}
+        const logExcerpt = readLogExcerpt(logFile);
         
         dialog.showErrorBox(
           "Falha no Servidor de Áudio",
@@ -157,6 +175,17 @@ async function startBackend() {
         );
       }
     });
+  }
+
+  const healthy = await waitForBackendHealth(port, isDev ? 15000 : 45000);
+  if (!healthy) {
+    const logExcerpt = readLogExcerpt(logFile);
+    dialog.showErrorBox(
+      "Falha ao Iniciar o Backend",
+      `O servidor de audio demorou para responder na porta ${port}.\n\nLogs recentes:\n${logExcerpt || "Sem logs disponiveis."}\n\nTente abrir novamente ou verifique se o antivirus bloqueou o backend.`
+    );
+    app.quit();
+    process.exit(1);
   }
 }
 async function stopBackend() {
@@ -232,11 +261,6 @@ async function refreshSoundHotkeys() {
 
       // Skip registration if functionality is disabled
       if (actionName === "clip" && !settings.clipEnabled) {
-        continue;
-      }
-
-      // Skip focus_tts_widget registration if widget is closed
-      if (actionName === "focus_tts_widget" && (!ttsWidgetWindow || ttsWidgetWindow.isDestroyed())) {
         continue;
       }
 

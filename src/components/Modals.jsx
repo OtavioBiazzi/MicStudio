@@ -26,6 +26,8 @@ const soundOutputRoutes = [
   { value: "monitor", label: "Apenas Monitoramento" }
 ];
 
+const TTS_CHARACTER_LIMIT = 10000;
+
 // --- WaveformVisualizer ---
 export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, playingPosition }) {
   const canvasRef = useRef(null);
@@ -1373,6 +1375,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.0": `### Versao 1.0
+* TTS sem limite agora processa textos longos de verdade: o backend divide blocos gigantes em partes menores, gera cada trecho e junta tudo antes de tocar ou salvar.
+* O atalho global de focar digitacao voltou a abrir/focar o Widget TTS mesmo quando a barra flutuante esta fechada.
+* O campo de texto remove o limite de 10.000 caracteres de forma limpa quando a opcao "Remover limite de caracteres" esta ativa.`,
+
   "v0.5.47": `### 🌟 Versão 0.5.47 (Versão Atual)
 * 🎯 **Foco e Escopo Definidos do Atalho**: Correção robusta para o atalho global do Widget TTS. Usando uma transição rápida de visibilidade da janela (\`hide\`/\`show\`), o Windows agora é forçado a conceder o foco de digitação de forma imediata à janela flutuante ao acionar o atalho a partir de outros programas. Além disso, o atalho passa a ficar ativo e interceptar teclas **apenas quando o widget estiver aberto** na tela, respeitando o uso geral do teclado no PC.`,
 
@@ -1610,6 +1617,7 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  { id: "v1.0", tag_name: "v1.0", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.47", tag_name: "v0.5.47", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.46", tag_name: "v0.5.46", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.45", tag_name: "v0.5.45", published_at: new Date().toISOString(), body: "" },
@@ -2010,7 +2018,7 @@ export function TTSModal({ onClose, call, setToast }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}{unlimited ? "" : "/10000"}</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}{unlimited ? "" : `/${TTS_CHARACTER_LIMIT}`}</span>
             </div>
             <textarea
               placeholder="Digite aqui o que você quer que o robô fale..."
@@ -2023,7 +2031,7 @@ export function TTSModal({ onClose, call, setToast }) {
                 }
               }}
               disabled={isWorking}
-              maxLength={unlimited ? undefined : 10000}
+              {...(!unlimited ? { maxLength: TTS_CHARACTER_LIMIT } : {})}
               autoFocus
               rows={3}
               style={{
@@ -2172,4 +2180,3 @@ export function TTSModal({ onClose, call, setToast }) {
     </div>
   );
 }
-

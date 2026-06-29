@@ -108,6 +108,9 @@ class EffectsSettings:
     reverse_mix: float = 0.65
     alien_glitch_enabled: bool = False
     alien_glitch_mix: float = 0.62
+    glitch_enabled: bool = False
+    glitch_mix: float = 0.55
+    glitch_rate_hz: float = 18.0
     harmony_enabled: bool = False
     harmony_mode: str = "Major"
     harmony_mix: float = 0.5
@@ -121,6 +124,7 @@ class VoiceEffectsProcessor:
         self.sample_rate = int(sample_rate)
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
+        self.glitch_phase = 0.0
         self.echo_feedback = 0.28
         self.echo_delay_samples = max(1, int(self.sample_rate * 0.135))
         self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
@@ -137,6 +141,7 @@ class VoiceEffectsProcessor:
     def reset(self) -> None:
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
+        self.glitch_phase = 0.0
         self.echo_buffer.fill(0.0)
         self.echo_pos = 0
 
@@ -211,6 +216,13 @@ class VoiceEffectsProcessor:
 
         if settings.alien_glitch_enabled:
             y = self._alien_glitch(y, _finite_clamped(settings.alien_glitch_mix, 0.0, 1.0, 0.62))
+
+        if settings.glitch_enabled:
+            y = self._glitch(
+                y,
+                _finite_clamped(settings.glitch_mix, 0.0, 1.0, 0.55),
+                _finite_clamped(settings.glitch_rate_hz, 4.0, 60.0, 18.0),
+            )
 
         if settings.harmony_enabled:
             y = self._harmony(y, settings.harmony_mode, _finite_clamped(settings.harmony_mix, 0.0, 1.0, 0.5))
@@ -393,6 +405,30 @@ class VoiceEffectsProcessor:
         warped = (held * 0.35) + (ring * 0.38) + (crushed * 0.42) + (reverse * 0.28)
         warped = np.tanh(warped * np.float32(1.4 + mix)).astype(np.float32, copy=False)
         return ((samples * (1.0 - mix)) + (warped * mix)).astype(np.float32, copy=False)
+
+    def _glitch(self, samples: np.ndarray, mix: float, rate_hz: float) -> np.ndarray:
+        if samples.size < 4 or mix <= 0.0:
+            return samples.copy()
+
+        indexes = np.arange(samples.size, dtype=np.float32)
+        phase_step = rate_hz / max(1, self.sample_rate)
+        phase = (self.glitch_phase + indexes * phase_step) % 1.0
+        self.glitch_phase = (self.glitch_phase + samples.size * phase_step) % 1.0
+
+        hold = max(2, int(self.sample_rate / max(1.0, rate_hz * (8.0 + mix * 16.0))))
+        int_indexes = np.arange(samples.size, dtype=np.int32)
+        held = samples[(int_indexes // hold) * hold]
+        repeated = np.roll(held, hold // 2)
+        crushed = self._bitcrush(repeated + held * np.float32(0.4), 3 + int((1.0 - mix) * 4.0))
+
+        dropout = np.where((phase > 0.16) & (phase < 0.24 + mix * 0.12), 0.0, 1.0).astype(np.float32)
+        chop = np.where(phase < 0.5, 1.0, -1.0).astype(np.float32)
+        ring = self._ring_modulate(samples, 150.0 + rate_hz * 7.5)
+
+        wet = (crushed * 0.55) + (held * chop * 0.28) + (ring * 0.24)
+        wet = np.tanh(wet * np.float32(1.35 + mix * 1.4)).astype(np.float32, copy=False)
+        wet *= dropout
+        return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
     def _band_limited(self, samples: np.ndarray) -> np.ndarray:
         if samples.size < 3:

@@ -298,7 +298,7 @@ export const voicePresets = [
   {
     id: "voz_glitch", label: "Glitch Cibernético", description: "Modulação de glitch estourada com bitcrush cibernético.",
     emoji: "📟", category: "Exclusivos", gradient: "linear-gradient(135deg, #1f2937, #dc2626)",
-    gain: 3.5, pitch: 2, effects: { alien_glitch_enabled: true, alien_glitch_mix: 0.9, wobble_enabled: true, wobble_mix: 0.6, bitcrush_enabled: true, bitcrush_bits: 4 }
+    gain: 3.5, pitch: 2, effects: { glitch_enabled: true, glitch_mix: 0.88, glitch_rate_hz: 24, alien_glitch_enabled: true, alien_glitch_mix: 0.62, wobble_enabled: true, wobble_mix: 0.45, bitcrush_enabled: true, bitcrush_bits: 4 }
   },
   {
     id: "voz_holografica", label: "Holograma Sci-Fi", description: "Chorus/Flanger misturado com sussurro do além.",
@@ -384,6 +384,16 @@ export const voicePresets = [
     id: "divine_choir", label: "Coral Divino", description: "Harmonizador oitavado denso imitando um grande coral de igreja.",
     emoji: "⛪", category: "Música", gradient: "linear-gradient(135deg, #4c1d95, #2e1065)",
     gain: 2.5, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Octaves", harmony_mix: 0.65, reverb_enabled: true, reverb_mix: 0.6 }
+  },
+  {
+    id: "datamosh", label: "DataMoshed", description: "Cortes digitais rapidos com dropouts e textura corrompida.",
+    emoji: "D", category: "Exclusivos", gradient: "linear-gradient(135deg, #111827, #22d3ee)",
+    gain: 3.2, pitch: 0, effects: { glitch_enabled: true, glitch_mix: 0.78, glitch_rate_hz: 34, bitcrush_enabled: true, bitcrush_bits: 5, radio_enabled: true, radio_mix: 0.38 }
+  },
+  {
+    id: "radio_quebrado", label: "Radio Quebrado", description: "Voz de radio falhando com recortes digitais e compressao forte.",
+    emoji: "R", category: "Radio", gradient: "linear-gradient(135deg, #172554, #7f1d1d)",
+    gain: 4.2, pitch: -1, effects: { glitch_enabled: true, glitch_mix: 0.55, glitch_rate_hz: 18, radio_enabled: true, radio_mix: 0.86, compressor_enabled: true, compressor_amount: 0.75 }
   }
 ];
 

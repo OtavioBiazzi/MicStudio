@@ -4,6 +4,7 @@ from dataclasses import asdict
 import argparse
 import json
 import random
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
@@ -66,6 +67,87 @@ class SoundCache:
             self.cache[key] = (value, time.time() + self.ttl)
 
 MYINSTANTS_CACHE = SoundCache(ttl_seconds=1200)
+
+TTS_CHUNK_LIMIT = 3500
+TTS_CHUNK_GAP_SECONDS = 0.12
+
+
+def split_tts_text(text: str, limit: int = TTS_CHUNK_LIMIT) -> list[str]:
+    text = str(text or "").strip()
+    if not text:
+        return []
+
+    chunks: list[str] = []
+    remaining = text
+    min_split = max(1, int(limit * 0.45))
+    separators = ("\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ")
+
+    while len(remaining) > limit:
+        window = remaining[: limit + 1]
+        split_at = -1
+        for separator in separators:
+            idx = window.rfind(separator)
+            if idx >= min_split:
+                split_at = idx + len(separator)
+                break
+        if split_at < min_split:
+            split_at = limit
+        chunk = remaining[:split_at].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_at:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+async def synthesize_tts_text_to_audio(
+    text: str,
+    voice: str,
+    rate: str,
+    sample_rate: int,
+    temp_dir: Path,
+) -> np.ndarray:
+    import edge_tts
+    import uuid
+
+    chunks = split_tts_text(text)
+    if not chunks:
+        raise RuntimeError("Texto vazio.")
+
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_paths: list[Path] = []
+    parts: list[np.ndarray] = []
+    try:
+        for index, chunk in enumerate(chunks):
+            temp_path = temp_dir / f"tts_{uuid.uuid4().hex}_{index}.mp3"
+            temp_paths.append(temp_path)
+            communicate = edge_tts.Communicate(chunk, voice, rate=rate)
+            await communicate.save(str(temp_path))
+            part = load_audio_mono(str(temp_path), sample_rate)
+            if part.size:
+                parts.append(part.astype(np.float32, copy=False))
+    finally:
+        for temp_path in temp_paths:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
+
+    if not parts:
+        raise RuntimeError("A sintese nao gerou audio.")
+    if len(parts) == 1:
+        return parts[0]
+
+    gap = np.zeros(max(1, int(sample_rate * TTS_CHUNK_GAP_SECONDS)), dtype=np.float32)
+    with_gaps: list[np.ndarray] = []
+    for index, part in enumerate(parts):
+        if index:
+            with_gaps.append(gap)
+        with_gaps.append(part)
+    return np.concatenate(with_gaps).astype(np.float32, copy=False)
 
 
 def scrape_myinstants_page(url: str, cache_key: str, default_category: str) -> list[dict]:
@@ -220,6 +302,10 @@ DEFAULT_APP_SETTINGS = {
     "keepTtsTextAfterSpeak": False,
     "ttsVolume": 100,
     "maxSoundboardStorage": 0,
+    "audioSampleRate": "48000",
+    "audioBufferSize": "1024",
+    "inputChannels": "mono",
+    "youtubeUseBrowserCookies": False,
 }
 
 DEFAULT_PROFILE = {
@@ -258,6 +344,8 @@ class AudioClippingManager:
         self._pc_streams = []
         self._monitor_history: deque[np.ndarray] = deque()
         self._monitor_history_size = 0
+        self._dropped_voice_chunks = 0
+        self._dropped_pc_chunks = 0
 
     def write_voice(self, samples: np.ndarray, monitor_voice: np.ndarray | None = None) -> None:
         if not self._running:
@@ -268,7 +356,10 @@ class AudioClippingManager:
         chunk = np.asarray(samples, dtype=np.float32).copy()
         if chunk.size == 0:
             return
-        with self._lock:
+        if not self._lock.acquire(blocking=False):
+            self._dropped_voice_chunks += 1
+            return
+        try:
             self._voice_chunks.append(chunk)
             self._voice_available += chunk.size
             max_samples = 60 * 48000
@@ -298,6 +389,8 @@ class AudioClippingManager:
                 else:
                     self._monitor_history[0] = first[overflow:].copy()
                     self._monitor_history_size -= overflow
+        finally:
+            self._lock.release()
 
     def _make_pc_callback(self, device, stream_rate: int):
         import pyaudiowpatch as pyaudio
@@ -320,7 +413,10 @@ class AudioClippingManager:
                 from .recording import _resample_linear
                 mono = _resample_linear(mono, int(stream_rate), 48000)
             
-            with self._lock:
+            if not self._lock.acquire(blocking=False):
+                self._dropped_pc_chunks += 1
+                return (None, pyaudio.paContinue)
+            try:
                 self._pc_chunks.append(mono.copy())
                 self._pc_available += mono.size
                 max_samples = 60 * 48000
@@ -333,6 +429,8 @@ class AudioClippingManager:
                     else:
                         self._pc_chunks[0] = first[overflow:].copy()
                         self._pc_available -= overflow
+            finally:
+                self._lock.release()
             return (None, pyaudio.paContinue)
         return callback
 
@@ -351,6 +449,8 @@ class AudioClippingManager:
 
     def start_capture(self) -> None:
         self._running = True
+        self._dropped_voice_chunks = 0
+        self._dropped_pc_chunks = 0
         if self._pc_streams:
             return
         
@@ -411,6 +511,16 @@ class AudioClippingManager:
             self._voice_chunks.clear()
             self._voice_available = 0
         print("Clipping: Stopped all capturing.")
+
+    def stats(self) -> dict:
+        with self._lock:
+            return {
+                "running": self._running,
+                "voiceBufferedSamples": self._voice_available,
+                "pcBufferedSamples": self._pc_available,
+                "droppedVoiceChunks": self._dropped_voice_chunks,
+                "droppedPcChunks": self._dropped_pc_chunks,
+            }
 
     def save_clip(self, duration_sec: int) -> dict | None:
         if not self._running:
@@ -541,6 +651,131 @@ class AudioClippingManager:
         return {"soundId": item.id, "name": item.name}
 
 
+def _write_worker_status(status_path: Path, payload: dict) -> None:
+    tmp_path = status_path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp_path.replace(status_path)
+
+
+def _set_low_process_priority() -> None:
+    try:
+        import ctypes
+        import os
+
+        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        ctypes.windll.kernel32.SetPriorityClass(handle, BELOW_NORMAL_PRIORITY_CLASS)
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["OPENBLAS_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+        os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    except Exception:
+        pass
+
+
+def run_youtube_download_worker(job_path: str) -> int:
+    _set_low_process_priority()
+    job = json.loads(Path(job_path).read_text(encoding="utf-8-sig"))
+    youtube_url = str(job["url"])
+    work_dir = Path(job["workDir"])
+    status_path = Path(job["statusPath"])
+    cancel_path = Path(job["cancelPath"])
+    use_browser_cookies = bool(job.get("useBrowserCookies", False))
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    def cancelled() -> bool:
+        return cancel_path.exists()
+
+    def status(message: str, state: str = "running", **extra) -> None:
+        payload = {"state": state, "message": message, "time": time.time(), **extra}
+        _write_worker_status(status_path, payload)
+
+    try:
+        import imageio_ffmpeg
+        import yt_dlp
+
+        from .soundboard import sanitize_sound_name
+
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        outtmpl = str(work_dir / "download.%(ext)s")
+        browsers = [None]
+        if use_browser_cookies:
+            browsers.extend(["edge", "chrome", "firefox", "brave", "opera"])
+
+        def hook(d):
+            if cancelled():
+                raise RuntimeError("CANCELLED")
+            if d.get("status") == "downloading":
+                percent = d.get("_percent_str", "").strip()
+                speed = d.get("_speed_str", "").strip()
+                suffix = f" ({speed})" if speed else ""
+                status(f"Baixando: {percent}{suffix}".strip())
+            elif d.get("status") == "finished":
+                status("Convertendo audio...")
+
+        last_err = None
+        info = None
+        status("Iniciando download...")
+        for browser in browsers:
+            if cancelled():
+                raise RuntimeError("CANCELLED")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": outtmpl,
+                "ffmpeg_location": ffmpeg_path,
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+                "quiet": True,
+                "no_warnings": True,
+                "progress_hooks": [hook],
+                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+                "retries": 3,
+                "fragment_retries": 3,
+            }
+            if browser:
+                ydl_opts["cookiesfrombrowser"] = (browser,)
+                status(f"Tentando cookies do {browser}...")
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(youtube_url, download=True)
+                break
+            except Exception as exc:
+                if "CANCELLED" in str(exc) or cancelled():
+                    raise RuntimeError("CANCELLED") from exc
+                last_err = exc
+
+        if cancelled():
+            raise RuntimeError("CANCELLED")
+        if not info:
+            raise last_err or RuntimeError("Falha ao extrair audio.")
+
+        mp3_path = work_dir / "download.mp3"
+        if not mp3_path.exists():
+            raise RuntimeError("Falha ao converter audio.")
+
+        title = info.get("title", "Som do YouTube")
+        sanitized_title = sanitize_sound_name(title) or "som_youtube"
+        status(
+            "Download concluido.",
+            state="done",
+            title=title,
+            name=sanitized_title,
+            audioPath=str(mp3_path),
+        )
+        return 0
+    except Exception as exc:
+        if "CANCELLED" in str(exc) or cancelled():
+            status("Importacao cancelada.", state="cancelled")
+            return 2
+        status(f"Erro: {exc}", state="error", error=str(exc))
+        return 1
+
+
 class AppState:
     def __init__(self) -> None:
         self.lock = threading.RLock()
@@ -562,6 +797,10 @@ class AppState:
         self.windows_capture_endpoints: list[dict[str, str]] = []
         self.youtube_download_cancelled = False
         self.youtube_download_thread = None
+        self.youtube_download_process = None
+        self.youtube_work_dir: Path | None = None
+        self.youtube_status_path: Path | None = None
+        self.youtube_cancel_path: Path | None = None
         self.youtube_status = ""
         self.selected_input: int | None = None
         self.selected_input_name: str | None = None
@@ -766,6 +1005,18 @@ class AppState:
         )
 
     def update_settings(self, patch: dict) -> None:
+        patch = dict(patch or {})
+        if "sampleRate" in patch and "audioSampleRate" not in patch:
+            patch["audioSampleRate"] = patch["sampleRate"]
+        if "bufferSize" in patch and "audioBufferSize" not in patch:
+            patch["audioBufferSize"] = patch["bufferSize"]
+
+        audio_keys = {"audioSampleRate", "audioBufferSize", "inputChannels"}
+        audio_changed = any(str(self.settings.get(key)) != str(patch.get(key)) for key in audio_keys if key in patch)
+        was_running = self.engine.running
+        was_virtual = self.virtual_mode_active
+        was_monitor_only = self.monitor_only_active
+
         for key in DEFAULT_APP_SETTINGS:
             if key in patch:
                 default_val = DEFAULT_APP_SETTINGS[key]
@@ -775,6 +1026,187 @@ class AppState:
                     self.settings[key] = str(patch[key])
         self.save_app_settings()
         self.clipping_manager.update()
+        if audio_changed and was_running:
+            if was_virtual:
+                self.activate_virtual()
+            elif was_monitor_only:
+                self.start_monitor_only()
+            else:
+                self.start()
+
+    def preferred_sample_rate(self) -> int | None:
+        value = str(self.settings.get("audioSampleRate", "auto")).strip().lower()
+        if value in {"", "auto", "automatico", "automático"}:
+            return None
+        try:
+            sample_rate = int(float(value))
+        except (TypeError, ValueError):
+            return None
+        return sample_rate if 8000 <= sample_rate <= 192000 else None
+
+    def preferred_block_size(self) -> int | None:
+        value = str(self.settings.get("audioBufferSize", "1024")).strip()
+        try:
+            block_size = int(float(value))
+        except (TypeError, ValueError):
+            return 1024
+        return block_size if 64 <= block_size <= 4096 else 1024
+
+    def preferred_input_channels(self) -> int:
+        value = str(self.settings.get("inputChannels", "mono")).strip().lower()
+        return 2 if value == "stereo" else 1
+
+    def _youtube_worker_command(self, job_path: Path) -> list[str]:
+        import sys
+
+        if getattr(sys, "frozen", False):
+            return [sys.executable, "--youtube-worker", str(job_path)]
+        return [sys.executable, "-m", "micfudiddo.backend", "--youtube-worker", str(job_path)]
+
+    def start_youtube_import(self, youtube_url: str) -> None:
+        import subprocess
+        import tempfile
+        import uuid
+
+        youtube_url = str(youtube_url or "").strip()
+        if not youtube_url:
+            raise RuntimeError("URL do YouTube ausente.")
+
+        with self.lock:
+            if self.youtube_download_process and self.youtube_download_process.poll() is None:
+                raise RuntimeError("Ja existe um download em andamento.")
+            if self.youtube_download_thread and self.youtube_download_thread.is_alive():
+                raise RuntimeError("Ja existe um download em andamento.")
+
+            self.youtube_download_cancelled = False
+            self.youtube_status = "Iniciando download..."
+
+        work_dir = Path(tempfile.gettempdir()) / f"micfudiddo_yt_{uuid.uuid4().hex}"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        status_path = work_dir / "status.json"
+        cancel_path = work_dir / "cancel.flag"
+        job_path = work_dir / "job.json"
+        job = {
+            "url": youtube_url,
+            "workDir": str(work_dir),
+            "statusPath": str(status_path),
+            "cancelPath": str(cancel_path),
+            "useBrowserCookies": bool(self.settings.get("youtubeUseBrowserCookies", False)),
+        }
+        job_path.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
+
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags |= subprocess.CREATE_NO_WINDOW
+        if hasattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS"):
+            creationflags |= subprocess.BELOW_NORMAL_PRIORITY_CLASS
+
+        process = subprocess.Popen(
+            self._youtube_worker_command(job_path),
+            cwd=str(Path(__file__).resolve().parent.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+
+        with self.lock:
+            self.youtube_download_process = process
+            self.youtube_work_dir = work_dir
+            self.youtube_status_path = status_path
+            self.youtube_cancel_path = cancel_path
+
+        self.youtube_download_thread = threading.Thread(
+            target=self._monitor_youtube_import,
+            args=(process, work_dir, status_path, cancel_path),
+            daemon=True,
+        )
+        self.youtube_download_thread.start()
+
+    def _monitor_youtube_import(self, process, work_dir: Path, status_path: Path, cancel_path: Path) -> None:
+        import shutil
+
+        final_payload: dict | None = None
+        while True:
+            payload = None
+            if status_path.exists():
+                try:
+                    payload = json.loads(status_path.read_text(encoding="utf-8"))
+                except Exception:
+                    payload = None
+            if payload:
+                final_payload = payload
+                message = str(payload.get("message") or "")
+                if message:
+                    with self.lock:
+                        self.youtube_status = message
+                if payload.get("state") in {"done", "error", "cancelled"}:
+                    break
+
+            if process.poll() is not None:
+                time.sleep(0.15)
+                if status_path.exists():
+                    try:
+                        final_payload = json.loads(status_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        pass
+                if not final_payload or final_payload.get("state") not in {"done", "error", "cancelled"}:
+                    final_payload = {
+                        "state": "cancelled" if cancel_path.exists() else "error",
+                        "message": "Importacao cancelada." if cancel_path.exists() else "Erro: processo de download encerrou sem resultado.",
+                    }
+                break
+
+            time.sleep(0.25)
+
+        try:
+            state = (final_payload or {}).get("state")
+            if state == "done" and not self.youtube_download_cancelled:
+                audio_path = Path(str(final_payload.get("audioPath", "")))
+                name = str(final_payload.get("name") or "som_youtube")
+                if not audio_path.exists():
+                    raise RuntimeError("Arquivo baixado nao foi encontrado.")
+                with self.lock:
+                    self.youtube_status = "Adicionando a biblioteca..."
+                    item = self.library.add_file(str(audio_path), category="Geral", name=name)
+                    self.youtube_status = f"Concluido: '{item.name}' importado!"
+                    self.register_hotkeys()
+            elif state == "cancelled":
+                with self.lock:
+                    self.youtube_status = "Importacao cancelada."
+            else:
+                with self.lock:
+                    self.youtube_status = str((final_payload or {}).get("message") or "Erro ao importar audio.")
+        except Exception as exc:
+            with self.lock:
+                self.youtube_status = f"Erro: {exc}"
+        finally:
+            with self.lock:
+                self.youtube_download_process = None
+                self.youtube_work_dir = None
+                self.youtube_status_path = None
+                self.youtube_cancel_path = None
+                self.youtube_download_cancelled = False
+            try:
+                shutil.rmtree(work_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    def cancel_youtube_import(self) -> None:
+        with self.lock:
+            self.youtube_download_cancelled = True
+            self.youtube_status = "Cancelando..."
+            cancel_path = self.youtube_cancel_path
+            process = self.youtube_download_process
+        if cancel_path is not None:
+            try:
+                cancel_path.write_text("cancelled", encoding="utf-8")
+            except Exception:
+                pass
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except Exception:
+                pass
 
     def load_profile(self) -> dict:
         if not self.profile_path.exists():
@@ -977,6 +1409,9 @@ class AppState:
             master_voice_volume=self.master_voice_volume,
             master_pitch=self.master_pitch,
             master_mute=self.master_mute,
+            preferred_sample_rate=self.preferred_sample_rate(),
+            preferred_block_size=self.preferred_block_size(),
+            input_channels=self.preferred_input_channels(),
         )
 
     def register_hotkeys(self) -> None:
@@ -1041,6 +1476,9 @@ class AppState:
                 soundboard_monitor_enabled=self.soundboard_monitor_enabled,
                 soundboard_monitor_volume=self.soundboard_monitor_volume,
                 primary_outputs_monitor_mix=True,
+                preferred_sample_rate=self.preferred_sample_rate(),
+                preferred_block_size=self.preferred_block_size(),
+                input_channels=self.preferred_input_channels(),
             )
         )
         self.monitor_only_active = True
@@ -1552,10 +1990,19 @@ class AppState:
             "running": self.engine.running,
             "monitorOnly": self.monitor_only_active,
             "sampleRate": self.engine.sample_rate,
+            "blockSize": self.engine.block_size,
             "level": self.engine.last_level,
+            "lastError": self.engine.last_error,
+            "lastCallbackStatus": self.engine.last_callback_status,
             "route": route,
             "storageUsed": self.calculate_total_storage(),
             "youtubeStatus": self.youtube_status,
+            "audioConfig": {
+                "preferredSampleRate": self.settings.get("audioSampleRate", "auto"),
+                "preferredBlockSize": self.settings.get("audioBufferSize", "1024"),
+                "inputChannels": self.settings.get("inputChannels", "mono"),
+            },
+            "clipStats": self.clipping_manager.stats(),
             "virtualMode": self.virtual_mode_active,
             "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
             "selected": {
@@ -1654,7 +2101,7 @@ def _sanitize_color(value) -> str:
     return "#25a7f2"
 
 
-STATE = AppState()
+STATE = None if "--youtube-worker" in sys.argv else AppState()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -2030,20 +2477,11 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 raise RuntimeError("Texto vazio.")
             import asyncio
-            import edge_tts
-            temp_path = STATE.online_cache_dir / "tts_temp.mp3"
-            async def run_tts():
-                communicate = edge_tts.Communicate(text, voice, rate=rate)
-                await communicate.save(str(temp_path))
-            try:
-                asyncio.run(run_tts())
-            except Exception as e:
-                raise RuntimeError(f"Erro na síntese de voz: {e}")
             sr = STATE.engine.sample_rate or 48000
             try:
-                audio = load_audio_mono(str(temp_path), sr)
+                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, sr, STATE.online_cache_dir))
             except Exception as e:
-                raise RuntimeError(f"Erro ao carregar áudio gerado: {e}")
+                raise RuntimeError(f"Erro na sintese de voz: {e}")
             route = str(STATE.settings.get("onlinePlaybackRoute", "both")).strip().lower()
             tts_volume = float(STATE.settings.get("ttsVolume", 100)) / 100.0
             rendered = render_sound_for_playback(
@@ -2079,188 +2517,33 @@ class Handler(BaseHTTPRequestHandler):
             if not name:
                 name = text[:20] + "..." if len(text) > 20 else text
             import asyncio
-            import edge_tts
             import uuid
             filename = f"tts_{uuid.uuid4().hex}.wav"
-            temp_mp3 = STATE.online_cache_dir / f"{uuid.uuid4().hex}.mp3"
             dest_path = STATE.library.sounds_dir / filename
-            async def run_tts():
-                communicate = edge_tts.Communicate(text, voice, rate=rate)
-                await communicate.save(str(temp_mp3))
             try:
-                asyncio.run(run_tts())
+                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, 48000, STATE.online_cache_dir))
             except Exception as e:
-                raise RuntimeError(f"Erro na síntese de voz: {e}")
+                raise RuntimeError(f"Erro na sintese de voz: {e}")
             import soundfile as sf
             try:
                 sr = 48000
-                audio = load_audio_mono(str(temp_mp3), sr)
                 tts_volume = float(STATE.settings.get("ttsVolume", 100)) / 100.0
                 if abs(tts_volume - 1.0) > 0.01:
                     audio = audio * tts_volume
                 sf.write(str(dest_path), audio, sr, format="WAV", subtype="PCM_16")
             except Exception as e:
-                import shutil
-                dest_path = STATE.library.sounds_dir / f"tts_{uuid.uuid4().hex}.mp3"
-                shutil.copy(str(temp_mp3), str(dest_path))
-            finally:
-                if temp_mp3.exists():
-                    try:
-                        temp_mp3.unlink()
-                    except Exception:
-                        pass
+                raise RuntimeError(f"Erro ao salvar audio gerado: {e}")
             item = STATE.library.add_file(str(dest_path), name=name, category="TTS")
             STATE.save_profile()
             STATE.register_hotkeys()
             return {"ok": True, "sound": asdict(item)}
+
         if path == "/api/sounds/import-youtube":
-            youtube_url = data.get("url")
-            if not youtube_url:
-                raise RuntimeError("URL do YouTube ausente.")
-            
-            with STATE.lock:
-                if STATE.youtube_download_thread and STATE.youtube_download_thread.is_alive():
-                    raise RuntimeError("Já existe um download em andamento.")
-                STATE.youtube_download_cancelled = False
-                STATE.youtube_status = "Iniciando verificação..."
-            
-            def bg_download():
-                import yt_dlp
-                import imageio_ffmpeg
-                import tempfile
-                from pathlib import Path
-                import uuid
-                from .soundboard import sanitize_sound_name
-                
-                browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'safari', None]
-                info = None
-                last_err = None
-                
-                # 1. Quick verification: check if video exists
-                for browser in browsers:
-                    if STATE.youtube_download_cancelled:
-                        break
-                    ydl_opts_verify = {
-                        'quiet': True,
-                        'no_warnings': True,
-                        'simulate': True,
-                        'extractor_args': {
-                            'youtube': {
-                                'player_client': ['android', 'web']
-                            }
-                        }
-                    }
-                    if browser:
-                        ydl_opts_verify['cookiesfrombrowser'] = (browser,)
-                    try:
-                        with yt_dlp.YoutubeDL(ydl_opts_verify) as ydl:
-                            info = ydl.extract_info(youtube_url, download=False)
-                        break
-                    except Exception as e:
-                        if "CANCELLED" in str(e) or STATE.youtube_download_cancelled:
-                            break
-                        last_err = e
-                
-                if STATE.youtube_download_cancelled:
-                    with STATE.lock:
-                        STATE.youtube_status = "Importacao cancelada."
-                    return
-                
-                if not info:
-                    with STATE.lock:
-                        STATE.youtube_status = f"Erro: Video invalido ou nao encontrado ({str(last_err)})"
-                    return
-                
-                ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-                temp_dir = tempfile.gettempdir()
-                temp_id = uuid.uuid4().hex
-                outtmpl = str(Path(temp_dir) / f"yt_{temp_id}.%(ext)s")
-                
-                def hook(d):
-                    if STATE.youtube_download_cancelled:
-                        raise RuntimeError("CANCELLED")
-                    if d['status'] == 'downloading':
-                        percent = d.get('_percent_str', '').strip()
-                        with STATE.lock:
-                            STATE.youtube_status = f"Baixando: {percent}"
-                            
-                info = None
-                last_err = None
-                for browser in browsers:
-                    if STATE.youtube_download_cancelled:
-                        break
-                    ydl_opts = {
-                        'format': 'bestaudio/best',
-                        'outtmpl': outtmpl,
-                        'ffmpeg_location': ffmpeg_path,
-                        'postprocessors': [{
-                            'key': 'FFmpegExtractAudio',
-                            'preferredcodec': 'mp3',
-                            'preferredquality': '192',
-                        }],
-                        'quiet': True,
-                        'no_warnings': True,
-                        'progress_hooks': [hook],
-                        'extractor_args': {
-                            'youtube': {
-                                'player_client': ['android', 'web']
-                            }
-                        }
-                    }
-                    if browser:
-                        ydl_opts['cookiesfrombrowser'] = (browser,)
-                    try:
-                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(youtube_url, download=True)
-                        break
-                    except Exception as e:
-                        if "CANCELLED" in str(e) or STATE.youtube_download_cancelled:
-                            break
-                        last_err = e
-                
-                try:
-                    if STATE.youtube_download_cancelled:
-                        raise RuntimeError("CANCELLED")
-                    if not info:
-                        raise last_err or RuntimeError("Falha ao extrair audio.")
-                    
-                    mp3_path = Path(temp_dir) / f"yt_{temp_id}.mp3"
-                    if not mp3_path.exists():
-                        raise RuntimeError("Falha ao extrair audio.")
-                    
-                    title = info.get("title", "Som do YouTube")
-                    sanitized_title = sanitize_sound_name(title)
-                    if not sanitized_title:
-                        sanitized_title = "som_youtube"
-                        
-                    with STATE.lock:
-                        STATE.youtube_status = "Adicionando a biblioteca..."
-                        item = STATE.library.add_file(str(mp3_path), category="Geral", name=sanitized_title)
-                        try:
-                            mp3_path.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        STATE.youtube_status = f"Concluido: '{item.name}' importado!"
-                        STATE.register_hotkeys()
-                except Exception as e:
-                    try:
-                        Path(str(Path(temp_dir) / f"yt_{temp_id}.mp3")).unlink(missing_ok=True)
-                    except OSError:
-                        pass
-                    with STATE.lock:
-                        if STATE.youtube_download_cancelled:
-                            STATE.youtube_status = "Importacao cancelada."
-                        else:
-                            STATE.youtube_status = f"Erro: {str(e)}"
-                            
-            STATE.youtube_download_thread = threading.Thread(target=bg_download, daemon=True)
-            STATE.youtube_download_thread.start()
+            STATE.start_youtube_import(data.get("url"))
             return {"status": "started"}
 
         if path == "/api/sounds/import-youtube/cancel":
-            with STATE.lock:
-                STATE.youtube_download_cancelled = True
-                STATE.youtube_status = "Cancelando..."
+            STATE.cancel_youtube_import()
             return {"status": "cancelled"}
 
         if path == "/api/sounds/download":
@@ -3116,10 +3399,18 @@ def watch_parent_process() -> None:
 
 
 def main() -> None:
+    global STATE
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=38717)
+    parser.add_argument("--youtube-worker", default="")
     args = parser.parse_args()
+
+    if args.youtube_worker:
+        raise SystemExit(run_youtube_download_worker(args.youtube_worker))
+
+    if STATE is None:
+        STATE = AppState()
 
     import threading
     threading.Thread(target=watch_parent_process, daemon=True).start()

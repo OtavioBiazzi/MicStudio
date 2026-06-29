@@ -64,6 +64,17 @@ class ProcessingTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(out)))
         self.assertFalse(np.allclose(out, samples))
 
+    def test_glitch_effect_outputs_finite_changed_waveform(self):
+        samples = np.sin(np.linspace(0.0, 12.0 * np.pi, 512, dtype=np.float32)) * 0.3
+        processor = VoiceEffectsProcessor(48000)
+        out = processor.process(
+            samples,
+            EffectsSettings(glitch_enabled=True, glitch_mix=0.8, glitch_rate_hz=28.0),
+        )
+        self.assertEqual(out.shape, samples.shape)
+        self.assertTrue(np.all(np.isfinite(out)))
+        self.assertFalse(np.allclose(out, samples))
+
     def test_pitch_ratio(self):
         self.assertTrue(math.isclose(semitones_to_ratio(12.0), 2.0, rel_tol=0.0001))
         self.assertTrue(math.isclose(semitones_to_ratio(-12.0), 0.5, rel_tol=0.0001))

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, FadersHorizontal, YoutubeLogo, Lightning, ChartBar,
-  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone
+  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone, X
 } from "@phosphor-icons/react";
 import { formatTime } from "../utils";
 import { YoutubeImportModal, TTSModal } from "./Modals";
@@ -25,6 +25,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
   const [showFilters, setShowFilters] = useState(false);
   const [showYoutubeModal, setShowYoutubeModal] = useState(false);
   const [showTTSModal, setShowTTSModal] = useState(false);
+  const [pendingSoundDestination, setPendingSoundDestination] = useState(null);
 
   const parseDuration = (durVal) => {
     if (durVal === null || durVal === undefined) return 3.0;
@@ -206,7 +207,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
     }
   };
 
-  const handleImport = async (sound) => {
+  const handleImport = async (sound, tabs = ["Todos"]) => {
     setDownloading((prev) => ({ ...prev, [sound.id]: "downloading" }));
     try {
       await call("/api/sounds/download", {
@@ -215,6 +216,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
         name: sound.name,
         category: "Online",
         color: sound.color || "#8B5CF6",
+        tabs,
       });
       setDownloading((prev) => ({ ...prev, [sound.id]: "imported" }));
     } catch (err) {
@@ -286,7 +288,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             }}
           >
             <YoutubeLogo size={16} color="#FF0000" />
-            <span>Adicionar Som do YouTube</span>
+            <span>Adicionar Som do YouTube/TikTok</span>
           </button>
           <button
             onClick={() => {
@@ -482,7 +484,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
                     ) : (
                       <button
                         className="import-btn"
-                        onClick={() => handleImport(sound)}
+                        onClick={() => setPendingSoundDestination(sound)}
                         disabled={status === "downloading"}
                         style={{ width: "100%" }}
                       >
@@ -551,7 +553,80 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             setToast={setToast}
           />
         )}
+        {pendingSoundDestination && (
+          <OnlineDestinationModal
+            sound={pendingSoundDestination}
+            state={state}
+            onClose={() => setPendingSoundDestination(null)}
+            onConfirm={(tabs) => {
+              const sound = pendingSoundDestination;
+              setPendingSoundDestination(null);
+              handleImport(sound, tabs);
+            }}
+          />
+        )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function OnlineDestinationModal({ sound, state, onClose, onConfirm }) {
+  const [selectedTabs, setSelectedTabs] = useState(["Todos", "Online"]);
+  const [customTabs, setCustomTabs] = useState([]);
+  const [newTabName, setNewTabName] = useState("");
+
+  const destinationTabs = useMemo(() => {
+    const names = new Set(["Todos", "Online", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos"), ...customTabs]);
+    return Array.from(names);
+  }, [state?.soundCategories, customTabs]);
+
+  const toggleTab = (tab) => {
+    setSelectedTabs((prev) => {
+      if (tab === "Todos") return prev.includes("Todos") ? prev : ["Todos", ...prev];
+      const next = prev.includes(tab) ? prev.filter((item) => item !== tab) : [...prev, tab];
+      return next.length ? (next.includes("Todos") ? next : ["Todos", ...next]) : ["Todos"];
+    });
+  };
+
+  const addCustomTab = () => {
+    const name = newTabName.trim();
+    if (!name) return;
+    setCustomTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
+    setSelectedTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
+    setNewTabName("");
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent destinationModal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, padding: 22 }}>
+        <div className="modalHeader" style={{ padding: 0, borderBottom: "none" }}>
+          <h3 className="modalTitle" style={{ margin: 0 }}>Salvar no Soundboard</h3>
+          <button className="closeBtn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <p style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5, margin: "10px 0 14px" }}>
+          Escolha em quais abas "{sound?.name}" vai aparecer. O arquivo sera baixado uma vez so.
+        </p>
+        <div className="destinationTabGrid">
+          {destinationTabs.map((tab) => (
+            <button key={tab} className={selectedTabs.includes(tab) ? "active" : ""} onClick={() => toggleTab(tab)}>
+              {tab}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <input
+            value={newTabName}
+            onChange={(e) => setNewTabName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addCustomTab(); }}
+            placeholder="Criar nova aba..."
+          />
+          <button className="btn btn-ghost" onClick={addCustomTab}>Adicionar</button>
+        </div>
+        <div className="modalFooter" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={() => onConfirm(selectedTabs)}>Adicionar ao Soundboard</button>
+        </div>
+      </div>
     </div>
   );
 }

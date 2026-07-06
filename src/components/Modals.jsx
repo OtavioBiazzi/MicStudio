@@ -787,11 +787,14 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
   const [selectedTabs, setSelectedTabs] = useState(["Todos"]);
+  const [customTabs, setCustomTabs] = useState([]);
+  const [newTabName, setNewTabName] = useState("");
+  const [choosingDestination, setChoosingDestination] = useState(false);
 
   const destinationTabs = useMemo(() => {
-    const names = new Set(["Todos", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos")]);
+    const names = new Set(["Todos", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos"), ...customTabs]);
     return Array.from(names);
-  }, [state?.soundCategories]);
+  }, [state?.soundCategories, customTabs]);
 
   const detectedSource = useMemo(() => {
     const value = youtubeUrl.toLowerCase();
@@ -829,20 +832,41 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
     }
   }, [state?.youtubeStatus, youtubeLoading, onClose]);
 
-  const handleImport = async () => {
+  const handleImport = () => {
     if (!youtubeUrl || !youtubeUrl.trim()) {
-      setToast("Cole uma URL válida do YouTube.");
+      setToast("Cole uma URL válida do YouTube ou TikTok.");
       return;
     }
+    setChoosingDestination(true);
+    return;
+  };
+
+  const handleStartDownload = async () => {
     const sanitizedUrl = cleanMediaUrl(youtubeUrl);
     setLocalLoading(true);
-    setToast("Verificando vídeo do YouTube...");
+    setToast(`Verificando link do ${detectedSource}...`);
     try {
       await call("/api/sounds/import-youtube", { url: sanitizedUrl, tabs: selectedTabs });
     } catch (err) {
       setToast("Erro: " + err.message);
       setLocalLoading(false);
     }
+  };
+
+  const toggleTab = (tab) => {
+    setSelectedTabs((prev) => {
+      if (tab === "Todos") return prev.includes("Todos") ? prev : ["Todos", ...prev];
+      const next = prev.includes(tab) ? prev.filter((item) => item !== tab) : [...prev, tab];
+      return next.length ? (next.includes("Todos") ? next : ["Todos", ...next]) : ["Todos"];
+    });
+  };
+
+  const addCustomTab = () => {
+    const name = newTabName.trim();
+    if (!name) return;
+    setCustomTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
+    setSelectedTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
+    setNewTabName("");
   };
 
   const handleCancel = async () => {
@@ -873,7 +897,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
         </div>
         <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
-            Cole o link de um vídeo do YouTube abaixo para converter e importar o áudio diretamente para o seu Soundboard.
+            Cole um link do YouTube ou TikTok. Depois de clicar em Importar, escolha em quais abas o áudio vai aparecer.
           </p>
           
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -901,6 +925,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
             <small style={{ color: "var(--text-muted)", fontSize: 11 }}>Detectado: {detectedSource}</small>
           </div>
 
+          {choosingDestination && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Salvar nas abas</span>
             <div className="destinationTabGrid">
@@ -909,19 +934,34 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
                   key={tab}
                   className={selectedTabs.includes(tab) ? "active" : ""}
                   disabled={youtubeLoading}
-                  onClick={() => {
-                    setSelectedTabs((prev) => {
-                      if (tab === "Todos") return prev.includes("Todos") ? prev : ["Todos", ...prev];
-                      const next = prev.includes(tab) ? prev.filter((item) => item !== tab) : [...prev, tab];
-                      return next.length ? (next.includes("Todos") ? next : ["Todos", ...next]) : ["Todos"];
-                    });
-                  }}
+                  onClick={() => toggleTab(tab)}
                 >
                   {tab}
                 </button>
               ))}
             </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={newTabName}
+                onChange={(e) => setNewTabName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addCustomTab(); }}
+                placeholder="Criar nova aba..."
+                disabled={youtubeLoading}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "9px 11px",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text)",
+                  fontSize: 12
+                }}
+              />
+              <button className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 12 }} onClick={addCustomTab} disabled={youtubeLoading}>Adicionar</button>
+            </div>
           </div>
+          )}
           
           {youtubeLoading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
@@ -952,9 +992,9 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
               <button
                 className="btn btn-primary"
                 style={{ padding: "8px 20px", fontSize: 12 }}
-                onClick={handleImport}
+                onClick={choosingDestination ? handleStartDownload : handleImport}
               >
-                Importar
+                {choosingDestination ? "Iniciar download" : "Importar"}
               </button>
             </>
           )}

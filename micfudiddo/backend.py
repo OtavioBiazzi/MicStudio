@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import atexit
 import argparse
 import json
 import random
+import signal
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -306,6 +308,10 @@ DEFAULT_APP_SETTINGS = {
     "audioBufferSize": "1024",
     "inputChannels": "mono",
     "youtubeUseBrowserCookies": False,
+    "importDestinationMode": "ask",
+    "importDestinationTabs": ["Todos"],
+    "rememberLastImportTabs": True,
+    "autoOrganizeBySource": False,
 }
 
 DEFAULT_PROFILE = {
@@ -681,6 +687,8 @@ def run_youtube_download_worker(job_path: str) -> int:
     status_path = Path(job["statusPath"])
     cancel_path = Path(job["cancelPath"])
     use_browser_cookies = bool(job.get("useBrowserCookies", False))
+    source_kind = str(job.get("source") or ("tiktok" if "tiktok." in youtube_url.lower() else "youtube"))
+    tabs = [str(tab).strip() for tab in job.get("tabs", []) if str(tab).strip()]
     work_dir.mkdir(parents=True, exist_ok=True)
 
     def cancelled() -> bool:
@@ -766,6 +774,9 @@ def run_youtube_download_worker(job_path: str) -> int:
             title=title,
             name=sanitized_title,
             audioPath=str(mp3_path),
+            source=source_kind,
+            url=youtube_url,
+            tabs=tabs,
         )
         return 0
     except Exception as exc:
@@ -830,6 +841,11 @@ class AppState:
                 import json
                 raw = json.loads(self.saved_capture_defaults_path.read_text(encoding="utf-8"))
                 self.saved_capture_defaults = {int(k): v for k, v in raw.items()}
+                if self.saved_capture_defaults:
+                    restore_default_capture_ids(self.saved_capture_defaults)
+                    self.saved_capture_defaults_path.unlink(missing_ok=True)
+                    self.saved_capture_defaults = {}
+                    print("Microfone padrao restaurado apos encerramento inesperado.", flush=True)
             except Exception as e:
                 print("Erro ao recuperar microfone padrao temporario:", e)
         self.virtual_mode_active = False
@@ -1022,6 +1038,8 @@ class AppState:
                 default_val = DEFAULT_APP_SETTINGS[key]
                 if isinstance(default_val, bool):
                     self.settings[key] = bool(patch[key])
+                elif isinstance(default_val, list):
+                    self.settings[key] = [str(value).strip() for value in (patch[key] or []) if str(value).strip()]
                 else:
                     self.settings[key] = str(patch[key])
         self.save_app_settings()
@@ -1056,6 +1074,44 @@ class AppState:
         value = str(self.settings.get("inputChannels", "mono")).strip().lower()
         return 2 if value == "stereo" else 1
 
+    def resolve_import_tabs(self, requested_tabs=None, source_kind: str = "local") -> list[str]:
+        source_kind = str(source_kind or "local").strip().lower()
+        source_labels = {
+            "youtube": "YouTube",
+            "tiktok": "TikTok",
+            "local": "Importados do PC",
+            "online": "Online",
+            "tts": "TTS",
+            "recording": "Gravacoes",
+        }
+        tabs = [str(tab).strip() for tab in (requested_tabs or []) if str(tab).strip()]
+        mode = str(self.settings.get("importDestinationMode", "ask") or "ask")
+        if not tabs:
+            if mode in {"auto_tabs", "remember_last"}:
+                tabs = [
+                    str(tab).strip()
+                    for tab in (self.settings.get("importDestinationTabs") or [])
+                    if str(tab).strip()
+                ]
+            elif mode == "source":
+                tabs = [source_labels.get(source_kind, source_kind.title()) if source_kind else "Todos"]
+            else:
+                tabs = ["Todos"]
+        if bool(self.settings.get("autoOrganizeBySource", False)) and source_kind in {"youtube", "tiktok", "local", "online", "tts", "recording"}:
+            label = source_labels.get(source_kind, source_kind.title())
+            if label not in tabs:
+                tabs.append(label)
+        if "Todos" not in tabs:
+            tabs.insert(0, "Todos")
+        deduped = []
+        for tab in tabs:
+            if tab not in deduped:
+                deduped.append(tab)
+        if bool(self.settings.get("rememberLastImportTabs", True)):
+            self.settings["importDestinationTabs"] = deduped
+            self.save_app_settings()
+        return deduped
+
     def _youtube_worker_command(self, job_path: Path) -> list[str]:
         import sys
 
@@ -1063,14 +1119,16 @@ class AppState:
             return [sys.executable, "--youtube-worker", str(job_path)]
         return [sys.executable, "-m", "micfudiddo.backend", "--youtube-worker", str(job_path)]
 
-    def start_youtube_import(self, youtube_url: str) -> None:
+    def start_youtube_import(self, youtube_url: str, tabs=None) -> None:
         import subprocess
         import tempfile
         import uuid
 
         youtube_url = str(youtube_url or "").strip()
         if not youtube_url:
-            raise RuntimeError("URL do YouTube ausente.")
+            raise RuntimeError("URL ausente.")
+        source_kind = "tiktok" if "tiktok." in youtube_url.lower() else "youtube"
+        destination_tabs = self.resolve_import_tabs(tabs, source_kind)
 
         with self.lock:
             if self.youtube_download_process and self.youtube_download_process.poll() is None:
@@ -1092,6 +1150,8 @@ class AppState:
             "statusPath": str(status_path),
             "cancelPath": str(cancel_path),
             "useBrowserCookies": bool(self.settings.get("youtubeUseBrowserCookies", False)),
+            "source": source_kind,
+            "tabs": destination_tabs,
         }
         job_path.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
 
@@ -1163,11 +1223,21 @@ class AppState:
             if state == "done" and not self.youtube_download_cancelled:
                 audio_path = Path(str(final_payload.get("audioPath", "")))
                 name = str(final_payload.get("name") or "som_youtube")
+                tabs = final_payload.get("tabs") or []
+                source_kind = str(final_payload.get("source") or "youtube")
+                source_url = str(final_payload.get("url") or "")
                 if not audio_path.exists():
                     raise RuntimeError("Arquivo baixado nao foi encontrado.")
                 with self.lock:
                     self.youtube_status = "Adicionando a biblioteca..."
-                    item = self.library.add_file(str(audio_path), category="Geral", name=name)
+                    item = self.library.add_file(
+                        str(audio_path),
+                        category=(tabs[1] if isinstance(tabs, list) and len(tabs) > 1 else "Geral"),
+                        name=name,
+                        tabs=tabs,
+                        source_kind=source_kind,
+                        source_url=source_url,
+                    )
                     self.youtube_status = f"Concluido: '{item.name}' importado!"
                     self.register_hotkeys()
             elif state == "cancelled":
@@ -1958,7 +2028,15 @@ class AppState:
         return saved
 
     def add_recording_to_soundboard(self, path: Path, name: str | None = None):
-        return self.library.add_file(str(path), category="Gravacoes", name=name or Path(path).stem, color="#49e2d1")
+        tabs = self.resolve_import_tabs(["Todos", "Gravacoes"], "recording")
+        return self.library.add_file(
+            str(path),
+            category="Gravacoes",
+            name=name or Path(path).stem,
+            color="#49e2d1",
+            tabs=tabs,
+            source_kind="recording",
+        )
 
     def calculate_total_storage(self) -> int:
         total = 0
@@ -2102,6 +2180,47 @@ def _sanitize_color(value) -> str:
 
 
 STATE = None if "--youtube-worker" in sys.argv else AppState()
+
+
+def emergency_restore_microphone() -> None:
+    state = globals().get("STATE")
+    if state is None:
+        return
+    try:
+        state.deactivate_virtual()
+    except Exception as exc:
+        print("Falha na restauracao emergencial do microfone:", exc, flush=True)
+
+
+def install_microphone_safety_handlers() -> None:
+    atexit.register(emergency_restore_microphone)
+
+    def signal_handler(signum, _frame):
+        emergency_restore_microphone()
+        raise SystemExit(128 + int(signum))
+
+    for sig_name in ("SIGINT", "SIGTERM", "SIGBREAK"):
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
+            try:
+                signal.signal(sig, signal_handler)
+            except Exception:
+                pass
+
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+
+            HandlerRoutine = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+
+            def console_handler(_event):
+                emergency_restore_microphone()
+                return False
+
+            globals()["_MICFUDIDDO_CONSOLE_HANDLER"] = HandlerRoutine(console_handler)
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(globals()["_MICFUDIDDO_CONSOLE_HANDLER"], True)
+        except Exception as exc:
+            print("Nao foi possivel registrar handler de encerramento do Windows:", exc, flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -2319,6 +2438,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sounds/import-mfsound":
             archive_path = str(data["path"])
             item = STATE.library.import_mfsound(archive_path)
+            if data.get("tabs"):
+                item.tabs = STATE.resolve_import_tabs(data.get("tabs"), "local")
+                STATE.library.update(item)
             with STATE.lock:
                 STATE.status = f"Som importado: {item.name}"
             return {"ok": True, "soundId": item.id}
@@ -2439,11 +2561,12 @@ class Handler(BaseHTTPRequestHandler):
             
         if path == "/api/sounds/add":
             paths = data.get("paths", [])
+            tabs = STATE.resolve_import_tabs(data.get("tabs"), "local")
             def bg_add():
                 added = 0
                 for file_path in paths:
                     try:
-                        STATE.library.add_file(file_path)
+                        STATE.library.add_file(file_path, tabs=tabs, source_kind="local")
                         added += 1
                     except Exception as e:
                         print("Error adding file:", e)
@@ -2533,13 +2656,14 @@ class Handler(BaseHTTPRequestHandler):
                 sf.write(str(dest_path), audio, sr, format="WAV", subtype="PCM_16")
             except Exception as e:
                 raise RuntimeError(f"Erro ao salvar audio gerado: {e}")
-            item = STATE.library.add_file(str(dest_path), name=name, category="TTS")
+            tabs = STATE.resolve_import_tabs(data.get("tabs"), "tts")
+            item = STATE.library.add_file(str(dest_path), name=name, category="TTS", tabs=tabs, source_kind="tts")
             STATE.save_profile()
             STATE.register_hotkeys()
             return {"ok": True, "sound": asdict(item)}
 
         if path == "/api/sounds/import-youtube":
-            STATE.start_youtube_import(data.get("url"))
+            STATE.start_youtube_import(data.get("url"), data.get("tabs"))
             return {"status": "started"}
 
         if path == "/api/sounds/import-youtube/cancel":
@@ -2551,6 +2675,7 @@ class Handler(BaseHTTPRequestHandler):
             name = data.get("name")
             category = data.get("category", "Online")
             color = data.get("color")
+            tabs = STATE.resolve_import_tabs(data.get("tabs"), "online")
             if not url:
                 raise RuntimeError("URL de download ausente.")
             
@@ -2565,7 +2690,7 @@ class Handler(BaseHTTPRequestHandler):
                 
             cached_file = STATE.online_cache_dir / f"{sound_id}{suffix}"
             if cached_file.exists():
-                item = STATE.library.add_file(str(cached_file), category=category, name=name, color=color)
+                item = STATE.library.add_file(str(cached_file), category=category, name=name, color=color, tabs=tabs, source_kind="online", source_url=str(url))
                 STATE.status = f"Som '{item.name}' importado do cache!"
             else:
                 import urllib.request
@@ -2580,7 +2705,7 @@ class Handler(BaseHTTPRequestHandler):
                 req = urllib.request.Request(url, headers=headers)
                 with urllib.request.urlopen(req) as response, open(temp_path, "wb") as out_file:
                     out_file.write(response.read())
-                item = STATE.library.add_file(str(temp_path), category=category, name=name, color=color)
+                item = STATE.library.add_file(str(temp_path), category=category, name=name, color=color, tabs=tabs, source_kind="online", source_url=str(url))
                 try:
                     temp_path.unlink(missing_ok=True)
                 except OSError:
@@ -2730,11 +2855,16 @@ class Handler(BaseHTTPRequestHandler):
             
         if path == "/api/sounds/add-folder":
             paths = data.get("paths", [])
+            tabs = STATE.resolve_import_tabs(data.get("tabs"), "local")
             def bg_add_folder():
                 added = 0
                 for folder_path in paths:
                     try:
-                        added += len(STATE.library.add_folder(folder_path))
+                        new_items = STATE.library.add_folder(folder_path)
+                        for item in new_items:
+                            item.tabs = tabs
+                            STATE.library.update(item)
+                        added += len(new_items)
                     except Exception as e:
                         print("Error adding folder:", e)
                 with STATE.lock:
@@ -2897,6 +3027,9 @@ class Handler(BaseHTTPRequestHandler):
             for key in (
                 "name",
                 "category",
+                "tabs",
+                "source",
+                "source_url",
                 "color",
                 "volume",
                 "pitch_semitones",
@@ -2921,6 +3054,8 @@ class Handler(BaseHTTPRequestHandler):
             if not item.name:
                 item.name = "som"
             item.category = str(item.category or "Geral").strip() or "Geral"
+            if "tabs" in data:
+                item.tabs = STATE.resolve_import_tabs(data.get("tabs"), str(getattr(item, "source", "local") or "local"))
             item.color = _sanitize_color(item.color)
             item.volume = max(0.0, float(item.volume))
             item.speed = max(0.25, min(4.0, float(item.speed)))
@@ -2954,6 +3089,15 @@ class Handler(BaseHTTPRequestHandler):
             STATE.library._sanitize_item(item)
             STATE.library.update(item)
             STATE.register_hotkeys()
+            return STATE.snapshot()
+        if path == "/api/sounds/remove-from-tab":
+            item = STATE.library.remove_from_tab(str(data["id"]), str(data.get("tab") or ""))
+            if item:
+                STATE.status = f"Som removido da aba {data.get('tab')}"
+            return STATE.snapshot()
+        if path == "/api/sounds/set-tabs":
+            item = STATE.library.set_tabs(str(data["id"]), data.get("tabs", []))
+            STATE.status = f"Abas atualizadas: {item.name}"
             return STATE.snapshot()
         if path == "/api/sounds/defaults":
             STATE.library.defaults = SoundDefaults(
@@ -3411,6 +3555,8 @@ def main() -> None:
 
     if STATE is None:
         STATE = AppState()
+
+    install_microphone_safety_handlers()
 
     import threading
     threading.Thread(target=watch_parent_process, daemon=True).start()

@@ -154,7 +154,11 @@ export function ConfigPage({
           clipEnabled: false,
           clipDuration: "30",
           clipSource: "both",
-          maxSoundboardStorage: 0
+          maxSoundboardStorage: 0,
+          importDestinationMode: "ask",
+          importDestinationTabs: ["Todos"],
+          rememberLastImportTabs: true,
+          autoOrganizeBySource: false
         });
         setToast("Configurações de Soundboard redefinidas para o padrão!");
       } else if (tabName === "shortcuts") {
@@ -533,6 +537,44 @@ export function ConfigPage({
                     </small>
                   </div>
                 </div>
+              </div>
+
+              <div className="settingCard">
+                <div className="settingCardTitle">
+                  <DownloadSimple size={18} />
+                  <span>Destino de Downloads e Importacoes</span>
+                </div>
+                <div className="settingCardDesc">
+                  Defina como o app escolhe as abas onde novos audios aparecem.
+                </div>
+
+                <div className="selectField">
+                  <label>Comportamento padrao</label>
+                  <select
+                    value={state.settings?.importDestinationMode || "ask"}
+                    onChange={(e) => call("/api/settings", { importDestinationMode: e.target.value })}
+                  >
+                    <option value="ask">Sempre perguntar antes de baixar/importar</option>
+                    <option value="todos">Salvar automaticamente apenas em Todos</option>
+                    <option value="auto_tabs">Salvar automaticamente nas abas escolhidas abaixo</option>
+                    <option value="remember_last">Lembrar a ultima escolha usada</option>
+                    <option value="source">Organizar automaticamente por origem</option>
+                  </select>
+                </div>
+
+                <ToggleSetting
+                  label="Lembrar ultima escolha de abas"
+                  description="Atualiza o destino padrao quando voce confirma uma importacao."
+                  checked={state.settings?.rememberLastImportTabs !== false}
+                  onChange={(v) => call("/api/settings", { rememberLastImportTabs: v })}
+                />
+
+                <ToggleSetting
+                  label="Adicionar aba por origem automaticamente"
+                  description="Inclui abas como YouTube, TikTok ou Importados do PC junto do destino escolhido."
+                  checked={state.settings?.autoOrganizeBySource === true}
+                  onChange={(v) => call("/api/settings", { autoOrganizeBySource: v })}
+                />
               </div>
 
               {/* Card 2: Clipping Retroativo */}

@@ -89,8 +89,25 @@ class SoundboardTests(unittest.TestCase):
                 library.record_play(item.id)
                 updated = library.by_id(item.id)
                 self.assertIn("Alertas", library.categories())
-                self.assertEqual(updated.play_count, 1)
-                self.assertGreater(updated.last_played_at, 0)
+        self.assertEqual(updated.play_count, 1)
+        self.assertGreater(updated.last_played_at, 0)
+
+    def test_library_supports_multiple_tabs_without_duplicate_files(self):
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as tmp:
+            with patch("pathlib.Path.home", return_value=Path(home)):
+                library = SoundLibrary()
+                source = Path(tmp) / "source.wav"
+                sf.write(source, np.ones(100, dtype=np.float32) * 0.1, 48000)
+                item = library.add_file(str(source), tabs=["Todos", "Memes", "TikTok"], source_kind="tiktok", source_url="https://tiktok.example/video")
+                original_path = item.path
+                library.remove_from_tab(item.id, "Memes")
+                updated = library.by_id(item.id)
+        self.assertEqual(updated.path, original_path)
+        self.assertIn("Todos", updated.tabs)
+        self.assertIn("TikTok", updated.tabs)
+        self.assertNotIn("Memes", updated.tabs)
+        self.assertEqual(updated.source, "tiktok")
+        self.assertEqual(updated.source_url, "https://tiktok.example/video")
 
     def test_save_edited_copy_bakes_pitch_volume_and_trim(self):
         with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as tmp:

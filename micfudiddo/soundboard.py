@@ -76,6 +76,9 @@ class SoundItem:
     created_at: float = field(default_factory=time.time)
     effects: dict = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+    tabs: list[str] = field(default_factory=lambda: ["Todos"])
+    source: str = "local"
+    source_url: str = ""
 
 
 @dataclass
@@ -162,7 +165,16 @@ class SoundLibrary:
         data = {"sound_defaults": asdict(self.defaults)}
         self.settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def add_file(self, source: str, category: str | None = None, name: str | None = None, color: str | None = None) -> SoundItem:
+    def add_file(
+        self,
+        source: str,
+        category: str | None = None,
+        name: str | None = None,
+        color: str | None = None,
+        tabs: list[str] | None = None,
+        source_kind: str = "local",
+        source_url: str = "",
+    ) -> SoundItem:
         source_path = Path(source)
         if not source_path.is_file():
             raise RuntimeError(f"Arquivo nao encontrado: {source}")
@@ -179,11 +191,12 @@ class SoundLibrary:
         if not sanitized_name:
             sanitized_name = "som"
 
+        clean_category = (category or self.defaults.category or "Geral").strip() or "Geral"
         item = SoundItem(
             id=safe_id,
             name=sanitized_name,
             path=str(target),
-            category=(category or self.defaults.category or "Geral").strip() or "Geral",
+            category=clean_category,
             color=color or self.defaults.color,
             volume=self.defaults.volume,
             pitch_semitones=self.defaults.pitch_semitones,
@@ -198,6 +211,9 @@ class SoundLibrary:
             mute_other_sounds=self.defaults.mute_other_sounds,
             output_route=self.defaults.output_route,
             effects={},
+            tabs=_normalize_tabs(tabs, clean_category),
+            source=_sanitize_source(source_kind),
+            source_url=str(source_url or "").strip(),
         )
         self.items.append(item)
         self.save()
@@ -234,6 +250,25 @@ class SoundLibrary:
                 kept.append(item)
         self.items = kept
         self.save()
+
+    def remove_from_tab(self, item_id: str, tab: str) -> SoundItem | None:
+        item = self.by_id(item_id)
+        tab = str(tab or "").strip()
+        if item is None or not tab or tab == "Todos":
+            return item
+        item.tabs = [name for name in _normalize_tabs(item.tabs, item.category) if name != tab]
+        if not item.tabs:
+            item.tabs = ["Todos"]
+        self.update(item)
+        return item
+
+    def set_tabs(self, item_id: str, tabs: list[str]) -> SoundItem:
+        item = self.by_id(item_id)
+        if item is None:
+            raise RuntimeError("Som nao encontrado.")
+        item.tabs = _normalize_tabs(tabs, item.category)
+        self.update(item)
+        return item
 
     def detach(self, item_id: str) -> dict | None:
         removed = self.detach_many([item_id])
@@ -353,6 +388,9 @@ class SoundLibrary:
             shortcut="",
             block_voice=item.block_voice,
             effects=dict(item.effects or {}),
+            tabs=list(_normalize_tabs(item.tabs, item.category)),
+            source=item.source,
+            source_url=item.source_url,
         )
         self.items.append(copied)
         self.save()
@@ -479,6 +517,9 @@ class SoundLibrary:
             shortcut="",
             block_voice=bool(block_voice),
             effects=effects_dict,
+            tabs=list(_normalize_tabs(item.tabs, clean_category)),
+            source=item.source,
+            source_url=item.source_url,
         )
         self.items.append(copied)
         self.save()
@@ -545,6 +586,9 @@ class SoundLibrary:
             "block_voice": item.block_voice,
             "effects": item.effects,
             "tags": item.tags,
+            "tabs": item.tabs,
+            "source": item.source,
+            "source_url": item.source_url,
             "audio_filename": audio_path.name
         }
         
@@ -609,6 +653,9 @@ class SoundLibrary:
                 block_voice=metadata.get("block_voice", False),
                 effects=metadata.get("effects", {}),
                 tags=metadata.get("tags", []),
+                tabs=_normalize_tabs(metadata.get("tabs"), metadata.get("category", "Geral")),
+                source=_sanitize_source(metadata.get("source", "local")),
+                source_url=str(metadata.get("source_url", "") or ""),
             )
             self.items.append(item)
             self.save()
@@ -616,11 +663,12 @@ class SoundLibrary:
 
 
     def categories(self) -> list[str]:
-        names = {
-            (item.category or "Geral").strip() or "Geral"
-            for item in self.items
-        }
+        names = set()
+        for item in self.items:
+            names.update(_normalize_tabs(item.tabs, item.category))
+            names.add((item.category or "Geral").strip() or "Geral")
         names.add((self.defaults.category or "Geral").strip() or "Geral")
+        names.add("Todos")
         return sorted(names, key=str.lower)
 
     def by_id(self, item_id: str) -> SoundItem | None:
@@ -714,6 +762,9 @@ class SoundLibrary:
         item.block_voice = bool(item.block_voice)
         item.effects = dict(item.effects or {})
         item.tags = [str(t).strip() for t in (item.tags or []) if str(t).strip()]
+        item.tabs = _normalize_tabs(item.tabs, item.category)
+        item.source = _sanitize_source(item.source)
+        item.source_url = str(item.source_url or "").strip()
         return before != asdict(item)
 
     def _sanitize_defaults(self) -> None:
@@ -1029,6 +1080,27 @@ def _sanitize_output_route(value) -> str:
     if text in {"microphone", "monitor", "both"}:
         return text
     return "both"
+
+
+def _normalize_tabs(tabs, category: str | None = None) -> list[str]:
+    names: list[str] = []
+    for raw in tabs or []:
+        name = str(raw or "").strip()
+        if name and name not in names:
+            names.append(name)
+    if "Todos" not in names:
+        names.insert(0, "Todos")
+    category_name = str(category or "").strip()
+    if category_name and category_name not in {"Todos", "Favoritos"} and category_name not in names:
+        names.append(category_name)
+    return names
+
+
+def _sanitize_source(value) -> str:
+    text = str(value or "local").strip().lower()
+    if text in {"youtube", "tiktok", "local", "online", "tts", "recording"}:
+        return text
+    return "local"
 
 
 def _sanitize_speed(value) -> float:

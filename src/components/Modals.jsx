@@ -750,7 +750,7 @@ export function CloseChoiceModal({ onCancel, onMinimize, onQuit }) {
   );
 }
 
-function cleanYoutubeUrl(url) {
+function cleanMediaUrl(url) {
   if (!url) return "";
   let cleanUrl = url.trim();
   try {
@@ -786,6 +786,19 @@ function cleanYoutubeUrl(url) {
 export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
+  const [selectedTabs, setSelectedTabs] = useState(["Todos"]);
+
+  const destinationTabs = useMemo(() => {
+    const names = new Set(["Todos", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos")]);
+    return Array.from(names);
+  }, [state?.soundCategories]);
+
+  const detectedSource = useMemo(() => {
+    const value = youtubeUrl.toLowerCase();
+    if (value.includes("tiktok.")) return "TikTok";
+    if (value.includes("youtu")) return "YouTube";
+    return "YouTube ou TikTok";
+  }, [youtubeUrl]);
 
   const isYoutubeDownloading = (status) => {
     if (!status) return false;
@@ -821,11 +834,11 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
       setToast("Cole uma URL válida do YouTube.");
       return;
     }
-    const sanitizedUrl = cleanYoutubeUrl(youtubeUrl);
+    const sanitizedUrl = cleanMediaUrl(youtubeUrl);
     setLocalLoading(true);
     setToast("Verificando vídeo do YouTube...");
     try {
-      await call("/api/sounds/import-youtube", { url: sanitizedUrl });
+      await call("/api/sounds/import-youtube", { url: sanitizedUrl, tabs: selectedTabs });
     } catch (err) {
       setToast("Erro: " + err.message);
       setLocalLoading(false);
@@ -852,7 +865,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
         <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0 }}>
           <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
             <YoutubeLogo size={20} color="#FF0000" weight="fill" />
-            <span>Adicionar Som do YouTube</span>
+            <span>Baixar audio do YouTube ou TikTok</span>
           </h3>
           <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
             <X size={18} />
@@ -867,7 +880,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Link do Vídeo</span>
             <input
               type="text"
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/@perfil/video/..."
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               disabled={youtubeLoading}
@@ -885,6 +898,29 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
                 boxSizing: "border-box"
               }}
             />
+            <small style={{ color: "var(--text-muted)", fontSize: 11 }}>Detectado: {detectedSource}</small>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Salvar nas abas</span>
+            <div className="destinationTabGrid">
+              {destinationTabs.map((tab) => (
+                <button
+                  key={tab}
+                  className={selectedTabs.includes(tab) ? "active" : ""}
+                  disabled={youtubeLoading}
+                  onClick={() => {
+                    setSelectedTabs((prev) => {
+                      if (tab === "Todos") return prev.includes("Todos") ? prev : ["Todos", ...prev];
+                      const next = prev.includes(tab) ? prev.filter((item) => item !== tab) : [...prev, tab];
+                      return next.length ? (next.includes("Todos") ? next : ["Todos", ...next]) : ["Todos"];
+                    });
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
           
           {youtubeLoading && (

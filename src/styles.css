@@ -455,6 +455,45 @@ html,body,#root {
   color:#fff
 }
 
+.soundSourceFilters button {
+  font-size:10px;
+  opacity:.9
+}
+
+.destinationTabGrid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:8px
+}
+
+.destinationTabGrid button {
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:rgba(255,255,255,.04);
+  color:var(--text-secondary);
+  padding:9px 10px;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  text-align:left
+}
+
+.destinationTabGrid button.active {
+  background:var(--purple-soft);
+  color:var(--text);
+  border-color:var(--purple)
+}
+
+.destinationModal input {
+  flex:1;
+  min-width:0;
+  background:var(--bg-input);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  color:var(--text);
+  padding:9px 11px
+}
+
 .sectionHeader {
   font-size:11px;
   font-weight:700;

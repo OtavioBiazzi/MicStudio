@@ -33,20 +33,33 @@ export function SoundboardPage({
   const [contextMenu, setContextMenu] = useState(null);
   const [undoDelete, setUndoDelete] = useState(null);
   const [editingSoundId, setEditingSoundId] = useState(null);
+  const [sourceFilter, setSourceFilter] = useState("Todos");
+  const [pendingImport, setPendingImport] = useState(null);
 
   const sounds = state.sounds || [];
   const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
   const storageLimitMB = Number(state.settings?.maxSoundboardStorage ?? 0);
   const isLimitReached = storageLimitMB > 0 && storageMB >= storageLimitMB;
   const categories = useMemo(() => {
-    const cats = new Set([...sounds.map((s) => s.category).filter(Boolean), ...customCategories]);
+    const cats = new Set([
+      ...sounds.flatMap((s) => (s.tabs?.length ? s.tabs : [s.category])).filter(Boolean),
+      ...customCategories
+    ]);
+    cats.delete("Todos");
     return ["Todos", "Favoritos", ...Array.from(cats).sort()];
   }, [sounds, customCategories]);
 
   const filtered = useMemo(() => {
     let list = sounds;
     if (category === "Favoritos") list = list.filter((s) => soundboardFavorites.includes(s.id));
-    else if (category !== "Todos") list = list.filter((s) => s.category === category);
+    else if (category !== "Todos") list = list.filter((s) => (s.tabs?.length ? s.tabs : [s.category]).includes(category));
+    if (sourceFilter !== "Todos") {
+      const source = sourceFilter.toLowerCase();
+      if (source === "favoritos") list = list.filter((s) => soundboardFavorites.includes(s.id));
+      else if (source === "recentes") list = list.filter((s) => Date.now() / 1000 - Number(s.created_at || 0) < 60 * 60 * 24 * 14);
+      else if (source === "importados do pc") list = list.filter((s) => (s.source || "local") === "local");
+      else list = list.filter((s) => (s.source || "local") === source);
+    }
     if (query) {
       const q = query.toLowerCase();
       list = list.filter((s) => s.name?.toLowerCase().includes(q));
@@ -58,13 +71,44 @@ export function SoundboardPage({
       if (!aFav && bFav) return 1;
       return 0;
     });
-  }, [sounds, category, query, soundboardFavorites]);
+  }, [sounds, category, sourceFilter, query, soundboardFavorites]);
 
   const playerBySound = useMemo(() => {
     const map = {};
     (state.players || []).forEach((p) => { if (p.soundId) map[p.soundId] = p; });
     return map;
   }, [state.players]);
+
+  const runImportFiles = async (paths, tabs) => {
+    const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
+    const normalAudios = paths.filter(p => !p.toLowerCase().endsWith(".mfsound"));
+
+    let importedCount = 0;
+    if (mfsounds.length) {
+      for (const mfs of mfsounds) {
+        try {
+          await call("/api/sounds/import-mfsound", { path: mfs, tabs });
+          importedCount++;
+        } catch (err) {
+          console.error("Erro ao importar mfsound:", err);
+        }
+      }
+      if (importedCount > 0) setToast?.(`${importedCount} pacote(s) importado(s)!`);
+    }
+
+    if (normalAudios.length) {
+      await call("/api/sounds/add", { paths: normalAudios, tabs });
+    }
+  };
+
+  const chooseDestination = (payload) => {
+    const mode = state.settings?.importDestinationMode || "ask";
+    if (mode !== "ask") {
+      payload.onConfirm(state.settings?.importDestinationTabs?.length ? state.settings.importDestinationTabs : ["Todos"]);
+      return;
+    }
+    setPendingImport(payload);
+  };
 
   const addSounds = async () => {
     if (isLimitReached) {
@@ -73,25 +117,11 @@ export function SoundboardPage({
     }
     const paths = await window.micfudiddo?.openAudioFiles?.();
     if (paths?.length) {
-      const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
-      const normalAudios = paths.filter(p => !p.toLowerCase().endsWith(".mfsound"));
-      
-      let importedCount = 0;
-      if (mfsounds.length) {
-        for (const mfs of mfsounds) {
-          try {
-            await call("/api/sounds/import-mfsound", { path: mfs });
-            importedCount++;
-          } catch (err) {
-            console.error("Erro ao importar mfsound:", err);
-          }
-        }
-        if (importedCount > 0) setToast?.(`${importedCount} pacote(s) importado(s)!`);
-      }
-      
-      if (normalAudios.length) {
-        await call("/api/sounds/add", { paths: normalAudios });
-      }
+      chooseDestination({
+        title: "Escolher abas para os arquivos",
+        origin: "Importados do PC",
+        onConfirm: (tabs) => runImportFiles(paths, tabs)
+      });
     }
   };
 
@@ -101,7 +131,13 @@ export function SoundboardPage({
       return;
     }
     const folder = await window.micfudiddo?.openAudioFolders?.();
-    if (folder && folder.length) { await call("/api/sounds/add-folder", { paths: folder }); }
+    if (folder && folder.length) {
+      chooseDestination({
+        title: "Escolher abas para a pasta",
+        origin: "Importados do PC",
+        onConfirm: (tabs) => call("/api/sounds/add-folder", { paths: folder, tabs })
+      });
+    }
   };
 
   const importDropped = async (e) => {
@@ -114,33 +150,27 @@ export function SoundboardPage({
     const files = e.dataTransfer?.files;
     if (!files?.length) return;
     const paths = window.micfudiddo?.audioPathsFromDrop?.(files) || [];
-    
-    const mfsounds = paths.filter(p => p.toLowerCase().endsWith(".mfsound"));
-    const normalAudios = paths.filter(p => !p.toLowerCase().endsWith(".mfsound"));
-    
-    let importedCount = 0;
-    if (mfsounds.length) {
-      for (const mfs of mfsounds) {
-        try {
-          await call("/api/sounds/import-mfsound", { path: mfs });
-          importedCount++;
-        } catch (err) {
-          console.error("Erro ao importar mfsound:", err);
-        }
-      }
-    }
-    
-    if (normalAudios.length) {
-      await call("/api/sounds/add", { paths: normalAudios });
-    }
-    
-    if (importedCount > 0) {
-      setToast?.(`${importedCount} pacote(s) .mfsound importado(s) com sucesso!`);
-    }
+    chooseDestination({
+      title: "Escolher abas para os arquivos soltos",
+      origin: "Importados do PC",
+      onConfirm: (tabs) => runImportFiles(paths, tabs)
+    });
   };
 
   const deleteSounds = async (ids) => {
     if (!ids?.length) return;
+    if (ids.length === 1 && category !== "Todos" && category !== "Favoritos") {
+      const sound = sounds.find((s) => s.id === ids[0]);
+      const tabs = sound?.tabs || [];
+      if (tabs.includes(category) && tabs.length > 1) {
+        const onlyHere = confirm(`Remover "${sound.name}" apenas da aba "${category}"?\n\nOK remove so desta aba. Cancelar continua com a exclusao normal.`);
+        if (onlyHere) {
+          await call("/api/sounds/remove-from-tab", { id: ids[0], tab: category });
+          setToast(`Som removido apenas da aba "${category}".`);
+          return;
+        }
+      }
+    }
     const backup = sounds.filter((s) => ids.includes(s.id));
     if (ids.length === 1) await call("/api/sounds/delete", { id: ids[0] });
     else await call("/api/sounds/delete-batch", { ids });
@@ -318,6 +348,14 @@ export function SoundboardPage({
         {categories.map((cat) => (
           <button key={cat} className={category === cat ? "active" : ""} onClick={() => setCategory(cat)}>
             {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="categoryPills soundSourceFilters" style={{ marginTop: 8 }}>
+        {["Todos", "YouTube", "TikTok", "Importados do PC", "Online", "Favoritos", "Recentes"].map((filter) => (
+          <button key={filter} className={sourceFilter === filter ? "active" : ""} onClick={() => setSourceFilter(filter)}>
+            {filter}
           </button>
         ))}
       </div>
@@ -520,6 +558,18 @@ export function SoundboardPage({
               <FolderOpen size={14} /> Mover para Pasta
             </button>
             <button onClick={() => {
+              const currentSound = contextMenu.sound;
+              setContextMenu(null);
+              setPendingImport({
+                title: `Escolher abas de "${currentSound.name}"`,
+                origin: currentSound.source || "local",
+                initialTabs: currentSound.tabs || ["Todos", currentSound.category].filter(Boolean),
+                onConfirm: (tabs) => call("/api/sounds/set-tabs", { id: currentSound.id, tabs }).then(() => setToast("Abas atualizadas!"))
+              });
+            }}>
+              <FolderOpen size={14} /> Copiar para Abas
+            </button>
+            <button onClick={() => {
               window.micfudiddo?.showItemInFolder?.(contextMenu.sound.path);
               setContextMenu(null);
             }}>
@@ -590,6 +640,76 @@ export function SoundboardPage({
           </div>
         );
       })()}
+      {pendingImport && (
+        <DestinationPickerModal
+          title={pendingImport.title}
+          origin={pendingImport.origin}
+          categories={categories}
+          initialTabs={pendingImport.initialTabs}
+          onClose={() => setPendingImport(null)}
+          onConfirm={(tabs) => {
+            pendingImport.onConfirm(tabs);
+            setPendingImport(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DestinationPickerModal({ title, origin, categories, initialTabs, onClose, onConfirm }) {
+  const baseTabs = useMemo(() => {
+    const names = new Set(["Todos", ...(categories || []).filter((c) => c !== "Favoritos")]);
+    return Array.from(names);
+  }, [categories]);
+  const [selected, setSelected] = useState(() => new Set(initialTabs?.length ? initialTabs : ["Todos"]));
+  const [newTab, setNewTab] = useState("");
+
+  const toggle = (tab) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (tab === "Todos") next.add("Todos");
+      else if (next.has(tab)) next.delete(tab);
+      else next.add(tab);
+      if (!next.size) next.add("Todos");
+      return next;
+    });
+  };
+
+  const addTab = () => {
+    const name = newTab.trim();
+    if (!name) return;
+    setSelected((prev) => new Set([...prev, "Todos", name]));
+    setNewTab("");
+  };
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent destinationModal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, padding: 22 }}>
+        <div className="modalHeader" style={{ padding: 0, borderBottom: "none" }}>
+          <h3 className="modalTitle" style={{ margin: 0 }}>{title}</h3>
+          <button className="closeBtn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <p style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5, margin: "10px 0 14px" }}>
+          Escolha em quais abas este audio vai aparecer. Um mesmo arquivo pode estar em varias abas sem duplicar no disco.
+        </p>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>Origem: {origin || "local"}</div>
+        <div className="destinationTabGrid">
+          {baseTabs.map((tab) => (
+            <button key={tab} className={selected.has(tab) ? "active" : ""} onClick={() => toggle(tab)}>
+              {tab}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <input value={newTab} onChange={(e) => setNewTab(e.target.value)} placeholder="Criar nova aba..." />
+          <button className="btn btn-ghost" onClick={addTab}>Adicionar</button>
+        </div>
+        <div className="modalFooter" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={() => onConfirm(Array.from(selected))}>Confirmar destino</button>
+        </div>
+      </div>
     </div>
   );
 }

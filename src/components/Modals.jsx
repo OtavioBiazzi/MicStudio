@@ -1451,6 +1451,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.0.4": `### Versão 1.0.4
+* O verificador de atualizações agora ignora respostas antigas em cache.
+* Novas releases são verificadas novamente ao focar o aplicativo e periodicamente.
+* A janela de versões ganhou atualização manual e fallback recente.`,
+
+  "v1.0.3": `### Versão 1.0.3
+* Criação direta e persistente de abas vazias no Soundboard.
+* Novo efeito Glitched Temporal com repetição, rewind e reversão de microtrechos.`,
+
   "v1.0": `### Versao 1.0
 * TTS sem limite agora processa textos longos de verdade: o backend divide blocos gigantes em partes menores, gera cada trecho e junta tudo antes de tocar ou salvar.
 * O atalho global de focar digitacao voltou a abrir/focar o Widget TTS mesmo quando a barra flutuante esta fechada.
@@ -1693,6 +1702,28 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.0.4",
+    tag_name: "v1.0.4",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.0.4"],
+    assets: [{
+      name: "MicFudiddo.Studio.Setup.1.0.4.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.0.4/MicFudiddo.Studio.Setup.1.0.4.exe"
+    }]
+  },
+  {
+    id: "v1.0.3",
+    tag_name: "v1.0.3",
+    published_at: "2026-07-16T15:48:48Z",
+    body: LOCAL_CHANGELOGS["v1.0.3"],
+    assets: [{
+      name: "MicFudiddo.Studio.Setup.1.0.3.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.0.3/MicFudiddo.Studio.Setup.1.0.3.exe"
+    }]
+  },
+  { id: "v1.0.2", tag_name: "v1.0.2", published_at: "2026-07-06T18:42:11Z", body: "" },
+  { id: "v1.0.1", tag_name: "v1.0.1", published_at: "2026-07-06T18:28:05Z", body: "" },
   { id: "v1.0", tag_name: "v1.0", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.47", tag_name: "v0.5.47", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.46", tag_name: "v0.5.46", published_at: new Date().toISOString(), body: "" },
@@ -1755,8 +1786,13 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
   const [error, setError] = useState(null);
   const [updatingUrl, setUpdatingUrl] = useState(null);
 
-  useEffect(() => {
-    fetch("https://api.github.com/repos/OtavioBiazzi/MicStudio/releases")
+  const loadReleases = () => {
+    setLoading(true);
+    setError(null);
+    fetch(`https://api.github.com/repos/OtavioBiazzi/MicStudio/releases?ts=${Date.now()}`, {
+      cache: "no-store",
+      headers: { Accept: "application/vnd.github+json" }
+    })
       .then((res) => {
         if (!res.ok) throw new Error("Erro ao carregar do GitHub");
         return res.json();
@@ -1770,6 +1806,10 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
         setReleases(FALLBACK_RELEASES);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadReleases();
   }, []);
 
   const handleUpdate = async (release) => {
@@ -1817,7 +1857,12 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
           <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
             🚀 Histórico de Versões & Updates
           </h3>
-          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button className="closeBtn" onClick={loadReleases} disabled={loading} title="Atualizar releases" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
+              <ArrowClockwise size={18} className={loading ? "spin" : ""} />
+            </button>
+            <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+          </div>
         </div>
 
         <div className="modalBody" style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: 4 }}>

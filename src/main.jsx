@@ -207,13 +207,14 @@ function App() {
       try {
         const currentVersion = await window.micfudiddo?.getVersion?.();
         if (!currentVersion) return;
-        
-        const res = await fetch("https://api.github.com/repos/OtavioBiazzi/MicStudio/releases");
+
+        const res = await fetch(
+          `https://api.github.com/repos/OtavioBiazzi/MicStudio/releases/latest?ts=${Date.now()}`,
+          { cache: "no-store", headers: { Accept: "application/vnd.github+json" } }
+        );
         if (!res.ok) return;
-        const releases = await res.json();
-        if (!releases || releases.length === 0) return;
-        
-        const latestRelease = releases[0];
+        const latestRelease = await res.json();
+        if (!latestRelease?.tag_name) return;
         const latestVersion = latestRelease.tag_name;
         
         const isNewer = (curr, lat) => {
@@ -230,9 +231,10 @@ function App() {
         };
 
         if (isNewer(currentVersion, latestVersion)) {
-          const asset = latestRelease.assets.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) || 
-                        latestRelease.assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) || 
-                        latestRelease.assets.find(a => a.name.endsWith(".exe"));
+          const assets = latestRelease.assets || [];
+          const asset = assets.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) ||
+                        assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) ||
+                        assets.find(a => a.name.endsWith(".exe"));
           if (asset) {
             setUpdateAvailable({
               version: latestVersion,
@@ -240,13 +242,22 @@ function App() {
               downloadUrl: asset.browser_download_url
             });
           }
+        } else {
+          setUpdateAvailable(null);
         }
       } catch (err) {
         console.error("Erro ao verificar atualizações:", err);
       }
     };
     const timer = setTimeout(checkUpdates, 4000);
-    return () => clearTimeout(timer);
+    const interval = setInterval(checkUpdates, 5 * 60 * 1000);
+    const handleFocus = () => checkUpdates();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const handleUpdateApp = async (downloadUrl) => {

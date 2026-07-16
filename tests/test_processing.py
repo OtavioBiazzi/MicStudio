@@ -75,6 +75,27 @@ class ProcessingTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(out)))
         self.assertFalse(np.allclose(out, samples))
 
+    def test_time_glitch_replays_recent_audio_across_blocks(self):
+        sample_rate = 48000
+        processor = VoiceEffectsProcessor(sample_rate)
+        settings = EffectsSettings(
+            time_glitch_enabled=True,
+            time_glitch_mix=1.0,
+            time_glitch_rate_hz=16.0,
+            time_glitch_depth=1.0,
+        )
+        t = np.arange(sample_rate, dtype=np.float32) / sample_rate
+        samples = (0.3 * np.sin(2.0 * np.pi * (180.0 + 240.0 * t) * t)).astype(np.float32)
+        blocks = [processor.process(block, settings) for block in np.array_split(samples, 48)]
+        out = np.concatenate(blocks)
+        self.assertEqual(out.shape, samples.shape)
+        self.assertTrue(np.all(np.isfinite(out)))
+        self.assertFalse(np.allclose(out, samples))
+
+        processor.reset()
+        self.assertEqual(processor.time_glitch_history_filled, 0)
+        self.assertEqual(processor.time_glitch_event_remaining, 0)
+
     def test_pitch_ratio(self):
         self.assertTrue(math.isclose(semitones_to_ratio(12.0), 2.0, rel_tol=0.0001))
         self.assertTrue(math.isclose(semitones_to_ratio(-12.0), 0.5, rel_tol=0.0001))

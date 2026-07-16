@@ -3219,7 +3219,15 @@ class Handler(BaseHTTPRequestHandler):
             categories = data.get("categories")
             if cat_type not in ("voices", "soundboard") or not isinstance(categories, list):
                 raise RuntimeError("Dados inválidos.")
-            STATE.custom_categories[cat_type] = [str(c).strip() for c in categories if str(c).strip()]
+            clean_categories = []
+            seen_categories = set()
+            for category_name in categories:
+                clean_category = str(category_name).strip()
+                category_key = clean_category.casefold()
+                if clean_category and category_key not in seen_categories and category_key not in {"todos", "favoritos"}:
+                    clean_categories.append(clean_category)
+                    seen_categories.add(category_key)
+            STATE.custom_categories[cat_type] = clean_categories
             STATE.save_custom_categories()
             STATE.status = "Categorias atualizadas."
             return STATE.snapshot()
@@ -3238,13 +3246,18 @@ class Handler(BaseHTTPRequestHandler):
             if cat_type == "soundboard":
                 modified = 0
                 for item in STATE.library.items:
+                    changed = False
                     if item.category == category:
                         item.category = destination
-                        STATE.library.update(item)
+                        changed = True
+                    if category in item.tabs:
+                        item.tabs = [tab for tab in item.tabs if tab != category]
+                        changed = True
+                    if changed:
                         modified += 1
                 if modified:
                     STATE.library.save()
-                STATE.status = f"Categoria '{category}' removida. {modified} som(ns) movido(s) para '{destination}'."
+                STATE.status = f"Aba '{category}' removida de {modified} som(ns)."
             else:
                 modified = 0
                 for voice in STATE.custom_voices:

@@ -301,6 +301,11 @@ export const voicePresets = [
     gain: 3.5, pitch: 2, effects: { glitch_enabled: true, glitch_mix: 0.88, glitch_rate_hz: 24, alien_glitch_enabled: true, alien_glitch_mix: 0.62, wobble_enabled: true, wobble_mix: 0.45, bitcrush_enabled: true, bitcrush_bits: 4 }
   },
   {
+    id: "glitched_temporal", label: "Glitched Temporal", description: "Microtrechos da voz voltam, repetem e alternam entre frente e reverso em tempo real.",
+    emoji: "⏪", category: "Exclusivos", gradient: "linear-gradient(135deg, #111827, #be123c)",
+    gain: 2.8, pitch: 0, effects: { time_glitch_enabled: true, time_glitch_mix: 0.86, time_glitch_rate_hz: 7.5, time_glitch_depth: 0.82, glitch_enabled: true, glitch_mix: 0.22, glitch_rate_hz: 14, bitcrush_enabled: true, bitcrush_bits: 7 }
+  },
+  {
     id: "voz_holografica", label: "Holograma Sci-Fi", description: "Chorus/Flanger misturado com sussurro do além.",
     emoji: "💿", category: "Exclusivos", gradient: "linear-gradient(135deg, #0891b2, #0d9488)",
     gain: 3.2, pitch: 3, effects: { flanger_enabled: true, flanger_mix: 0.5, chorus_enabled: true, chorus_mix: 0.4, reverb_enabled: true, reverb_mix: 0.4, whisper_enabled: true, whisper_mix: 0.3 }

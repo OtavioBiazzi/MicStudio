@@ -455,6 +455,22 @@ html,body,#root {
   color:#fff
 }
 
+.categoryPills button.newSoundboardTab {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  border-style:dashed;
+  border-color:var(--border-active);
+  color:var(--cyan)
+}
+
+.categoryPills button.deleteSoundboardTab {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  color:var(--danger)
+}
+
 .soundSourceFilters button {
   font-size:10px;
   opacity:.9

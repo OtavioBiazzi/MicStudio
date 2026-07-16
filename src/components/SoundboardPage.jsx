@@ -49,6 +49,48 @@ export function SoundboardPage({
     return ["Todos", "Favoritos", ...Array.from(cats).sort()];
   }, [sounds, customCategories]);
 
+  const openCreateTab = () => {
+    setPromptState({
+      title: "Nova aba do Soundboard",
+      value: "",
+      onConfirm: async (name) => {
+        const trimmed = String(name || "").trim();
+        if (!trimmed) return;
+        const exists = categories.some((item) => item.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+        if (exists || ["todos", "favoritos"].includes(trimmed.toLocaleLowerCase())) {
+          setToast("Essa aba já existe.");
+          return;
+        }
+
+        const previous = customCategories;
+        const next = [...customCategories, trimmed];
+        setCustomCategories(next);
+        setCategory(trimmed);
+        try {
+          await call("/api/custom-categories/save", { type: "soundboard", categories: next });
+          setToast(`Aba "${trimmed}" criada.`);
+        } catch (error) {
+          setCustomCategories(previous);
+          setCategory("Todos");
+          setToast(error.message);
+        }
+      }
+    });
+  };
+
+  const deleteCurrentTab = async () => {
+    if (!customCategories.includes(category)) return;
+    if (!confirm(`Excluir a aba "${category}"? Os sons continuam no Soundboard.`)) return;
+    try {
+      await call("/api/custom-categories/delete", { type: "soundboard", category });
+      setCustomCategories(customCategories.filter((item) => item !== category));
+      setCategory("Todos");
+      setToast(`Aba "${category}" excluída.`);
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
   const filtered = useMemo(() => {
     let list = sounds;
     if (category === "Favoritos") list = list.filter((s) => soundboardFavorites.includes(s.id));
@@ -245,38 +287,6 @@ export function SoundboardPage({
           </div>
         </div>
         <div className="toolbarRight">
-          <button className="btn btn-ghost" onClick={() => {
-            setPromptState({
-              title: "Nova Categoria",
-              value: "",
-              onConfirm: (name) => {
-                if (name && name.trim()) {
-                  const trimmed = name.trim();
-                  if (customCategories.includes(trimmed) || ["Todos", "Favoritos"].includes(trimmed)) {
-                    setToast("Categoria já existe!");
-                    return;
-                  }
-                  setCustomCategories([...customCategories, trimmed]);
-                  setToast(`Categoria "${trimmed}" criada!`);
-                }
-              }
-            });
-          }} title="Nova Categoria">
-            <Plus size={14} /> Adicionar Categoria
-          </button>
-          {customCategories.includes(category) && (
-            <button className="btn btn-ghost" onClick={() => {
-              if (confirm(`Deseja excluir a categoria "${category}"? Os sons serão movidos para "Geral".`)) {
-                call("/api/sounds/delete-category", { category }).then(() => {
-                  setCustomCategories(customCategories.filter(c => c !== category));
-                  setCategory("Todos");
-                  setToast(`Categoria "${category}" excluída.`);
-                }).catch((e) => setToast(e.message));
-              }
-            }} title="Excluir Categoria" style={{ color: "var(--danger)" }}>
-              <Trash size={14} /> Excluir Cat.
-            </button>
-          )}
           <div className="importButtonGroup">
             <button className="btn btn-ghost" onClick={() => {
               if (isLimitReached) {
@@ -350,6 +360,14 @@ export function SoundboardPage({
             {cat}
           </button>
         ))}
+        <button className="newSoundboardTab" onClick={openCreateTab} title="Criar uma aba vazia">
+          <Plus size={14} weight="bold" /> Nova aba
+        </button>
+        {customCategories.includes(category) && (
+          <button className="deleteSoundboardTab" onClick={deleteCurrentTab} title={`Excluir a aba ${category}`}>
+            <Trash size={14} /> Excluir aba
+          </button>
+        )}
       </div>
 
       <div className="categoryPills soundSourceFilters" style={{ marginTop: 8 }}>
@@ -647,7 +665,17 @@ export function SoundboardPage({
           categories={categories}
           initialTabs={pendingImport.initialTabs}
           onClose={() => setPendingImport(null)}
-          onConfirm={(tabs) => {
+          onConfirm={async (tabs) => {
+            const createdTabs = tabs.filter((tab) => tab !== "Todos" && !categories.includes(tab));
+            if (createdTabs.length) {
+              const next = Array.from(new Set([...customCategories, ...createdTabs]));
+              setCustomCategories(next);
+              try {
+                await call("/api/custom-categories/save", { type: "soundboard", categories: next });
+              } catch (error) {
+                setToast(error.message);
+              }
+            }
             pendingImport.onConfirm(tabs);
             setPendingImport(null);
           }}

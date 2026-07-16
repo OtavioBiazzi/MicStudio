@@ -100,6 +100,7 @@ function App() {
   const lastYoutubeStatusRef = useRef("");
   const controlsTimerRef = useRef(null);
   const latestControlsRef = useRef(null);
+  const categoriesHydratedRef = useRef(false);
 
   const [bypassActive, setBypassActive] = useState(false);
   const [lastActivePresetId, setLastActivePresetId] = useState(null);
@@ -376,6 +377,11 @@ function App() {
 
   const applyIncomingState = (data) => {
     if (!data) return;
+
+    if (!categoriesHydratedRef.current && Array.isArray(data.customSoundCategories)) {
+      setCustomCategories((current) => Array.from(new Set([...data.customSoundCategories, ...current])));
+      categoriesHydratedRef.current = true;
+    }
     
     // Normalizar a duração de todos os sons para números decimais limpos no frontend
     if (data.sounds && Array.isArray(data.sounds)) {

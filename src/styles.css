@@ -704,10 +704,12 @@ html,body,#root {
   border-radius:var(--radius-lg);
   padding:0;
   overflow-y:auto;
+  overflow-x:hidden;
   position:sticky;
   top:10px;
   max-height:calc(100vh - 180px);
-  z-index:10
+  z-index:10;
+  min-width:0
 }
 
 .voiceSidePanel .panelClose {
@@ -778,7 +780,8 @@ html,body,#root {
 }
 
 .voiceSidePanel .panelBody {
-  padding:20px
+  padding:20px;
+  min-width:0
 }
 
 .voiceSidePanel .panelName {
@@ -911,7 +914,8 @@ html,body,#root {
   display:flex;
   align-items:center;
   gap:12px;
-  margin-bottom:10px
+  margin-bottom:10px;
+  min-width:0
 }
 
 .panelSlider .sliderLabel {
@@ -924,6 +928,8 @@ html,body,#root {
 
 .panelSlider input[type=range] {
   flex:1;
+  width:100%;
+  min-width:0;
   -webkit-appearance:none;
   appearance:none;
   height:4px;

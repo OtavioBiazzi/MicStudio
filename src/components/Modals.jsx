@@ -1451,6 +1451,10 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.1.1": `### Versão 1.1.1
+* Corrige o corte lateral dos controles no painel de edição de vozes.
+* Sliders agora se adaptam corretamente à largura do painel sem rolagem horizontal invisível.`,
+
   "v1.1.0": `### Versão 1.1.0
 * Controles personalizados para cada voz, com nomes, unidades e limites próprios.
 * Glitched Temporal avançado com intervalo, fragmento, rewind, repetições, reverso e ping-pong.
@@ -1709,6 +1713,16 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.1.1",
+    tag_name: "v1.1.1",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.1.1"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.1.1.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.1.1/MicFudiddo-Studio-Setup-1.1.1.exe"
+    }]
+  },
   {
     id: "v1.1.0",
     tag_name: "v1.1.0",

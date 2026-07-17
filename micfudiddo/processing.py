@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import threading
 
 import numpy as np
 
@@ -124,6 +125,11 @@ class EffectsSettings:
     time_glitch_repeats: int = 4
     time_glitch_reverse_chance: float = 0.38
     time_glitch_pingpong_chance: float = 0.28
+    time_glitch_trigger_mode: str = "automatic"
+    time_glitch_shortcut_mode: str = "press"
+    time_glitch_shortcut: str = ""
+    time_glitch_repeat_volume: float = 1.0
+    time_glitch_voice_duck: float = 1.0
     double_voice_enabled: bool = False
     double_voice_mix: float = 0.4
     double_voice_delay_ms: float = 45.0
@@ -145,14 +151,17 @@ class VoiceEffectsProcessor:
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
         self.glitch_phase = 0.0
-        self.time_glitch_history = np.zeros(max(64, int(self.sample_rate * 2.2)), dtype=np.float32)
+        self.time_glitch_history = np.zeros(max(64, int(self.sample_rate * 4.5)), dtype=np.float32)
         self.time_glitch_history_pos = 0
         self.time_glitch_history_filled = 0
         self.time_glitch_grain = np.zeros(0, dtype=np.float32)
         self.time_glitch_grain_pos = 0
         self.time_glitch_event_remaining = 0
         self.time_glitch_event_total = 0
+        self.time_glitch_event_elapsed = 0
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
+        self._time_glitch_trigger = threading.Event()
+        self._time_glitch_hold = threading.Event()
         self.echo_feedback = 0.28
         self.echo_delay_samples = max(1, int(self.sample_rate * 0.135))
         self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
@@ -181,7 +190,10 @@ class VoiceEffectsProcessor:
         self.time_glitch_grain_pos = 0
         self.time_glitch_event_remaining = 0
         self.time_glitch_event_total = 0
+        self.time_glitch_event_elapsed = 0
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
+        self._time_glitch_trigger.clear()
+        self._time_glitch_hold.clear()
         self.double_voice_buffer.fill(0.0)
         self.double_voice_pos = 0
         self._double_voice_shifter.reset()
@@ -292,11 +304,14 @@ class VoiceEffectsProcessor:
                 _finite_clamped(settings.time_glitch_mix, 0.0, 1.0, 0.72),
                 _finite_clamped(settings.time_glitch_depth, 0.0, 1.0, 0.7),
                 interval_s,
-                _finite_clamped(settings.time_glitch_fragment_ms, 10.0, 500.0, 55.0),
+                _finite_clamped(settings.time_glitch_fragment_ms, 10.0, 1500.0, 55.0),
                 _finite_clamped(settings.time_glitch_lookback_s, 0.02, 2.0, 0.45),
-                int(_finite_clamped(float(settings.time_glitch_repeats), 1.0, 16.0, 4.0)),
+                int(_finite_clamped(float(settings.time_glitch_repeats), 1.0, 10000.0, 4.0)),
                 _finite_clamped(settings.time_glitch_reverse_chance, 0.0, 1.0, 0.38),
                 _finite_clamped(settings.time_glitch_pingpong_chance, 0.0, 1.0, 0.28),
+                str(settings.time_glitch_trigger_mode or "automatic"),
+                _finite_clamped(settings.time_glitch_repeat_volume, 0.0, 3.0, 1.0),
+                _finite_clamped(settings.time_glitch_voice_duck, 0.0, 1.0, 1.0),
             )
 
         if settings.ambience_enabled:
@@ -319,6 +334,19 @@ class VoiceEffectsProcessor:
             np.float32,
             copy=False,
         )
+
+    def trigger_time_glitch(self, hold: bool = False) -> None:
+        if hold:
+            self._time_glitch_hold.set()
+        else:
+            self._time_glitch_hold.clear()
+        self._time_glitch_trigger.set()
+
+    def release_time_glitch(self) -> None:
+        self._time_glitch_hold.clear()
+        fade_samples = max(1, int(self.sample_rate * 0.01))
+        if self.time_glitch_event_remaining > fade_samples:
+            self.time_glitch_event_remaining = fade_samples
 
     def _ring_modulate(self, samples: np.ndarray, rate_hz: float) -> np.ndarray:
         indexes = np.arange(samples.size, dtype=np.float32)
@@ -561,6 +589,9 @@ class VoiceEffectsProcessor:
         repeats: int,
         reverse_chance: float,
         pingpong_chance: float,
+        trigger_mode: str,
+        repeat_volume: float,
+        voice_duck: float,
     ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
         if samples.size == 0 or mix <= 0.0:
@@ -576,7 +607,20 @@ class VoiceEffectsProcessor:
             self.time_glitch_history_pos = (self.time_glitch_history_pos + 1) % history_size
             self.time_glitch_history_filled = min(history_size, self.time_glitch_history_filled + 1)
 
-            if self.time_glitch_event_remaining <= 0:
+            shortcut_mode = trigger_mode.strip().lower() == "shortcut"
+            trigger_requested = shortcut_mode and self._time_glitch_trigger.is_set()
+            if trigger_requested:
+                self._time_glitch_trigger.clear()
+                self._start_time_glitch_event(
+                    depth,
+                    interval_s,
+                    fragment_ms,
+                    lookback_s,
+                    repeats,
+                    reverse_chance,
+                    pingpong_chance,
+                )
+            elif self.time_glitch_event_remaining <= 0 and not shortcut_mode:
                 self.time_glitch_samples_until_event -= 1
                 if self.time_glitch_samples_until_event <= 0:
                     self._start_time_glitch_event(
@@ -595,11 +639,13 @@ class VoiceEffectsProcessor:
             wet_sample = self.time_glitch_grain[self.time_glitch_grain_pos]
             self.time_glitch_grain_pos = (self.time_glitch_grain_pos + 1) % self.time_glitch_grain.size
 
-            elapsed = self.time_glitch_event_total - self.time_glitch_event_remaining
-            edge = min(elapsed, self.time_glitch_event_remaining - 1)
+            edge = min(self.time_glitch_event_elapsed, self.time_glitch_event_remaining - 1)
             event_mix = mix * min(1.0, max(0.0, edge / fade_samples))
-            output[index] = (clean_sample * (1.0 - event_mix)) + (wet_sample * event_mix)
-            self.time_glitch_event_remaining -= 1
+            dry_gain = 1.0 - (voice_duck * event_mix)
+            output[index] = (clean_sample * dry_gain) + (wet_sample * event_mix * repeat_volume)
+            self.time_glitch_event_elapsed += 1
+            if not self._time_glitch_hold.is_set():
+                self.time_glitch_event_remaining -= 1
 
         return output.astype(np.float32, copy=False)
 
@@ -654,12 +700,13 @@ class VoiceEffectsProcessor:
 
         repeat_variation = max(0, int(round(depth * 2.0)))
         actual_repeats = int(
-            self.noise_rng.integers(max(1, repeats - repeat_variation), min(16, repeats + repeat_variation) + 1)
+            self.noise_rng.integers(max(1, repeats - repeat_variation), min(10000, repeats + repeat_variation) + 1)
         )
         self.time_glitch_grain = grain.astype(np.float32, copy=False)
         self.time_glitch_grain_pos = 0
         self.time_glitch_event_total = grain.size * actual_repeats
         self.time_glitch_event_remaining = self.time_glitch_event_total
+        self.time_glitch_event_elapsed = 0
 
     def _band_limited(self, samples: np.ndarray) -> np.ndarray:
         if samples.size < 3:

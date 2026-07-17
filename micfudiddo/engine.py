@@ -265,6 +265,8 @@ class AudioEngine:
             self._pitch_semitones = float(pitch_semitones)
             if effects is not None:
                 self._effects = effects
+                if not effects.time_glitch_enabled or effects.time_glitch_trigger_mode != "shortcut":
+                    self._effects_processor.release_time_glitch()
             if monitor_volume is not None:
                 self._monitor_volume = max(0.0, min(3.0, float(monitor_volume)))
             if soundboard_monitor_enabled is not None:
@@ -279,6 +281,12 @@ class AudioEngine:
                 self._master_pitch_semitones = float(master_pitch)
             if master_mute is not None:
                 self._master_mute = bool(master_mute)
+
+    def trigger_time_glitch(self, hold: bool = False) -> None:
+        self._effects_processor.trigger_time_glitch(hold=hold)
+
+    def release_time_glitch(self) -> None:
+        self._effects_processor.release_time_glitch()
 
     def play_sound(
         self,

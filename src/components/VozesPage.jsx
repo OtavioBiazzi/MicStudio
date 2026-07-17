@@ -11,7 +11,8 @@ import {
   storeEffectValue,
   EffectSliderRow,
   effectGroups,
-  copyTextToClipboard
+  copyTextToClipboard,
+  HotkeyCaptureButton
 } from "../utils";
 import { voicePresets, visibleVoicePresets } from "../voicePresets";
 
@@ -580,18 +581,44 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
               {Object.entries(controlGroups).map(([group, items]) => (
                 <div key={group} className="voiceControlGroup">
                   <div className="voiceControlGroupName">{group}</div>
-                  {items.map((item) => (
-                    <PanelSlider
-                      key={`${item.target}-${item.key}`}
-                      label={item.label}
-                      value={readParameter(item)}
-                      min={item.min}
-                      max={item.max}
-                      step={item.step || 1}
-                      unit={item.unit || ""}
-                      onChange={(value) => updateParameter(item, value)}
-                    />
-                  ))}
+                  {items.map((item) => {
+                    if (item.type === "select") {
+                      return (
+                        <PanelField key={`${item.target}-${item.key}`} label={item.label}>
+                          <select
+                            value={controls.effects?.[item.key] ?? voice.effects?.[item.key] ?? item.options[0]?.value}
+                            onChange={(event) => updateEffects({ [item.key]: event.target.value, [item.enableKey]: true })}
+                          >
+                            {item.options.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </PanelField>
+                      );
+                    }
+                    if (item.type === "hotkey") {
+                      return (
+                        <PanelField key={`${item.target}-${item.key}`} label={item.label}>
+                          <HotkeyCaptureButton
+                            value={controls.effects?.[item.key] ?? voice.effects?.[item.key] ?? ""}
+                            onChange={(value) => updateEffects({ [item.key]: value, [item.enableKey]: true })}
+                          />
+                        </PanelField>
+                      );
+                    }
+                    return (
+                      <PanelSlider
+                        key={`${item.target}-${item.key}`}
+                        label={item.label}
+                        value={readParameter(item)}
+                        min={item.min}
+                        max={item.max}
+                        step={item.step || 1}
+                        unit={item.unit || ""}
+                        onChange={(value) => updateParameter(item, value)}
+                      />
+                    );
+                  })}
                 </div>
               ))}
             </div>
@@ -724,6 +751,15 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PanelField({ label, children }) {
+  return (
+    <div className="panelField">
+      <span>{label}</span>
+      {children}
     </div>
   );
 }

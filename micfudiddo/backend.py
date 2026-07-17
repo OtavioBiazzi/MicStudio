@@ -852,6 +852,8 @@ class AppState:
         self.monitor_only_active = False
         self.status = "Backend pronto"
         self.hotkey_handles = []
+        self.time_glitch_hotkey_handles = []
+        self.time_glitch_hotkey_down = False
         
         self.custom_voices_path = self.library.base_dir / "custom_voices.json"
         self.custom_categories_path = self.library.base_dir / "custom_categories.json"
@@ -1515,6 +1517,83 @@ class AppState:
                     self.hotkey_handles.append(handle)
                 except Exception as e:
                     print(f"Error registering hotkey {hotkey} for sound {item.name}: {e}")
+        self.refresh_time_glitch_hotkey()
+
+    def time_glitch_hotkey_signature(self) -> tuple:
+        return (
+            bool(self.effects.time_glitch_enabled),
+            str(self.effects.time_glitch_trigger_mode or ""),
+            str(self.effects.time_glitch_shortcut_mode or ""),
+            str(self.effects.time_glitch_shortcut or ""),
+        )
+
+    def refresh_time_glitch_hotkey(self) -> None:
+        try:
+            import keyboard
+        except Exception as e:
+            print("keyboard library not available or error:", e)
+            return
+
+        for kind, handle in self.time_glitch_hotkey_handles:
+            try:
+                if kind == "hotkey":
+                    keyboard.remove_hotkey(handle)
+                else:
+                    keyboard.unhook(handle)
+            except Exception:
+                pass
+        self.time_glitch_hotkey_handles = []
+        self.time_glitch_hotkey_down = False
+        self.engine.release_time_glitch()
+
+        effects = self.effects
+        if not effects.time_glitch_enabled or effects.time_glitch_trigger_mode != "shortcut":
+            return
+
+        hotkey = (
+            str(effects.time_glitch_shortcut or "")
+            .strip()
+            .lower()
+            .replace("control", "ctrl")
+            .replace("commandorcontrol", "ctrl")
+            .replace("cmdorctrl", "ctrl")
+            .replace(" ", "")
+        )
+        if not hotkey:
+            return
+
+        hold_mode = effects.time_glitch_shortcut_mode == "hold"
+
+        def trigger() -> None:
+            if hold_mode:
+                if self.time_glitch_hotkey_down:
+                    return
+                self.time_glitch_hotkey_down = True
+            self.engine.trigger_time_glitch(hold=hold_mode)
+
+        try:
+            press_handle = keyboard.add_hotkey(hotkey, trigger, suppress=False)
+            self.time_glitch_hotkey_handles.append(("hotkey", press_handle))
+            if hold_mode:
+                release_key = hotkey.split("+")[-1]
+
+                def release(_event) -> None:
+                    self.time_glitch_hotkey_down = False
+                    self.engine.release_time_glitch()
+
+                release_handle = keyboard.on_release_key(release_key, release, suppress=False)
+                self.time_glitch_hotkey_handles.append(("hook", release_handle))
+        except Exception as e:
+            print(f"Error registering command glitch hotkey {hotkey}: {e}")
+            for kind, handle in self.time_glitch_hotkey_handles:
+                try:
+                    if kind == "hotkey":
+                        keyboard.remove_hotkey(handle)
+                    else:
+                        keyboard.unhook(handle)
+                except Exception:
+                    pass
+            self.time_glitch_hotkey_handles = []
 
     def start(self) -> None:
         self.monitor_only_active = False
@@ -2340,6 +2419,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/api/controls":
             controls = data.get("controls", data)
+            previous_time_glitch_hotkey = STATE.time_glitch_hotkey_signature()
             STATE.gain = max(0.0, float(controls.get("gain", STATE.gain)))
             STATE.pitch = float(controls.get("pitch", STATE.pitch))
             STATE.master_mic_gain = max(0.0, float(controls.get("masterMicGain", STATE.master_mic_gain)))
@@ -2353,6 +2433,8 @@ class Handler(BaseHTTPRequestHandler):
             effects = controls.get("effects")
             if effects:
                 STATE.effects = EffectsSettings(**{**asdict(STATE.effects), **effects})
+            if STATE.time_glitch_hotkey_signature() != previous_time_glitch_hotkey:
+                STATE.refresh_time_glitch_hotkey()
             if STATE.monitor_only_active:
                 if STATE.monitor_enabled or STATE.soundboard_monitor_enabled:
                     STATE.engine.set_controls(

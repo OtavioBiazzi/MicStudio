@@ -43,6 +43,8 @@ export const effectDefaults = {
   time_glitch_enabled: false, time_glitch_mix: 0.72, time_glitch_rate_hz: 6, time_glitch_depth: 0.7,
   time_glitch_interval_s: 0, time_glitch_fragment_ms: 55, time_glitch_lookback_s: 0.45,
   time_glitch_repeats: 4, time_glitch_reverse_chance: 0.38, time_glitch_pingpong_chance: 0.28,
+  time_glitch_trigger_mode: "automatic", time_glitch_shortcut_mode: "press", time_glitch_shortcut: "",
+  time_glitch_repeat_volume: 1, time_glitch_voice_duck: 1,
   double_voice_enabled: false, double_voice_mix: 0.4, double_voice_delay_ms: 45, double_voice_pitch_semitones: -5,
   ambience_enabled: false, ambience_mode: "space", ambience_volume: 0.12,
   harmony_enabled: false, harmony_mode: "Major", harmony_mix: 0.5,
@@ -51,6 +53,52 @@ export const effectDefaults = {
 
 export function makeDisabledEffects() {
   return { ...effectDefaults };
+}
+
+export function HotkeyCaptureButton({ value, onChange }) {
+  const [recording, setRecording] = useState(false);
+
+  const capture = (event) => {
+    if (!recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const keys = [];
+    if (event.ctrlKey) keys.push("Ctrl");
+    if (event.shiftKey) keys.push("Shift");
+    if (event.altKey) keys.push("Alt");
+    if (event.metaKey) keys.push("Win");
+    const raw = event.key;
+    if (["Control", "Shift", "Alt", "Meta"].includes(raw)) return;
+    const names = {
+      " ": "Space",
+      ArrowUp: "Up",
+      ArrowDown: "Down",
+      ArrowLeft: "Left",
+      ArrowRight: "Right",
+    };
+    const key = names[raw] || (raw.length === 1 ? raw.toUpperCase() : raw);
+    keys.push(key);
+    onChange(keys.join("+"));
+    setRecording(false);
+  };
+
+  return (
+    <div className="hotkeyCapture">
+      <button
+        type="button"
+        className={recording ? "recording" : ""}
+        onClick={() => setRecording((current) => !current)}
+        onKeyDown={capture}
+      >
+        {recording ? "Pressione..." : (value || "Definir atalho")}
+      </button>
+      {value && (
+        <button type="button" className="clear" onClick={() => onChange("")} title="Limpar atalho">
+          ×
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function controlsForPreset(controls, preset) {
@@ -390,8 +438,8 @@ export const effectGroups = [
       ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100],
       ["glitch_enabled", "glitch_mix", "Glitch digital", "%", 0, 100],
       ["time_glitch_enabled", "time_glitch_mix", "Glitch temporal", "%", 0, 100],
-      ["time_glitch_enabled", "time_glitch_fragment_ms", "Trecho temporal", "ms", 10, 500],
-      ["time_glitch_enabled", "time_glitch_repeats", "Repetições temporais", "x", 1, 16],
+      ["time_glitch_enabled", "time_glitch_fragment_ms", "Trecho temporal", "ms", 10, 1500],
+      ["time_glitch_enabled", "time_glitch_repeats", "Repetições temporais", "x", 1, 10000],
       ["double_voice_enabled", "double_voice_mix", "Voz duplicada", "%", 0, 100],
       ["double_voice_enabled", "double_voice_delay_ms", "Atraso da duplicação", "ms", 0, 250],
       ["double_voice_enabled", "double_voice_pitch_semitones", "Tom da duplicação", "st", -24, 24],

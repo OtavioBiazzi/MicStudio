@@ -118,6 +118,75 @@ class ProcessingTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(out)))
         self.assertFalse(np.allclose(out, samples))
 
+    def test_time_glitch_can_repeat_a_captured_word_ten_thousand_times(self):
+        sample_rate = 8000
+        processor = VoiceEffectsProcessor(sample_rate)
+        processor.time_glitch_history[:] = np.linspace(
+            -0.25,
+            0.25,
+            processor.time_glitch_history.size,
+            dtype=np.float32,
+        )
+        processor.time_glitch_history_filled = processor.time_glitch_history.size
+        processor._start_time_glitch_event(
+            depth=0.0,
+            interval_s=0.1,
+            fragment_ms=500,
+            lookback_s=0.6,
+            repeats=10000,
+            reverse_chance=0.0,
+            pingpong_chance=0.0,
+        )
+        self.assertGreater(processor.time_glitch_grain.size, 0)
+        self.assertEqual(
+            processor.time_glitch_event_total,
+            processor.time_glitch_grain.size * 10000,
+        )
+
+    def test_command_glitch_stays_clean_until_triggered(self):
+        sample_rate = 8000
+        processor = VoiceEffectsProcessor(sample_rate)
+        settings = EffectsSettings(
+            time_glitch_enabled=True,
+            time_glitch_mix=1.0,
+            time_glitch_depth=0.0,
+            time_glitch_fragment_ms=80,
+            time_glitch_lookback_s=0.2,
+            time_glitch_repeats=8,
+            time_glitch_trigger_mode="shortcut",
+        )
+        clean = np.sin(np.linspace(0.0, 40.0 * np.pi, 2400, dtype=np.float32)) * 0.25
+        before = processor.process(clean[:1600], settings)
+        self.assertTrue(np.allclose(before, clean[:1600]))
+
+        processor.trigger_time_glitch()
+        after = processor.process(clean[1600:], settings)
+        self.assertFalse(np.allclose(after, clean[1600:]))
+
+    def test_command_glitch_hold_repeats_until_released(self):
+        sample_rate = 8000
+        processor = VoiceEffectsProcessor(sample_rate)
+        settings = EffectsSettings(
+            time_glitch_enabled=True,
+            time_glitch_mix=1.0,
+            time_glitch_depth=0.0,
+            time_glitch_fragment_ms=60,
+            time_glitch_lookback_s=0.15,
+            time_glitch_repeats=1,
+            time_glitch_trigger_mode="shortcut",
+            time_glitch_shortcut_mode="hold",
+        )
+        clean = np.sin(np.linspace(0.0, 80.0 * np.pi, 4000, dtype=np.float32)) * 0.25
+        processor.process(clean[:1800], settings)
+        processor.trigger_time_glitch(hold=True)
+        processor.process(clean[1800:3200], settings)
+        remaining_while_held = processor.time_glitch_event_remaining
+        self.assertGreater(remaining_while_held, 0)
+
+        processor.release_time_glitch()
+        processor.process(clean[3200:], settings)
+        self.assertEqual(processor.time_glitch_event_remaining, 0)
+
     def test_double_voice_keeps_streaming_state_and_changes_audio(self):
         sample_rate = 48000
         processor = VoiceEffectsProcessor(sample_rate)

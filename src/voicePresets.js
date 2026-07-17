@@ -10,6 +10,14 @@ const percentParam = (key, enableKey, label, group = "Efeito") => (
   effectParam(key, enableKey, label, 0, 100, 1, "%", group, 100)
 );
 
+const selectEffectParam = (key, enableKey, label, options, group = "Efeito") => ({
+  target: "effect", key, enableKey, label, options, group, type: "select"
+});
+
+const hotkeyEffectParam = (key, enableKey, label, group = "Efeito") => ({
+  target: "effect", key, enableKey, label, group, type: "hotkey"
+});
+
 export const voicePresets = [
   {
     id: "clean", label: "Sem efeito", description: "Voz limpa, ganho normal e efeitos desligados.",
@@ -436,13 +444,46 @@ export const voicePresets = [
     controls: [
       percentParam("time_glitch_mix", "time_glitch_enabled", "Mix temporal", "Tempo"),
       effectParam("time_glitch_interval_s", "time_glitch_enabled", "Intervalo", 0.05, 5, 0.05, "s", "Tempo"),
-      effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Tamanho do trecho", 10, 500, 5, "ms", "Fragmento"),
+      effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Tamanho do trecho", 10, 1500, 10, "ms", "Fragmento"),
       effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Fragmento"),
-      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições", 1, 16, 1, "x", "Fragmento"),
+      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições", 1, 10000, 1, "x", "Fragmento"),
       percentParam("time_glitch_reverse_chance", "time_glitch_enabled", "Chance de reverso", "Comportamento"),
       percentParam("time_glitch_pingpong_chance", "time_glitch_enabled", "Chance de ida e volta", "Comportamento"),
       percentParam("time_glitch_depth", "time_glitch_enabled", "Caos", "Comportamento"),
       percentParam("ambience_volume", "ambience_enabled", "Corrupção digital", "Ambiente")
+    ]
+  },
+  {
+    id: "glitch_sob_comando", label: "Glitch Sob Comando", description: "Voz totalmente limpa até você disparar a repetição pelo atalho configurado.",
+    emoji: "🔁", category: "Exclusivos", gradient: "linear-gradient(135deg, #082f49, #7c3aed)",
+    tags: ["atalho", "hold", "repetição"],
+    gain: 1, pitch: 0,
+    effects: {
+      time_glitch_enabled: true,
+      time_glitch_mix: 1,
+      time_glitch_depth: 0.15,
+      time_glitch_fragment_ms: 360,
+      time_glitch_lookback_s: 0.5,
+      time_glitch_repeats: 8,
+      time_glitch_reverse_chance: 0,
+      time_glitch_pingpong_chance: 0,
+      time_glitch_trigger_mode: "shortcut",
+      time_glitch_shortcut_mode: "press",
+      time_glitch_shortcut: "Ctrl+Alt+G",
+      time_glitch_repeat_volume: 1.15,
+      time_glitch_voice_duck: 1
+    },
+    controls: [
+      hotkeyEffectParam("time_glitch_shortcut", "time_glitch_enabled", "Atalho global", "Disparo"),
+      selectEffectParam("time_glitch_shortcut_mode", "time_glitch_enabled", "Comportamento", [
+        { value: "press", label: "Disparar quantidade" },
+        { value: "hold", label: "Repetir enquanto segura" }
+      ], "Disparo"),
+      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições ao disparar", 1, 10000, 1, "x", "Repetição"),
+      effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Trecho capturado", 40, 1500, 10, "ms", "Repetição"),
+      effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Repetição"),
+      effectParam("time_glitch_repeat_volume", "time_glitch_enabled", "Volume da repetição", 0, 3, 0.05, "x", "Mix"),
+      percentParam("time_glitch_voice_duck", "time_glitch_enabled", "Abaixar voz normal", "Mix")
     ]
   },
   {

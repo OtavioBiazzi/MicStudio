@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.2.0": `### Versão 1.2.0
+* Nova voz Glitch Sob Comando: permanece totalmente limpa até o atalho global ser usado.
+* Modo Disparar com repetição configurável de 1 a 10.000 vezes.
+* Modo Segurar mantém o trecho em loop e encerra suavemente quando a tecla é solta.
+* Volume exclusivo da repetição e redução independente da voz normal.
+* Configuração completa na lateral da voz e no Modular Voice Lab.`,
+
   "v1.1.1": `### Versão 1.1.1
 * Corrige o corte lateral dos controles no painel de edição de vozes.
 * Sliders agora se adaptam corretamente à largura do painel sem rolagem horizontal invisível.`,
@@ -1713,6 +1720,16 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.2.0",
+    tag_name: "v1.2.0",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.2.0"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.2.0.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.2.0/MicFudiddo-Studio-Setup-1.2.0.exe"
+    }]
+  },
   {
     id: "v1.1.1",
     tag_name: "v1.1.1",

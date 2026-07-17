@@ -4,7 +4,7 @@ import {
   Circuitry, ChartBar, Megaphone, SlidersHorizontal, ArrowCounterClockwise,
   FloppyDisk, Play, Export, UploadSimple, Trash, FadersHorizontal
 } from "@phosphor-icons/react";
-import { effectDefaults, countEnabledEffects } from "../utils";
+import { effectDefaults, countEnabledEffects, HotkeyCaptureButton } from "../utils";
 
 const voiceCategories = [
   "Todas", "Favoritas", "Recentes", "Reverb", "Fina e Aguda", "Grave", "Robótica", "Música", "Rádio", "Humor", "Monstros", "Jogos e Streaming", "Avançados", "Exclusivos", "Especiais", "Customizadas"
@@ -131,6 +131,14 @@ export function VoiceLabPage({
         time_glitch_mix: 1.0,
         time_glitch_rate_hz: 16,
         time_glitch_depth: 1.0,
+        time_glitch_interval_s: 0.05,
+        time_glitch_fragment_ms: 1500,
+        time_glitch_lookback_s: 2.0,
+        time_glitch_repeats: 10000,
+        time_glitch_reverse_chance: 1.0,
+        time_glitch_pingpong_chance: 1.0,
+        time_glitch_repeat_volume: 3.0,
+        time_glitch_voice_duck: 1.0,
         radio_static_enabled: true,
         radio_static_mix: 1.0,
         radio_crackle_rate_hz: 40,
@@ -187,6 +195,14 @@ export function VoiceLabPage({
         { key: "time_glitch_mix", label: "Glitch Temporal", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_rate_hz", label: "Frequência Temporal", icon: Circuitry, min: 1, max: 16, step: 0.5, suffix: "Hz", isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_depth", label: "Viagem no Tempo", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_interval_s", label: "Intervalo entre Travadas", icon: Circuitry, min: 0, max: 5, step: 0.05, suffix: "s", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_fragment_ms", label: "Trecho Capturado", icon: WaveSine, min: 10, max: 1500, step: 10, suffix: "ms", directValue: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_lookback_s", label: "Voltar no Tempo", icon: ArrowCounterClockwise, min: 0.02, max: 2, step: 0.02, suffix: "s", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_repeats", label: "Repetições do Trecho", icon: ArrowCounterClockwise, min: 1, max: 10000, step: 1, suffix: "x", directValue: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_repeat_volume", label: "Volume da Repetição", icon: SpeakerHigh, min: 0, max: 3, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_voice_duck", label: "Abaixar Voz Normal", icon: Microphone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_reverse_chance", label: "Chance de Reverso", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_pingpong_chance", label: "Chance de Ping-Pong", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "double_voice_mix", label: "Voz Duplicada", icon: WaveSine, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "double_voice_enabled" },
         { key: "double_voice_delay_ms", label: "Atraso da Segunda Voz", icon: Phone, min: 0, max: 250, step: 1, suffix: "ms", isControl: false, enableKey: "double_voice_enabled" },
         { key: "double_voice_pitch_semitones", label: "Tom da Segunda Voz", icon: WaveSine, min: -24, max: 24, step: 1, suffix: "st", isControl: false, enableKey: "double_voice_enabled" },
@@ -256,6 +272,42 @@ export function VoiceLabPage({
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20, maxHeight: "68vh", overflowY: "auto", paddingRight: 6 }}>
+            {state.controls?.effects?.time_glitch_enabled && (
+              <div className="glitchCommandSettings">
+                <div className="effectGroupTitle">DISPARO DO GLITCH TEMPORAL</div>
+                <label>
+                  <span>Ativação</span>
+                  <select
+                    value={state.controls.effects.time_glitch_trigger_mode || "automatic"}
+                    onChange={(event) => updateEffects({ time_glitch_trigger_mode: event.target.value })}
+                  >
+                    <option value="automatic">Automático</option>
+                    <option value="shortcut">Somente por atalho</option>
+                  </select>
+                </label>
+                {state.controls.effects.time_glitch_trigger_mode === "shortcut" && (
+                  <>
+                    <label>
+                      <span>Comportamento</span>
+                      <select
+                        value={state.controls.effects.time_glitch_shortcut_mode || "press"}
+                        onChange={(event) => updateEffects({ time_glitch_shortcut_mode: event.target.value })}
+                      >
+                        <option value="press">Disparar quantidade</option>
+                        <option value="hold">Repetir enquanto segura</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Atalho global</span>
+                      <HotkeyCaptureButton
+                        value={state.controls.effects.time_glitch_shortcut || ""}
+                        onChange={(value) => updateEffects({ time_glitch_shortcut: value })}
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
             {modules.map((group) => (
               <div key={group.title} className="effectGroup" style={{ marginBottom: 4 }}>
                 <div className="effectGroupTitle">{group.title}</div>
@@ -267,7 +319,9 @@ export function VoiceLabPage({
                     
                     const maxVal = item.max;
                     let sliderPct;
-                    if (item.key === "pitch") {
+                    if (item.directValue) {
+                      sliderPct = Math.max(item.min, Math.min(item.max, Number(raw)));
+                    } else if (item.key === "pitch") {
                       sliderPct = Math.round(((Number(raw) + 24) / 48) * 1000);
                     } else if (item.key === "robot_rate_hz") {
                       sliderPct = Math.round(((Number(raw) - 5) / 245) * 1000);
@@ -282,7 +336,9 @@ export function VoiceLabPage({
                     const handleSliderChange = (e) => {
                       const pct = Number(e.target.value);
                       let val;
-                      if (item.key === "pitch") {
+                      if (item.directValue) {
+                        val = pct;
+                      } else if (item.key === "pitch") {
                         val = (pct / 1000) * 48 - 24;
                       } else if (item.key === "robot_rate_hz") {
                         val = (pct / 1000) * 245 + 5;
@@ -307,7 +363,7 @@ export function VoiceLabPage({
                     };
 
                     const Icon = item.icon;
-                    const showClipping = sliderPct > 200;
+                    const showClipping = !item.directValue && sliderPct > 200;
 
                     return (
                       <div key={item.key} className={`voice-lab-effect-card ${enabled ? "active" : ""}`}>
@@ -333,9 +389,9 @@ export function VoiceLabPage({
                           <div className="voice-lab-effect-slider">
                             <input
                               type="range"
-                              min={0}
-                              max={1000}
-                              step={5}
+                              min={item.directValue ? item.min : 0}
+                              max={item.directValue ? item.max : 1000}
+                              step={item.directValue ? item.step : 5}
                               value={sliderPct}
                               onChange={handleSliderChange}
                               disabled={!enabled && !isControl}
@@ -343,7 +399,9 @@ export function VoiceLabPage({
                             />
                           </div>
                           <span className="voice-lab-effect-value">
-                            {isControl 
+                            {item.directValue
+                              ? `${Number(raw).toFixed(item.decimals || 0)}${item.suffix}`
+                              : isControl
                               ? (item.key === "pitch" ? `${Number(raw).toFixed(0)}st` : `${Number(raw).toFixed(1)}x`)
                               : `${Math.round(sliderPct)}%`
                             }

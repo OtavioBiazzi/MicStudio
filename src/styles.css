@@ -966,6 +966,94 @@ html,body,#root {
   flex-shrink:0
 }
 
+.panelField {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-bottom:10px;
+  min-width:0
+}
+
+.panelField>span {
+  color:var(--text-secondary);
+  font-size:11px;
+  font-weight:700
+}
+
+.panelField select,
+.glitchCommandSettings select {
+  width:100%;
+  min-width:0;
+  padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--bg-input);
+  color:var(--text);
+  font:600 11px var(--font);
+  outline:none
+}
+
+.hotkeyCapture {
+  display:flex;
+  gap:6px;
+  min-width:0
+}
+
+.hotkeyCapture button {
+  min-width:0;
+  padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--bg-input);
+  color:var(--text-secondary);
+  font:700 11px var(--font);
+  cursor:pointer
+}
+
+.hotkeyCapture button:first-child {
+  flex:1
+}
+
+.hotkeyCapture button.recording {
+  border-color:var(--purple);
+  background:var(--purple-soft);
+  color:var(--text)
+}
+
+.hotkeyCapture button.clear {
+  flex:0 0 32px;
+  color:var(--danger)
+}
+
+.glitchCommandSettings {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  padding:14px;
+  border:1px solid var(--border-active);
+  border-radius:var(--radius-sm);
+  background:var(--purple-bg)
+}
+
+.glitchCommandSettings .effectGroupTitle {
+  grid-column:1/-1;
+  margin:0
+}
+
+.glitchCommandSettings label {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0
+}
+
+.glitchCommandSettings label>span {
+  color:var(--text-secondary);
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase
+}
+
 .moreConfigsBtn {
   display:flex;
   align-items:center;

@@ -1451,6 +1451,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.2.1": `### Versão 1.2.1
+* Corrige o botão inferior Voz Normal para desligar todos os efeitos sem sobreposição.
+* Controles rápidos agora usam sempre o estado mais recente, evitando efeitos antigos reaparecendo.
+* Ganho do microfone e volume da voz aceitam precisão de 0,01 pelo slider ou campo numérico.`,
+
   "v1.2.0": `### Versão 1.2.0
 * Nova voz Glitch Sob Comando: permanece totalmente limpa até o atalho global ser usado.
 * Modo Disparar com repetição configurável de 1 a 10.000 vezes.
@@ -1720,6 +1725,16 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.2.1",
+    tag_name: "v1.2.1",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.2.1"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.2.1.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.2.1/MicFudiddo-Studio-Setup-1.2.1.exe"
+    }]
+  },
   {
     id: "v1.2.0",
     tag_name: "v1.2.0",

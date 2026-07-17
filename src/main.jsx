@@ -100,6 +100,7 @@ function App() {
   const lastYoutubeStatusRef = useRef("");
   const controlsTimerRef = useRef(null);
   const latestControlsRef = useRef(null);
+  const stateRef = useRef(state);
   const categoriesHydratedRef = useRef(false);
 
   const [bypassActive, setBypassActive] = useState(false);
@@ -429,6 +430,7 @@ function App() {
         nextState.controls = { ...nextState.controls, ...optimistic.controls };
       } else {
         controlsOptimisticRef.current = null;
+        if (nextState.controls) latestControlsRef.current = nextState.controls;
       }
       return nextState;
     });
@@ -475,9 +477,11 @@ function App() {
   );
 
   const updateControls = (patch) => {
-    const controls = { ...state.controls, ...patch };
+    const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
+    const controls = { ...currentControls, ...patch };
     controlsOptimisticRef.current = { controls, until: Date.now() + 1200 };
-    setState({ ...state, controls });
+    latestControlsRef.current = controls;
+    setState((currentState) => ({ ...currentState, controls }));
 
     // Se mudou algum controle não-limpo enquanto em bypassActive, desativa o bypass
     const isCurrentlyClean = Math.abs(Number(controls.pitch ?? 0)) < 0.05 && 
@@ -495,7 +499,6 @@ function App() {
       }));
     }
 
-    latestControlsRef.current = controls;
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     
     controlsTimerRef.current = setTimeout(() => {
@@ -514,11 +517,13 @@ function App() {
   };
 
   const updateEffects = (patch) => {
-    updateControls({ effects: { ...state.controls.effects, ...patch } });
+    const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
+    updateControls({ effects: { ...(currentControls.effects || {}), ...patch } });
   };
 
   const applyVoicePreset = (voice) => {
     if (!state || !voice) return;
+    const currentControls = latestControlsRef.current || stateRef.current?.controls || state.controls;
     setForcedPresetId(voice.id);
     if (voice.id !== "clean") {
       setBypassActive(false);
@@ -535,19 +540,19 @@ function App() {
         try {
           const parsed = JSON.parse(saved);
           targetControls = {
-            ...state.controls,
+            ...currentControls,
             gain: parsed.gain,
             pitch: parsed.pitch,
-            effects: { ...state.controls.effects, ...parsed.effects }
+            effects: { ...currentControls.effects, ...parsed.effects }
           };
         } catch (e) {
-          targetControls = controlsForPreset(state.controls, voice);
+          targetControls = controlsForPreset(currentControls, voice);
         }
       } else {
-        targetControls = controlsForPreset(state.controls, voice);
+        targetControls = controlsForPreset(currentControls, voice);
       }
     } else {
-      targetControls = controlsForPreset(state.controls, voice);
+      targetControls = controlsForPreset(currentControls, voice);
     }
 
     updateControls(targetControls);
@@ -584,20 +589,22 @@ function App() {
 
   function toggleBypass() {
     if (!state) return;
-    const isCurrentlyClean = Math.abs(Number(state.controls?.pitch ?? 0)) < 0.05 && 
-      countEnabledEffects(state.controls?.effects) === 0;
+    const currentControls = latestControlsRef.current || stateRef.current?.controls || state.controls;
+    const isCurrentlyClean = Math.abs(Number(currentControls?.pitch ?? 0)) < 0.05 &&
+      countEnabledEffects(currentControls?.effects) === 0;
       
     if (!isCurrentlyClean) {
       setSavedCustomControls({
-        gain: state.controls.gain,
-        pitch: state.controls.pitch,
-        effects: { ...state.controls.effects }
+        gain: currentControls.gain,
+        pitch: currentControls.pitch,
+        effects: { ...currentControls.effects }
       });
       if (activePreset && activePreset.id !== "clean") {
         setLastActivePresetId(activePreset.id);
       }
       setBypassActive(true);
       updateControls({
+        ...currentControls,
         gain: 1.0,
         pitch: 0.0,
         effects: {
@@ -632,7 +639,6 @@ function App() {
     return state.sounds[0];
   }, [state?.sounds]);
 
-  const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);

@@ -3743,6 +3743,24 @@ html,body,#root {
   font-family: monospace;
 }
 
+.slider-value-input {
+  width:64px;
+  min-width:64px;
+  padding:4px 5px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--bg-input);
+  color:var(--cyan);
+  font:700 11px monospace;
+  text-align:right;
+  outline:none
+}
+
+.slider-value-input:focus {
+  border-color:var(--purple);
+  box-shadow:0 0 0 2px var(--purple-soft)
+}
+
 .mixer-slider {
   -webkit-appearance: none;
   width: 100%;

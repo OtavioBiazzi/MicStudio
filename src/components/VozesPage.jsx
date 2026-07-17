@@ -567,9 +567,9 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
               <div className="panelSectionTitle">
                 CONTROLE DE MICROFONE
               </div>
-              <PanelSlider label="Ganho (Mic)" value={gainValue} min={0} max={10} step={0.1} unit="x" onChange={(v) => updateControls({ gain: v })} />
-              <PanelSlider label="Vol. Retorno" value={monitorVolumeValue} min={0} max={3} step={0.1} unit="x" onChange={(v) => updateControls({ monitorVolume: v })} />
-              <PanelSlider label="Volume Geral" value={outputVolumeValue} min={0} max={10} step={0.1} unit="x" onChange={(v) => updateEffects({ output_volume: v, output_volume_enabled: true })} />
+              <PanelSlider label="Ganho (Mic)" value={gainValue} min={0} max={10} step={0.01} unit="x" onChange={(v) => updateControls({ gain: v })} />
+              <PanelSlider label="Vol. Retorno" value={monitorVolumeValue} min={0} max={3} step={0.01} unit="x" onChange={(v) => updateControls({ monitorVolume: v })} />
+              <PanelSlider label="Volume Geral" value={outputVolumeValue} min={0} max={10} step={0.01} unit="x" onChange={(v) => updateEffects({ output_volume: v, output_volume_enabled: true })} />
             </div>
 
             <div className="panelSection">

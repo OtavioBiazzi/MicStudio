@@ -340,12 +340,21 @@ export function FloatingDock({
                   type="range"
                   min={0}
                   max={100}
-                  step={1}
+                  step={0.01}
                   value={state.controls?.masterMicGain ?? 1}
                   onChange={(e) => updateControls({ masterMicGain: Number(e.target.value) })}
                   className="mixer-slider"
                 />
-                <span className="slider-value">{(state.controls?.masterMicGain ?? 1).toFixed(1)}x</span>
+                <input
+                  className="slider-value-input"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={Number(state.controls?.masterMicGain ?? 1)}
+                  onChange={(e) => updateControls({ masterMicGain: Number(e.target.value) })}
+                  aria-label="Valor do ganho do microfone"
+                />
               </div>
             </div>
 
@@ -359,12 +368,21 @@ export function FloatingDock({
                   type="range"
                   min={0}
                   max={100}
-                  step={1}
+                  step={0.01}
                   value={state.controls?.masterVoiceVolume ?? 1}
                   onChange={(e) => updateControls({ masterVoiceVolume: Number(e.target.value) })}
                   className="mixer-slider"
                 />
-                <span className="slider-value">{(state.controls?.masterVoiceVolume ?? 1.0).toFixed(1)}x</span>
+                <input
+                  className="slider-value-input"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={Number(state.controls?.masterVoiceVolume ?? 1)}
+                  onChange={(e) => updateControls({ masterVoiceVolume: Number(e.target.value) })}
+                  aria-label="Valor do volume da voz"
+                />
               </div>
             </div>
 

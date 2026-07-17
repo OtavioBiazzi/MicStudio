@@ -16,6 +16,14 @@ import {
 import { voicePresets, visibleVoicePresets } from "../voicePresets";
 
 const voiceImageModules = import.meta.glob("../../assets/voices/*.png", { eager: true, import: "default" });
+const defaultVoiceControls = [
+  { target: "control", key: "pitch", label: "Pitch", min: -12, max: 12, step: 1, unit: "st", group: "Identidade" },
+  { target: "effect", key: "robot_rate_hz", enableKey: "robot_enabled", label: "Robotização", min: 5, max: 120, step: 1, unit: "Hz", group: "Textura" },
+  { target: "effect", key: "reverb_mix", enableKey: "reverb_enabled", label: "Reverb", min: 0, max: 100, step: 1, unit: "%", scale: 100, group: "Espaço" },
+  { target: "effect", key: "echo_mix", enableKey: "echo_enabled", label: "Eco", min: 0, max: 100, step: 1, unit: "%", scale: 100, group: "Espaço" },
+  { target: "effect", key: "distortion_drive", enableKey: "distortion_enabled", label: "Distorção", min: 1, max: 30, step: 0.5, unit: "x", group: "Textura" }
+];
+
 function getVoiceImage(id) {
   for (const [path, url] of Object.entries(voiceImageModules)) {
     if (path.includes(`/${id}.`)) return url;
@@ -484,14 +492,36 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
   const image = getVoiceImage(voice.id);
   const controls = state.controls;
 
-  const gainValue = Math.round((Number(controls.gain ?? 1.0) / 3.0) * 100);
-  const monitorVolumeValue = Math.round((Number(controls.monitorVolume ?? 1.0) / 3.0) * 100);
-  const outputVolumeValue = Math.round((Number(controls.effects?.output_volume ?? 1.0) / 10.0) * 100);
-  const pitchValue = Math.round(((Number(controls.pitch) + 12) / 24) * 100);
-  const reverbValue = Math.round((Number(controls.effects?.reverb_mix ?? 0)) * 100);
-  const echoValue = Math.round((Number(controls.effects?.echo_mix ?? 0)) * 100);
-  const distortionValue = Math.round(((Number(controls.effects?.distortion_drive ?? 1) - 1) / 29) * 100);
-  const formantValue = Math.round(((Number(controls.effects?.robot_rate_hz ?? 5) - 5) / 115) * 100);
+  const gainValue = Number(controls.gain ?? 1.0);
+  const monitorVolumeValue = Number(controls.monitorVolume ?? 1.0);
+  const outputVolumeValue = Number(controls.effects?.output_volume ?? 1.0);
+  const personalizedControls = voice.controls?.length ? voice.controls : defaultVoiceControls;
+  const controlGroups = personalizedControls.reduce((groups, item) => {
+    const group = item.group || "Configuração";
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(item);
+    return groups;
+  }, {});
+
+  const readParameter = (item) => {
+    const raw = item.target === "control"
+      ? controls[item.key]
+      : controls.effects?.[item.key];
+    const fallback = item.target === "control" ? voice[item.key] : voice.effects?.[item.key];
+    return Number(raw ?? fallback ?? item.min ?? 0) * Number(item.scale || 1);
+  };
+
+  const updateParameter = (item, displayValue) => {
+    const storedValue = Number(displayValue) / Number(item.scale || 1);
+    if (item.target === "control") {
+      updateControls({ [item.key]: storedValue });
+      return;
+    }
+    updateEffects({
+      [item.key]: storedValue,
+      ...(item.enableKey ? { [item.enableKey]: true } : {})
+    });
+  };
 
   return (
     <div className="voiceSidePanel">
@@ -513,6 +543,11 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
           <span className="proBadge">PRO</span>
         </div>
         <p className="panelDesc">{voice.description}</p>
+        {voice.tags?.length > 0 && (
+          <div className="voiceProfileTags">
+            {voice.tags.map((tag) => <span key={tag}>{tag}</span>)}
+          </div>
+        )}
 
         <button className={`addFavBtn ${isFavorite ? "favorited" : ""}`} onClick={onToggleFavorite}>
           <Star size={16} weight={isFavorite ? "fill" : "regular"} />
@@ -531,22 +566,34 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
               <div className="panelSectionTitle">
                 CONTROLE DE MICROFONE
               </div>
-              <PanelSlider label="Ganho (Mic)" value={gainValue} onChange={(v) => updateControls({ gain: (v / 100) * 3.0 })} />
-              <PanelSlider label="Vol. Retorno" value={monitorVolumeValue} onChange={(v) => updateControls({ monitorVolume: (v / 100) * 3.0 })} />
-              <PanelSlider label="Volume Geral" value={outputVolumeValue} onChange={(v) => updateEffects({ output_volume: (v / 100) * 10.0, output_volume_enabled: true })} />
+              <PanelSlider label="Ganho (Mic)" value={gainValue} min={0} max={10} step={0.1} unit="x" onChange={(v) => updateControls({ gain: v })} />
+              <PanelSlider label="Vol. Retorno" value={monitorVolumeValue} min={0} max={3} step={0.1} unit="x" onChange={(v) => updateControls({ monitorVolume: v })} />
+              <PanelSlider label="Volume Geral" value={outputVolumeValue} min={0} max={10} step={0.1} unit="x" onChange={(v) => updateEffects({ output_volume: v, output_volume_enabled: true })} />
             </div>
 
             <div className="panelSection">
               <div className="panelSectionTitle">
-                CONFIGURAÇÕES DO EFEITO
+                CONTROLES DE {voice.label}
                 <button className="moreBtn"><DotsThreeVertical size={16} /></button>
               </div>
 
-              <PanelSlider label="Pitch" value={pitchValue} onChange={(v) => updateControls({ pitch: (v / 100) * 24 - 12 })} />
-              <PanelSlider label="Formant" value={formantValue} onChange={(v) => updateEffects({ robot_rate_hz: (v / 100) * 115 + 5, robot_enabled: v > 0 })} />
-              <PanelSlider label="Reverb" value={reverbValue} onChange={(v) => updateEffects({ reverb_mix: v / 100, reverb_enabled: v > 0 })} />
-              <PanelSlider label="Echo" value={echoValue} onChange={(v) => updateEffects({ echo_mix: v / 100, echo_enabled: v > 0 })} />
-              <PanelSlider label="Distorção" value={distortionValue} onChange={(v) => updateEffects({ distortion_drive: (v / 100) * 29 + 1, distortion_enabled: v > 0 })} />
+              {Object.entries(controlGroups).map(([group, items]) => (
+                <div key={group} className="voiceControlGroup">
+                  <div className="voiceControlGroupName">{group}</div>
+                  {items.map((item) => (
+                    <PanelSlider
+                      key={`${item.target}-${item.key}`}
+                      label={item.label}
+                      value={readParameter(item)}
+                      min={item.min}
+                      max={item.max}
+                      step={item.step || 1}
+                      unit={item.unit || ""}
+                      onChange={(value) => updateParameter(item, value)}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
 
             <button className="moreConfigsBtn" onClick={() => setShowMore(!showMore)}>
@@ -610,6 +657,21 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                           />
                         </div>
                       )}
+                      {valueKey === "ambience_volume" && enabled && (
+                        <div style={{ paddingLeft: 36, display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>Tipo de ambiente:</span>
+                          <select
+                            value={controls.effects?.ambience_mode || "space"}
+                            onChange={(e) => updateEffects({ ambience_mode: e.target.value })}
+                            style={{ padding: "4px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11, outline: "none" }}
+                          >
+                            <option value="space">Nave espacial</option>
+                            <option value="infernal">Rumble infernal</option>
+                            <option value="haunted">Ar assombrado</option>
+                            <option value="digital">Corrupção digital</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -667,12 +729,15 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
 }
 
 // --- PanelSlider ---
-export function PanelSlider({ label, value, onChange }) {
+export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit = "", onChange }) {
+  const safeValue = Math.max(min, Math.min(max, Number(value) || 0));
+  const decimals = String(step).includes(".") ? String(step).split(".")[1].length : 0;
+  const formatted = decimals ? safeValue.toFixed(decimals) : Math.round(safeValue);
   return (
     <div className="panelSlider">
       <span className="sliderLabel">{label}</span>
-      <input type="range" min={0} max={100} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="sliderValue">{value}</span>
+      <input type="range" min={min} max={max} step={step} value={safeValue} onChange={(e) => onChange(Number(e.target.value))} />
+      <span className="sliderValue">{formatted}{unit}</span>
     </div>
   );
 }

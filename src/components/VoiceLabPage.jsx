@@ -130,7 +130,17 @@ export function VoiceLabPage({
         time_glitch_enabled: true,
         time_glitch_mix: 1.0,
         time_glitch_rate_hz: 16,
-        time_glitch_depth: 1.0
+        time_glitch_depth: 1.0,
+        radio_static_enabled: true,
+        radio_static_mix: 1.0,
+        radio_crackle_rate_hz: 40,
+        double_voice_enabled: true,
+        double_voice_mix: 1.0,
+        double_voice_delay_ms: 250,
+        double_voice_pitch_semitones: -24,
+        ambience_enabled: true,
+        ambience_mode: "digital",
+        ambience_volume: 1.0
       }
     };
     updateControls(maxControls);
@@ -176,7 +186,13 @@ export function VoiceLabPage({
         { key: "glitch_rate_hz", label: "Velocidade Glitch", icon: Circuitry, min: 4, max: 60, step: 1, suffix: "Hz", isControl: false, enableKey: "glitch_enabled" },
         { key: "time_glitch_mix", label: "Glitch Temporal", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_rate_hz", label: "Frequência Temporal", icon: Circuitry, min: 1, max: 16, step: 0.5, suffix: "Hz", isControl: false, enableKey: "time_glitch_enabled" },
-        { key: "time_glitch_depth", label: "Viagem no Tempo", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" }
+        { key: "time_glitch_depth", label: "Viagem no Tempo", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "double_voice_mix", label: "Voz Duplicada", icon: WaveSine, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "double_voice_enabled" },
+        { key: "double_voice_delay_ms", label: "Atraso da Segunda Voz", icon: Phone, min: 0, max: 250, step: 1, suffix: "ms", isControl: false, enableKey: "double_voice_enabled" },
+        { key: "double_voice_pitch_semitones", label: "Tom da Segunda Voz", icon: WaveSine, min: -24, max: 24, step: 1, suffix: "st", isControl: false, enableKey: "double_voice_enabled" },
+        { key: "radio_static_mix", label: "Estática de Rádio", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "radio_static_enabled" },
+        { key: "radio_crackle_rate_hz", label: "Estalos do Rádio", icon: Circuitry, min: 0, max: 40, step: 1, suffix: "Hz", isControl: false, enableKey: "radio_static_enabled" },
+        { key: "ambience_volume", label: "Ambiente Procedural", icon: Sparkle, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "ambience_enabled" }
       ]
     },
     {

@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.1.0": `### Versão 1.1.0
+* Controles personalizados para cada voz, com nomes, unidades e limites próprios.
+* Glitched Temporal avançado com intervalo, fragmento, rewind, repetições, reverso e ping-pong.
+* Novos módulos de segunda voz, estática de rádio e ambientes procedurais.
+* Novas vozes Possuído, Arquétipo Colossal, Anime Spark e Mic Troll.
+* Demônio, Fantasma, Alien, Rádio de Combate e Robô Quebrado foram reconstruídos.`,
+
   "v1.0.4": `### Versão 1.0.4
 * O verificador de atualizações agora ignora respostas antigas em cache.
 * Novas releases são verificadas novamente ao focar o aplicativo e periodicamente.
@@ -1703,13 +1710,23 @@ const LOCAL_CHANGELOGS = {
 
 const FALLBACK_RELEASES = [
   {
+    id: "v1.1.0",
+    tag_name: "v1.1.0",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.1.0"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.1.0.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.1.0/MicFudiddo-Studio-Setup-1.1.0.exe"
+    }]
+  },
+  {
     id: "v1.0.4",
     tag_name: "v1.0.4",
     published_at: new Date().toISOString(),
     body: LOCAL_CHANGELOGS["v1.0.4"],
     assets: [{
-      name: "MicFudiddo.Studio.Setup.1.0.4.exe",
-      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.0.4/MicFudiddo.Studio.Setup.1.0.4.exe"
+      name: "MicFudiddo-Studio-Setup-1.0.4.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.0.4/MicFudiddo-Studio-Setup-1.0.4.exe"
     }]
   },
   {

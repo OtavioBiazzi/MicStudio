@@ -82,6 +82,9 @@ class EffectsSettings:
     bitcrush_bits: int = 8
     radio_enabled: bool = False
     radio_mix: float = 0.7
+    radio_static_enabled: bool = False
+    radio_static_mix: float = 0.12
+    radio_crackle_rate_hz: float = 7.0
     megaphone_enabled: bool = False
     megaphone_drive: float = 4.0
     telephone_enabled: bool = False
@@ -115,6 +118,19 @@ class EffectsSettings:
     time_glitch_mix: float = 0.72
     time_glitch_rate_hz: float = 6.0
     time_glitch_depth: float = 0.7
+    time_glitch_interval_s: float = 0.0
+    time_glitch_fragment_ms: float = 55.0
+    time_glitch_lookback_s: float = 0.45
+    time_glitch_repeats: int = 4
+    time_glitch_reverse_chance: float = 0.38
+    time_glitch_pingpong_chance: float = 0.28
+    double_voice_enabled: bool = False
+    double_voice_mix: float = 0.4
+    double_voice_delay_ms: float = 45.0
+    double_voice_pitch_semitones: float = -5.0
+    ambience_enabled: bool = False
+    ambience_mode: str = "space"
+    ambience_volume: float = 0.12
     harmony_enabled: bool = False
     harmony_mode: str = "Major"
     harmony_mix: float = 0.5
@@ -129,7 +145,7 @@ class VoiceEffectsProcessor:
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
         self.glitch_phase = 0.0
-        self.time_glitch_history = np.zeros(max(64, int(self.sample_rate * 0.8)), dtype=np.float32)
+        self.time_glitch_history = np.zeros(max(64, int(self.sample_rate * 2.2)), dtype=np.float32)
         self.time_glitch_history_pos = 0
         self.time_glitch_history_filled = 0
         self.time_glitch_grain = np.zeros(0, dtype=np.float32)
@@ -142,6 +158,10 @@ class VoiceEffectsProcessor:
         self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
         self.echo_pos = 0
         self.noise_rng = np.random.default_rng()
+        self.double_voice_buffer = np.zeros(max(64, int(self.sample_rate * 0.3)), dtype=np.float32)
+        self.double_voice_pos = 0
+        self._double_voice_shifter = DualDelayPitchShifter(self.sample_rate)
+        self._ambience_sample_index = 0
         self._harm_shifters = [
             DualDelayPitchShifter(self.sample_rate),
             DualDelayPitchShifter(self.sample_rate),
@@ -162,6 +182,10 @@ class VoiceEffectsProcessor:
         self.time_glitch_event_remaining = 0
         self.time_glitch_event_total = 0
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
+        self.double_voice_buffer.fill(0.0)
+        self.double_voice_pos = 0
+        self._double_voice_shifter.reset()
+        self._ambience_sample_index = 0
         self.echo_buffer.fill(0.0)
         self.echo_pos = 0
 
@@ -198,6 +222,13 @@ class VoiceEffectsProcessor:
         if settings.radio_enabled:
             y = self._radio(y, _finite_clamped(settings.radio_mix, 0.0, 1.0, 0.7))
 
+        if settings.radio_static_enabled:
+            y = self._radio_static(
+                y,
+                _finite_clamped(settings.radio_static_mix, 0.0, 1.0, 0.12),
+                _finite_clamped(settings.radio_crackle_rate_hz, 0.0, 40.0, 7.0),
+            )
+
         if settings.megaphone_enabled:
             y = self._megaphone(y, _finite_clamped(settings.megaphone_drive, 1.0, 40.0, 4.0))
 
@@ -228,6 +259,14 @@ class VoiceEffectsProcessor:
         if settings.compressor_enabled:
             y = self._compressor(y, _finite_clamped(settings.compressor_amount, 0.0, 1.0, 0.45))
 
+        if settings.double_voice_enabled:
+            y = self._double_voice(
+                y,
+                _finite_clamped(settings.double_voice_mix, 0.0, 1.0, 0.4),
+                _finite_clamped(settings.double_voice_delay_ms, 0.0, 250.0, 45.0),
+                _finite_clamped(settings.double_voice_pitch_semitones, -24.0, 24.0, -5.0),
+            )
+
         if settings.wobble_enabled:
             y = self._wobble(y, _finite_clamped(settings.wobble_mix, 0.0, 1.0, 0.35))
 
@@ -245,11 +284,26 @@ class VoiceEffectsProcessor:
             )
 
         if settings.time_glitch_enabled:
+            interval_s = _finite_clamped(settings.time_glitch_interval_s, 0.0, 5.0, 0.0)
+            if interval_s <= 0.0:
+                interval_s = 1.0 / _finite_clamped(settings.time_glitch_rate_hz, 1.0, 16.0, 6.0)
             y = self._time_glitch(
                 y,
                 _finite_clamped(settings.time_glitch_mix, 0.0, 1.0, 0.72),
-                _finite_clamped(settings.time_glitch_rate_hz, 1.0, 16.0, 6.0),
                 _finite_clamped(settings.time_glitch_depth, 0.0, 1.0, 0.7),
+                interval_s,
+                _finite_clamped(settings.time_glitch_fragment_ms, 10.0, 500.0, 55.0),
+                _finite_clamped(settings.time_glitch_lookback_s, 0.02, 2.0, 0.45),
+                int(_finite_clamped(float(settings.time_glitch_repeats), 1.0, 16.0, 4.0)),
+                _finite_clamped(settings.time_glitch_reverse_chance, 0.0, 1.0, 0.38),
+                _finite_clamped(settings.time_glitch_pingpong_chance, 0.0, 1.0, 0.28),
+            )
+
+        if settings.ambience_enabled:
+            y += self._ambience(
+                y.size,
+                settings.ambience_mode,
+                _finite_clamped(settings.ambience_volume, 0.0, 1.0, 0.12),
             )
 
         if settings.harmony_enabled:
@@ -320,6 +374,20 @@ class VoiceEffectsProcessor:
         crushed = self._bitcrush(colored * np.float32(1.35), 7)
         return ((samples * (1.0 - mix)) + (crushed * mix)).astype(np.float32, copy=False)
 
+    def _radio_static(self, samples: np.ndarray, mix: float, crackle_rate_hz: float) -> np.ndarray:
+        if samples.size == 0 or mix <= 0.0:
+            return samples.copy()
+        static = self.noise_rng.normal(0.0, 0.055, samples.size).astype(np.float32)
+        probability = min(0.25, crackle_rate_hz / max(1, self.sample_rate))
+        crackle_mask = self.noise_rng.random(samples.size) < probability
+        if np.any(crackle_mask):
+            static[crackle_mask] += self.noise_rng.uniform(-0.8, 0.8, int(np.sum(crackle_mask))).astype(np.float32)
+        static = self._band_limited(static)
+        return np.clip(samples * np.float32(1.0 - mix * 0.08) + static * np.float32(mix), -1.0, 1.0).astype(
+            np.float32,
+            copy=False,
+        )
+
     def _megaphone(self, samples: np.ndarray, drive: float) -> np.ndarray:
         voiced = self._band_limited(samples)
         return np.tanh(voiced * np.float32(drive)).astype(np.float32, copy=False)
@@ -387,6 +455,30 @@ class VoiceEffectsProcessor:
         )
         makeup = 1.0 + (amount * 0.65)
         return np.tanh(compressed * np.float32(makeup)).astype(np.float32, copy=False)
+
+    def _double_voice(self, samples: np.ndarray, mix: float, delay_ms: float, pitch_semitones: float) -> np.ndarray:
+        if samples.size == 0 or mix <= 0.0:
+            return samples.copy()
+        self._double_voice_shifter.set_pitch_semitones(pitch_semitones)
+        shifted = self._double_voice_shifter.process(samples)
+        delay_samples = min(
+            self.double_voice_buffer.size - 1,
+            max(0, int(self.sample_rate * delay_ms / 1000.0)),
+        )
+        if delay_samples == 0:
+            wet = shifted
+            return (
+                samples * np.float32(1.0 - mix * 0.32) + wet * np.float32(mix * 0.82)
+            ).astype(np.float32, copy=False)
+        wet = np.empty_like(samples)
+        for index, sample in enumerate(shifted):
+            read_pos = (self.double_voice_pos - delay_samples) % self.double_voice_buffer.size
+            wet[index] = self.double_voice_buffer[read_pos]
+            self.double_voice_buffer[self.double_voice_pos] = sample
+            self.double_voice_pos = (self.double_voice_pos + 1) % self.double_voice_buffer.size
+        return (
+            samples * np.float32(1.0 - mix * 0.32) + wet * np.float32(mix * 0.82)
+        ).astype(np.float32, copy=False)
 
     def _wobble(self, samples: np.ndarray, mix: float) -> np.ndarray:
         if samples.size < 8 or mix <= 0.0:
@@ -458,7 +550,18 @@ class VoiceEffectsProcessor:
         wet *= dropout
         return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
-    def _time_glitch(self, samples: np.ndarray, mix: float, rate_hz: float, depth: float) -> np.ndarray:
+    def _time_glitch(
+        self,
+        samples: np.ndarray,
+        mix: float,
+        depth: float,
+        interval_s: float,
+        fragment_ms: float,
+        lookback_s: float,
+        repeats: int,
+        reverse_chance: float,
+        pingpong_chance: float,
+    ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
         if samples.size == 0 or mix <= 0.0:
             return samples.copy()
@@ -476,7 +579,15 @@ class VoiceEffectsProcessor:
             if self.time_glitch_event_remaining <= 0:
                 self.time_glitch_samples_until_event -= 1
                 if self.time_glitch_samples_until_event <= 0:
-                    self._start_time_glitch_event(rate_hz, depth)
+                    self._start_time_glitch_event(
+                        depth,
+                        interval_s,
+                        fragment_ms,
+                        lookback_s,
+                        repeats,
+                        reverse_chance,
+                        pingpong_chance,
+                    )
 
             if self.time_glitch_event_remaining <= 0 or self.time_glitch_grain.size == 0:
                 continue
@@ -492,16 +603,26 @@ class VoiceEffectsProcessor:
 
         return output.astype(np.float32, copy=False)
 
-    def _start_time_glitch_event(self, rate_hz: float, depth: float) -> None:
+    def _start_time_glitch_event(
+        self,
+        depth: float,
+        interval_s: float,
+        fragment_ms: float,
+        lookback_s: float,
+        repeats: int,
+        reverse_chance: float,
+        pingpong_chance: float,
+    ) -> None:
         jitter = float(self.noise_rng.uniform(0.65, 1.4))
-        self.time_glitch_samples_until_event = max(1, int((self.sample_rate / rate_hz) * jitter))
+        self.time_glitch_samples_until_event = max(1, int(self.sample_rate * interval_s * jitter))
 
         minimum_history = max(16, int(self.sample_rate * 0.045))
         if self.time_glitch_history_filled < minimum_history:
             return
 
-        grain_min = max(8, int(self.sample_rate * 0.018))
-        grain_max = max(grain_min, int(self.sample_rate * (0.04 + depth * 0.065)))
+        target_grain = self.sample_rate * fragment_ms / 1000.0
+        grain_min = max(8, int(target_grain * (0.72 - depth * 0.12)))
+        grain_max = max(grain_min, int(target_grain * (1.08 + depth * 0.42)))
         grain_size = int(self.noise_rng.integers(grain_min, grain_max + 1))
         available_lookback = self.time_glitch_history_filled - grain_size - 1
         if available_lookback <= 1:
@@ -510,7 +631,7 @@ class VoiceEffectsProcessor:
         lookback_min = min(available_lookback, max(1, int(self.sample_rate * 0.025)))
         lookback_max = min(
             available_lookback,
-            max(lookback_min, int(self.sample_rate * (0.10 + depth * 0.34))),
+            max(lookback_min, int(self.sample_rate * lookback_s)),
         )
         lookback = int(self.noise_rng.integers(lookback_min, lookback_max + 1))
         end = (self.time_glitch_history_pos - lookback) % self.time_glitch_history.size
@@ -522,20 +643,22 @@ class VoiceEffectsProcessor:
         if grain.size == 0:
             return
 
-        mode = int(self.noise_rng.integers(0, 4))
-        if mode == 1:
-            grain = grain[::-1].copy()
-        elif mode == 2:
+        mode_roll = float(self.noise_rng.random())
+        if mode_roll < pingpong_chance:
             grain = np.concatenate((grain, grain[::-1])).astype(np.float32, copy=False)
-        elif mode == 3:
+        elif mode_roll < pingpong_chance + reverse_chance:
+            grain = grain[::-1].copy()
+        elif mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
             slice_size = max(8, grain.size // 3)
             grain = np.tile(grain[:slice_size], 3)
 
-        repeats_max = max(2, 2 + int(round(depth * 4.0)))
-        repeats = int(self.noise_rng.integers(2, repeats_max + 1))
+        repeat_variation = max(0, int(round(depth * 2.0)))
+        actual_repeats = int(
+            self.noise_rng.integers(max(1, repeats - repeat_variation), min(16, repeats + repeat_variation) + 1)
+        )
         self.time_glitch_grain = grain.astype(np.float32, copy=False)
         self.time_glitch_grain_pos = 0
-        self.time_glitch_event_total = grain.size * repeats
+        self.time_glitch_event_total = grain.size * actual_repeats
         self.time_glitch_event_remaining = self.time_glitch_event_total
 
     def _band_limited(self, samples: np.ndarray) -> np.ndarray:
@@ -547,6 +670,46 @@ class VoiceEffectsProcessor:
         high_pass = samples - previous * np.float32(0.94)
         kernel = np.array([0.18, 0.24, 0.24, 0.2, 0.14], dtype=np.float32)
         return np.convolve(high_pass, kernel, mode="same").astype(np.float32, copy=False)
+
+    def _ambience(self, size: int, mode: str, volume: float) -> np.ndarray:
+        if size <= 0 or volume <= 0.0:
+            return np.zeros(max(0, size), dtype=np.float32)
+
+        indexes = self._ambience_sample_index + np.arange(size, dtype=np.float64)
+        time_s = indexes / max(1, self.sample_rate)
+        mode = str(mode or "space").strip().lower()
+
+        if mode == "infernal":
+            slow = 0.62 + 0.38 * np.sin(2.0 * math.pi * 0.17 * time_s)
+            ambience = (
+                0.72 * np.sin(2.0 * math.pi * 34.0 * time_s)
+                + 0.38 * np.sin(2.0 * math.pi * 51.0 * time_s)
+            ) * slow
+            noise = self.noise_rng.normal(0.0, 0.18, size)
+            ambience += np.convolve(noise, np.ones(24) / 24.0, mode="same")
+        elif mode == "haunted":
+            breath = self.noise_rng.normal(0.0, 0.42, size).astype(np.float32)
+            breath = self._band_limited(breath)
+            drift = 0.28 + 0.72 * ((np.sin(2.0 * math.pi * 0.11 * time_s) + 1.0) * 0.5)
+            ambience = breath * drift + 0.16 * np.sin(2.0 * math.pi * 91.0 * time_s)
+        elif mode == "digital":
+            gate = (np.sin(2.0 * math.pi * 7.0 * time_s) > 0.72).astype(np.float32)
+            carrier = np.sin(2.0 * math.pi * 780.0 * time_s) + 0.45 * np.sin(2.0 * math.pi * 1170.0 * time_s)
+            ticks = (self.noise_rng.random(size) < (12.0 / max(1, self.sample_rate))).astype(np.float32)
+            ambience = carrier * gate * 0.3 + ticks * self.noise_rng.uniform(-1.0, 1.0, size)
+        else:
+            orbit = 0.55 + 0.45 * np.sin(2.0 * math.pi * 0.09 * time_s)
+            ambience = (
+                0.62 * np.sin(2.0 * math.pi * 48.0 * time_s)
+                + 0.28 * np.sin(2.0 * math.pi * 73.0 * time_s)
+                + 0.12 * np.sin(2.0 * math.pi * 146.0 * time_s)
+            ) * orbit
+
+        self._ambience_sample_index += size
+        return (np.asarray(ambience, dtype=np.float32) * np.float32(volume * 0.16)).astype(
+            np.float32,
+            copy=False,
+        )
 
     def _harmony(self, x: np.ndarray, mode: str, mix: float) -> np.ndarray:
         mix = max(0.0, min(1.0, float(mix)))

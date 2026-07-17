@@ -25,6 +25,7 @@ export const effectDefaults = {
   tremolo_enabled: false, tremolo_rate_hz: 8,
   bitcrush_enabled: false, bitcrush_bits: 8,
   radio_enabled: false, radio_mix: 0.7,
+  radio_static_enabled: false, radio_static_mix: 0.12, radio_crackle_rate_hz: 7,
   megaphone_enabled: false, megaphone_drive: 4,
   telephone_enabled: false, telephone_mix: 0.8,
   reverb_enabled: false, reverb_mix: 0.28,
@@ -40,6 +41,10 @@ export const effectDefaults = {
   alien_glitch_enabled: false, alien_glitch_mix: 0.62,
   glitch_enabled: false, glitch_mix: 0.55, glitch_rate_hz: 18,
   time_glitch_enabled: false, time_glitch_mix: 0.72, time_glitch_rate_hz: 6, time_glitch_depth: 0.7,
+  time_glitch_interval_s: 0, time_glitch_fragment_ms: 55, time_glitch_lookback_s: 0.45,
+  time_glitch_repeats: 4, time_glitch_reverse_chance: 0.38, time_glitch_pingpong_chance: 0.28,
+  double_voice_enabled: false, double_voice_mix: 0.4, double_voice_delay_ms: 45, double_voice_pitch_semitones: -5,
+  ambience_enabled: false, ambience_mode: "space", ambience_volume: 0.12,
   harmony_enabled: false, harmony_mode: "Major", harmony_mix: 0.5,
   drum_loop_enabled: false, drum_loop_bpm: 90.0, drum_loop_volume: 0.3
 };
@@ -107,13 +112,15 @@ export function deviceName(items, idx) {
 }
 
 export function displayEffectValue(key, value) {
-  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold"))
+  const isNormalizedVolume = key.endsWith("_volume") && key !== "output_volume";
+  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || isNormalizedVolume)
     return Math.round(Number(value) * 100);
   return Math.round(Number(value));
 }
 
 export function storeEffectValue(key, value) {
-  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold"))
+  const isNormalizedVolume = key.endsWith("_volume") && key !== "output_volume";
+  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || isNormalizedVolume)
     return Number(value) / 100;
   return Number(value);
 }
@@ -354,6 +361,7 @@ export const effectGroups = [
       ["equalizer_enabled", "equalizer_tone", "Equalizador", "%", 0, 100],
       ["noise_gate_enabled", "noise_gate_threshold", "Noise Gate", "%", 0, 40],
       ["radio_enabled", "radio_mix", "Rádio antigo", "%", 0, 100],
+      ["radio_static_enabled", "radio_static_mix", "Estática de rádio", "%", 0, 100],
       ["telephone_enabled", "telephone_mix", "Telefone", "%", 0, 100]
     ]
   },
@@ -380,7 +388,14 @@ export const effectGroups = [
       ["wobble_enabled", "wobble_mix", "Vibrato estranho", "%", 0, 90],
       ["reverse_enabled", "reverse_mix", "Reverse estranho", "%", 0, 100],
       ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100],
-      ["glitch_enabled", "glitch_mix", "Glitch digital", "%", 0, 100]
+      ["glitch_enabled", "glitch_mix", "Glitch digital", "%", 0, 100],
+      ["time_glitch_enabled", "time_glitch_mix", "Glitch temporal", "%", 0, 100],
+      ["time_glitch_enabled", "time_glitch_fragment_ms", "Trecho temporal", "ms", 10, 500],
+      ["time_glitch_enabled", "time_glitch_repeats", "Repetições temporais", "x", 1, 16],
+      ["double_voice_enabled", "double_voice_mix", "Voz duplicada", "%", 0, 100],
+      ["double_voice_enabled", "double_voice_delay_ms", "Atraso da duplicação", "ms", 0, 250],
+      ["double_voice_enabled", "double_voice_pitch_semitones", "Tom da duplicação", "st", -24, 24],
+      ["ambience_enabled", "ambience_volume", "Ambiente procedural", "%", 0, 100]
     ]
   },
   {

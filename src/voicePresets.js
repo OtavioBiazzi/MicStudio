@@ -1,3 +1,15 @@
+const voiceParam = (key, label, min, max, step = 1, unit = "", group = "Identidade") => ({
+  target: "control", key, label, min, max, step, unit, group
+});
+
+const effectParam = (key, enableKey, label, min, max, step = 1, unit = "", group = "Efeito", scale = 1) => ({
+  target: "effect", key, enableKey, label, min, max, step, unit, group, scale
+});
+
+const percentParam = (key, enableKey, label, group = "Efeito") => (
+  effectParam(key, enableKey, label, 0, 100, 1, "%", group, 100)
+);
+
 export const voicePresets = [
   {
     id: "clean", label: "Sem efeito", description: "Voz limpa, ganho normal e efeitos desligados.",
@@ -197,9 +209,19 @@ export const voicePresets = [
     gain: 10.0, pitch: 1, effects: { megaphone_enabled: true, megaphone_drive: 9, distortion_enabled: true, distortion_drive: 12 }
   },
   {
-    id: "radio_militar", label: "Rádio Militar", description: "Walkie militar com alta saturação e clipping.",
+    id: "radio_militar", label: "Rádio de Combate", description: "Comunicação militar comprimida, estreita, com estática e estalos de transmissão.",
     emoji: "🪖", category: "Rádio", gradient: "linear-gradient(135deg, #27270a, #3f3f12)",
-    gain: 5.5, pitch: -2, effects: { radio_enabled: true, radio_mix: 0.95, telephone_enabled: true, telephone_mix: 0.85, distortion_enabled: true, distortion_drive: 4 }
+    tags: ["comunicação", "estática", "combate"],
+    gain: 4.2, pitch: -2,
+    effects: { radio_enabled: true, radio_mix: 0.92, telephone_enabled: true, telephone_mix: 0.78, distortion_enabled: true, distortion_drive: 3.2, compressor_enabled: true, compressor_amount: 0.72, radio_static_enabled: true, radio_static_mix: 0.2, radio_crackle_rate_hz: 9 },
+    controls: [
+      voiceParam("pitch", "Peso da voz", -8, 4, 1, "st", "Voz"),
+      percentParam("radio_mix", "radio_enabled", "Filtro do rádio", "Transmissão"),
+      percentParam("radio_static_mix", "radio_static_enabled", "Estática", "Transmissão"),
+      effectParam("radio_crackle_rate_hz", "radio_static_enabled", "Estalos", 0, 40, 1, "Hz", "Transmissão"),
+      effectParam("distortion_drive", "distortion_enabled", "Saturação", 1, 10, 0.5, "x", "Textura"),
+      percentParam("compressor_amount", "compressor_enabled", "Pressão", "Textura")
+    ]
   },
   {
     id: "interfone", label: "Interfone", description: "Interfone telefônico de condomínio antigo.",
@@ -234,14 +256,52 @@ export const voicePresets = [
   },
   // --- Monstros e Fantasia ---
   {
-    id: "demonio", label: "Demônio", description: "Grave de demônio com distorção e reverb.",
+    id: "demonio", label: "Demônio Profundo", description: "Entidade grave em duas camadas, com corpo distorcido e sala infernal.",
     emoji: "👹", category: "Monstros", gradient: "linear-gradient(135deg, #4a1a1a, #6a2a2a)",
-    gain: 4.0, pitch: -9, effects: { demon_enabled: true, demon_drive: 5.8, distortion_enabled: true, distortion_drive: 5, reverb_enabled: true, reverb_mix: 0.32 }
+    tags: ["dupla voz", "grave", "horror"],
+    gain: 3.6, pitch: -8,
+    effects: { demon_enabled: true, demon_drive: 5.2, distortion_enabled: true, distortion_drive: 3.8, reverb_enabled: true, reverb_mix: 0.28, double_voice_enabled: true, double_voice_mix: 0.58, double_voice_delay_ms: 52, double_voice_pitch_semitones: -9, ambience_enabled: true, ambience_mode: "infernal", ambience_volume: 0.12 },
+    controls: [
+      voiceParam("pitch", "Profundidade", -18, -2, 1, "st", "Entidade"),
+      effectParam("demon_drive", "demon_enabled", "Growl", 1, 12, 0.5, "x", "Entidade"),
+      percentParam("double_voice_mix", "double_voice_enabled", "Segunda voz", "Camadas"),
+      effectParam("double_voice_pitch_semitones", "double_voice_enabled", "Tom da entidade", -24, -2, 1, "st", "Camadas"),
+      effectParam("double_voice_delay_ms", "double_voice_enabled", "Atraso", 0, 160, 1, "ms", "Camadas"),
+      percentParam("reverb_mix", "reverb_enabled", "Sala infernal", "Espaço"),
+      percentParam("ambience_volume", "ambience_enabled", "Rumble infernal", "Ambiente")
+    ]
   },
   {
-    id: "ghost", label: "Fantasma", description: "Voz fria do além com eco reverso e reverb longo.",
+    id: "ghost", label: "Fantasma Espectral", description: "Sussurro frio com rastro instável, reversos curtos e presença distante.",
     emoji: "👻", category: "Monstros", gradient: "linear-gradient(135deg, #1e1b4b, #312e81)",
-    gain: 3.4, pitch: -2, effects: { ghost_enabled: true, ghost_mix: 0.52, reverse_enabled: true, reverse_mix: 0.24, reverb_enabled: true, reverb_mix: 0.35 }
+    tags: ["sussurro", "rastro", "reverso"],
+    gain: 3.0, pitch: -2,
+    effects: { ghost_enabled: true, ghost_mix: 0.56, reverse_enabled: true, reverse_mix: 0.3, reverb_enabled: true, reverb_mix: 0.42, whisper_enabled: true, whisper_mix: 0.24, wobble_enabled: true, wobble_mix: 0.18, ambience_enabled: true, ambience_mode: "haunted", ambience_volume: 0.1 },
+    controls: [
+      voiceParam("pitch", "Temperatura", -10, 6, 1, "st", "Presença"),
+      percentParam("ghost_mix", "ghost_enabled", "Rastro espectral", "Presença"),
+      percentParam("whisper_mix", "whisper_enabled", "Sussurro", "Presença"),
+      percentParam("reverse_mix", "reverse_enabled", "Fragmentos reversos", "Movimento"),
+      percentParam("wobble_mix", "wobble_enabled", "Flutuação", "Movimento"),
+      percentParam("reverb_mix", "reverb_enabled", "Distância", "Espaço"),
+      percentParam("ambience_volume", "ambience_enabled", "Ar assombrado", "Ambiente")
+    ]
+  },
+  {
+    id: "possessed", label: "Possuído", description: "Duas presenças disputam a mesma voz, com atraso nervoso e pitch instável.",
+    emoji: "⛧", category: "Monstros", gradient: "linear-gradient(135deg, #160b20, #6b1026)",
+    tags: ["dupla presença", "instável", "horror"],
+    gain: 3.3, pitch: -4,
+    effects: { double_voice_enabled: true, double_voice_mix: 0.7, double_voice_delay_ms: 78, double_voice_pitch_semitones: 7, demon_enabled: true, demon_drive: 2.8, whisper_enabled: true, whisper_mix: 0.25, wobble_enabled: true, wobble_mix: 0.32, reverb_enabled: true, reverb_mix: 0.34 },
+    controls: [
+      voiceParam("pitch", "Voz hospedeira", -14, 8, 1, "st", "Possessão"),
+      percentParam("double_voice_mix", "double_voice_enabled", "Entidade interna", "Possessão"),
+      effectParam("double_voice_pitch_semitones", "double_voice_enabled", "Tom da entidade", -18, 18, 1, "st", "Possessão"),
+      effectParam("double_voice_delay_ms", "double_voice_enabled", "Separação", 0, 220, 1, "ms", "Possessão"),
+      percentParam("wobble_mix", "wobble_enabled", "Instabilidade", "Movimento"),
+      percentParam("whisper_mix", "whisper_enabled", "Sussurros", "Textura"),
+      percentParam("reverb_mix", "reverb_enabled", "Ambiente", "Espaço")
+    ]
   },
   {
     id: "dragao", label: "Dragão Ancestral", description: "Grave e rugido extremo com saturação forte.",
@@ -254,9 +314,66 @@ export const voicePresets = [
     gain: 3.8, pitch: -6, effects: { demon_enabled: true, demon_drive: 4.0, distortion_enabled: true, distortion_drive: 10, compressor_enabled: true, compressor_amount: 0.6 }
   },
   {
-    id: "alien", label: "Alienígena", description: "Modulação espacial glitch, ideal para ficção científica.",
+    id: "alien", label: "Alien Orbital", description: "Transmissão extraterrestre com modulação orbital, reversos e instabilidade biológica.",
     emoji: "👽", category: "Monstros", gradient: "linear-gradient(135deg, #064e3b, #047857)",
-    gain: 3.0, pitch: 5, effects: { alien_enabled: true, alien_rate_hz: 104, alien_glitch_enabled: true, alien_glitch_mix: 0.76, reverse_enabled: true, reverse_mix: 0.42 }
+    tags: ["orbital", "modulação", "sci-fi"],
+    gain: 2.9, pitch: 4,
+    effects: { alien_enabled: true, alien_rate_hz: 112, alien_glitch_enabled: true, alien_glitch_mix: 0.55, reverse_enabled: true, reverse_mix: 0.28, flanger_enabled: true, flanger_mix: 0.24, delay_enabled: true, delay_mix: 0.2, ambience_enabled: true, ambience_mode: "space", ambience_volume: 0.11 },
+    controls: [
+      voiceParam("pitch", "Biologia", -8, 14, 1, "st", "Identidade"),
+      effectParam("alien_rate_hz", "alien_enabled", "Frequência orbital", 20, 280, 1, "Hz", "Modulação"),
+      percentParam("alien_glitch_mix", "alien_glitch_enabled", "Instabilidade", "Modulação"),
+      percentParam("reverse_mix", "reverse_enabled", "Linguagem reversa", "Modulação"),
+      percentParam("flanger_mix", "flanger_enabled", "Movimento espacial", "Espaço"),
+      percentParam("delay_mix", "delay_enabled", "Eco da nave", "Espaço"),
+      percentParam("ambience_volume", "ambience_enabled", "Motor da nave", "Ambiente")
+    ]
+  },
+  {
+    id: "giant_archetype", label: "Arquétipo Colossal", description: "Voz enorme em camadas, com peito profundo e presença cinematográfica.",
+    emoji: "◼", category: "Jogos e Streaming", gradient: "linear-gradient(135deg, #080b12, #26344a)",
+    tags: ["colossal", "cinema", "subvoz"],
+    gain: 3.0, pitch: -7,
+    effects: { double_voice_enabled: true, double_voice_mix: 0.46, double_voice_delay_ms: 34, double_voice_pitch_semitones: -12, compressor_enabled: true, compressor_amount: 0.8, equalizer_enabled: true, equalizer_tone: 0.18, reverb_enabled: true, reverb_mix: 0.2 },
+    controls: [
+      voiceParam("pitch", "Tamanho", -20, 0, 1, "st", "Corpo"),
+      percentParam("double_voice_mix", "double_voice_enabled", "Subvoz", "Corpo"),
+      effectParam("double_voice_pitch_semitones", "double_voice_enabled", "Profundidade da subvoz", -24, -2, 1, "st", "Corpo"),
+      effectParam("double_voice_delay_ms", "double_voice_enabled", "Separação", 0, 100, 1, "ms", "Corpo"),
+      percentParam("equalizer_tone", "equalizer_enabled", "Peso", "Timbre"),
+      percentParam("compressor_amount", "compressor_enabled", "Impacto", "Timbre"),
+      percentParam("reverb_mix", "reverb_enabled", "Escala da sala", "Espaço")
+    ]
+  },
+  {
+    id: "anime_spark", label: "Anime Spark", description: "Voz ágil, brilhante e expressiva para personagens e transmissões leves.",
+    emoji: "✦", category: "Anime", gradient: "linear-gradient(135deg, #db2777, #7c3aed)",
+    tags: ["brilhante", "expressiva", "anime"],
+    gain: 2.4, pitch: 6,
+    effects: { equalizer_enabled: true, equalizer_tone: 0.82, chorus_enabled: true, chorus_mix: 0.16, compressor_enabled: true, compressor_amount: 0.48, whisper_enabled: true, whisper_mix: 0.08, wobble_enabled: true, wobble_mix: 0.1 },
+    controls: [
+      voiceParam("pitch", "Altura", 1, 16, 1, "st", "Personagem"),
+      percentParam("equalizer_tone", "equalizer_enabled", "Brilho", "Personagem"),
+      percentParam("whisper_mix", "whisper_enabled", "Sopro", "Expressão"),
+      percentParam("wobble_mix", "wobble_enabled", "Vibrato", "Expressão"),
+      percentParam("chorus_mix", "chorus_enabled", "Largura", "Polimento"),
+      percentParam("compressor_amount", "compressor_enabled", "Consistência", "Polimento")
+    ]
+  },
+  {
+    id: "mic_troll", label: "Mic Troll", description: "Microfone propositalmente estourado, comprimido e quebrado para momentos caóticos.",
+    emoji: "!", category: "Humor", gradient: "linear-gradient(135deg, #7f1d1d, #f59e0b)",
+    tags: ["estourado", "meme", "caos"],
+    gain: 5.0, pitch: -1,
+    effects: { distortion_enabled: true, distortion_drive: 12, compressor_enabled: true, compressor_amount: 0.92, bitcrush_enabled: true, bitcrush_bits: 6, radio_enabled: true, radio_mix: 0.28, glitch_enabled: true, glitch_mix: 0.14, glitch_rate_hz: 11 },
+    controls: [
+      voiceParam("pitch", "Peso", -10, 8, 1, "st", "Microfone"),
+      effectParam("distortion_drive", "distortion_enabled", "Estouro", 1, 30, 1, "x", "Microfone"),
+      percentParam("compressor_amount", "compressor_enabled", "Esmagamento", "Microfone"),
+      effectParam("bitcrush_bits", "bitcrush_enabled", "Qualidade", 3, 12, 1, "bits", "Defeito"),
+      percentParam("radio_mix", "radio_enabled", "Microfone ruim", "Defeito"),
+      percentParam("glitch_mix", "glitch_enabled", "Falhas", "Defeito")
+    ]
   },
   {
     id: "criatura_sombria", label: "Criatura Sombria", description: "Sussurro fantasmagórico misturado com grave demoníaco.",
@@ -296,14 +413,37 @@ export const voicePresets = [
   },
   // --- Efeitos Exclusivos Cyber/Glitch ---
   {
-    id: "voz_glitch", label: "Glitch Cibernético", description: "Modulação de glitch estourada com bitcrush cibernético.",
+    id: "voz_glitch", label: "Robô Quebrado", description: "Android danificado com buffer falhando, metal digital e cortes agressivos.",
     emoji: "📟", category: "Exclusivos", gradient: "linear-gradient(135deg, #1f2937, #dc2626)",
-    gain: 3.5, pitch: 2, effects: { glitch_enabled: true, glitch_mix: 0.88, glitch_rate_hz: 24, alien_glitch_enabled: true, alien_glitch_mix: 0.62, wobble_enabled: true, wobble_mix: 0.45, bitcrush_enabled: true, bitcrush_bits: 4 }
+    tags: ["android", "buffer", "danificado"],
+    gain: 3.1, pitch: 1,
+    effects: { glitch_enabled: true, glitch_mix: 0.72, glitch_rate_hz: 26, alien_glitch_enabled: true, alien_glitch_mix: 0.42, wobble_enabled: true, wobble_mix: 0.28, bitcrush_enabled: true, bitcrush_bits: 5, robot_enabled: true, robot_rate_hz: 74 },
+    controls: [
+      voiceParam("pitch", "Modelo da unidade", -8, 10, 1, "st", "Android"),
+      effectParam("robot_rate_hz", "robot_enabled", "Metal", 10, 180, 1, "Hz", "Android"),
+      percentParam("glitch_mix", "glitch_enabled", "Falha digital", "Defeito"),
+      effectParam("glitch_rate_hz", "glitch_enabled", "Falhas por segundo", 4, 60, 1, "Hz", "Defeito"),
+      effectParam("bitcrush_bits", "bitcrush_enabled", "Resolução", 3, 12, 1, "bits", "Defeito"),
+      percentParam("alien_glitch_mix", "alien_glitch_enabled", "Buffer corrompido", "Defeito")
+    ]
   },
   {
     id: "glitched_temporal", label: "Glitched Temporal", description: "Microtrechos da voz voltam, repetem e alternam entre frente e reverso em tempo real.",
     emoji: "⏪", category: "Exclusivos", gradient: "linear-gradient(135deg, #111827, #be123c)",
-    gain: 2.8, pitch: 0, effects: { time_glitch_enabled: true, time_glitch_mix: 0.86, time_glitch_rate_hz: 7.5, time_glitch_depth: 0.82, glitch_enabled: true, glitch_mix: 0.22, glitch_rate_hz: 14, bitcrush_enabled: true, bitcrush_bits: 7 }
+    tags: ["rewind", "ping-pong", "granular"],
+    gain: 2.8, pitch: 0,
+    effects: { time_glitch_enabled: true, time_glitch_mix: 0.86, time_glitch_rate_hz: 7.5, time_glitch_depth: 0.82, time_glitch_interval_s: 0.18, time_glitch_fragment_ms: 62, time_glitch_lookback_s: 0.65, time_glitch_repeats: 5, time_glitch_reverse_chance: 0.4, time_glitch_pingpong_chance: 0.34, glitch_enabled: true, glitch_mix: 0.18, glitch_rate_hz: 14, bitcrush_enabled: true, bitcrush_bits: 7, ambience_enabled: true, ambience_mode: "digital", ambience_volume: 0.08 },
+    controls: [
+      percentParam("time_glitch_mix", "time_glitch_enabled", "Mix temporal", "Tempo"),
+      effectParam("time_glitch_interval_s", "time_glitch_enabled", "Intervalo", 0.05, 5, 0.05, "s", "Tempo"),
+      effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Tamanho do trecho", 10, 500, 5, "ms", "Fragmento"),
+      effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Fragmento"),
+      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições", 1, 16, 1, "x", "Fragmento"),
+      percentParam("time_glitch_reverse_chance", "time_glitch_enabled", "Chance de reverso", "Comportamento"),
+      percentParam("time_glitch_pingpong_chance", "time_glitch_enabled", "Chance de ida e volta", "Comportamento"),
+      percentParam("time_glitch_depth", "time_glitch_enabled", "Caos", "Comportamento"),
+      percentParam("ambience_volume", "ambience_enabled", "Corrupção digital", "Ambiente")
+    ]
   },
   {
     id: "voz_holografica", label: "Holograma Sci-Fi", description: "Chorus/Flanger misturado com sussurro do além.",

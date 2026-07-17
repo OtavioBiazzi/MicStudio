@@ -13,6 +13,7 @@ let ttsWidgetWindow;
 let tray;
 let backend;
 let quitting = false;
+let sessionEndRestoreStarted = false;
 let shortcutTimer;
 let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
@@ -200,6 +201,20 @@ async function stopBackend() {
     backend.kill();
     backend = null;
   }
+}
+
+async function restoreMicrophoneBeforeSessionEnd() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1400);
+    await fetch(`${API}/api/microphone/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: controller.signal
+    }).catch(() => {});
+    clearTimeout(timeoutId);
+  } catch (_) {}
 }
 
 
@@ -431,6 +446,19 @@ function createWindow() {
       event.preventDefault();
       askCloseChoice();
     }
+  });
+  mainWindow.on("query-session-end", (event) => {
+    if (sessionEndRestoreStarted) return;
+    event.preventDefault();
+    sessionEndRestoreStarted = true;
+    restoreMicrophoneBeforeSessionEnd().finally(async () => {
+      quitting = true;
+      await stopBackend();
+      app.quit();
+    });
+  });
+  mainWindow.on("session-end", () => {
+    restoreMicrophoneBeforeSessionEnd();
   });
 }
 

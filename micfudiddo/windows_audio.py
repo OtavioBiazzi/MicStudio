@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import ctypes
+import time
 from ctypes import POINTER, byref
 from ctypes.wintypes import DWORD, LPWSTR
 
@@ -185,17 +186,27 @@ def set_default_capture_id(device_id: str) -> None:
             policy.SetDefaultEndpoint(device_id, role)
 
 
-def restore_default_capture_ids(defaults: dict[int, str]) -> None:
+def restore_default_capture_ids(defaults: dict[int, str], attempts: int = 3) -> bool:
     if not defaults:
-        return
-    with com_initialized():
-        policy = comtypes.CoCreateInstance(CLSID_PolicyConfigClient, interface=IPolicyConfig)
-        for role, device_id in defaults.items():
-            if device_id:
-                try:
-                    policy.SetDefaultEndpoint(device_id, role)
-                except Exception:
-                    pass
+        return True
+    expected = {int(role): device_id for role, device_id in defaults.items() if device_id}
+    for attempt in range(max(1, attempts)):
+        try:
+            with com_initialized():
+                policy = comtypes.CoCreateInstance(CLSID_PolicyConfigClient, interface=IPolicyConfig)
+                for role, device_id in expected.items():
+                    try:
+                        policy.SetDefaultEndpoint(device_id, role)
+                    except Exception:
+                        pass
+            current = get_default_capture_ids()
+        except Exception:
+            current = {}
+        if all(current.get(role) == device_id for role, device_id in expected.items()):
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(0.05)
+    return False
 
 
 def find_capture_endpoint(*needles: str) -> WindowsAudioEndpoint | None:

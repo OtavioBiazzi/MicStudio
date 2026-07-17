@@ -272,6 +272,8 @@ export function VozesPage({
             updateControls={updateControls}
             updateEffects={updateEffects}
             onApplyPreset={() => applyVoicePreset(panelVoice)}
+            onRestorePreset={() => applyVoicePreset(panelVoice, { resetSaved: true })}
+            call={call}
             isFavorite={favorites.includes(panelVoice.id)}
             onToggleFavorite={() => toggleFavorite(panelVoice.id)}
             onClose={() => setSelectedVoice(null)}
@@ -488,7 +490,7 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
 }
 
 // --- VoiceSidePanel ---
-export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, isFavorite, onToggleFavorite, onClose, setToast }) {
+export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, onRestorePreset, call, isFavorite, onToggleFavorite, onClose, setToast }) {
   const [showMore, setShowMore] = useState(false);
   const image = getVoiceImage(voice.id);
   const controls = state.controls;
@@ -597,11 +599,18 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                       );
                     }
                     if (item.type === "hotkey") {
+                      const shortcutValue = controls.effects?.[item.key]
+                        || state.settings?.shortcutCommandGlitch
+                        || voice.effects?.[item.key]
+                        || "";
                       return (
                         <PanelField key={`${item.target}-${item.key}`} label={item.label}>
                           <HotkeyCaptureButton
-                            value={controls.effects?.[item.key] ?? voice.effects?.[item.key] ?? ""}
-                            onChange={(value) => updateEffects({ [item.key]: value, [item.enableKey]: true })}
+                            value={shortcutValue}
+                            onChange={(value) => {
+                              updateEffects({ [item.key]: value, [item.enableKey]: true });
+                              call?.("/api/settings", { shortcutCommandGlitch: value });
+                            }}
                           />
                         </PanelField>
                       );
@@ -615,6 +624,7 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                         max={item.max}
                         step={item.step || 1}
                         unit={item.unit || ""}
+                        curve={item.curve}
                         onChange={(value) => updateParameter(item, value)}
                       />
                     );
@@ -709,7 +719,7 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
 
         <div className="panelActions" style={{ flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", gap: 8, width: "100%" }}>
-            <button onClick={onApplyPreset} style={{ flex: 1 }}>
+            <button onClick={onRestorePreset || onApplyPreset} style={{ flex: 1 }}>
               <ArrowClockwise size={14} /> Restaurar
             </button>
             <button className="primary" onClick={onApplyPreset} style={{ flex: 1 }}>
@@ -765,14 +775,34 @@ function PanelField({ label, children }) {
 }
 
 // --- PanelSlider ---
-export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit = "", onChange }) {
+export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit = "", curve, onChange }) {
   const safeValue = Math.max(min, Math.min(max, Number(value) || 0));
   const decimals = String(step).includes(".") ? String(step).split(".")[1].length : 0;
   const formatted = decimals ? safeValue.toFixed(decimals) : Math.round(safeValue);
+  const logarithmic = curve === "log" && min > 0 && max > min;
+  const sliderValue = logarithmic
+    ? Math.log(safeValue / min) / Math.log(max / min) * 1000
+    : safeValue;
+  const handleChange = (event) => {
+    const raw = Number(event.target.value);
+    if (!logarithmic) {
+      onChange(raw);
+      return;
+    }
+    const mapped = min * Math.pow(max / min, raw / 1000);
+    onChange(Math.max(min, Math.min(max, Math.round(mapped / step) * step)));
+  };
   return (
     <div className="panelSlider">
       <span className="sliderLabel">{label}</span>
-      <input type="range" min={min} max={max} step={step} value={safeValue} onChange={(e) => onChange(Number(e.target.value))} />
+      <input
+        type="range"
+        min={logarithmic ? 0 : min}
+        max={logarithmic ? 1000 : max}
+        step={logarithmic ? 1 : step}
+        value={sliderValue}
+        onChange={handleChange}
+      />
       <span className="sliderValue">{formatted}{unit}</span>
     </div>
   );

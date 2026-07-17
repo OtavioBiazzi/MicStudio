@@ -287,7 +287,9 @@ DEFAULT_APP_SETTINGS = {
     "shortcutRecordVoice": "",
     "shortcutRecordPC": "",
     "shortcutRecordCombo": "",
+    "shortcutCommandGlitch": "Ctrl+Alt+G",
     "defaultMicOnClose": "restore",
+    "voiceEditPersistence": "save",
     "confirmClose": True,
     "closeBehavior": "ask",
     "onlinePlaybackRoute": "both",
@@ -841,11 +843,12 @@ class AppState:
                 import json
                 raw = json.loads(self.saved_capture_defaults_path.read_text(encoding="utf-8"))
                 self.saved_capture_defaults = {int(k): v for k, v in raw.items()}
-                if self.saved_capture_defaults:
-                    restore_default_capture_ids(self.saved_capture_defaults)
+                if self.saved_capture_defaults and restore_default_capture_ids(self.saved_capture_defaults):
                     self.saved_capture_defaults_path.unlink(missing_ok=True)
                     self.saved_capture_defaults = {}
                     print("Microfone padrao restaurado apos encerramento inesperado.", flush=True)
+                elif self.saved_capture_defaults:
+                    print("Restauracao pendente: mantendo os dados de seguranca do microfone.", flush=True)
             except Exception as e:
                 print("Erro ao recuperar microfone padrao temporario:", e)
         self.virtual_mode_active = False
@@ -1024,6 +1027,7 @@ class AppState:
 
     def update_settings(self, patch: dict) -> None:
         patch = dict(patch or {})
+        previous_time_glitch_hotkey = self.time_glitch_hotkey_signature()
         if "sampleRate" in patch and "audioSampleRate" not in patch:
             patch["audioSampleRate"] = patch["sampleRate"]
         if "bufferSize" in patch and "audioBufferSize" not in patch:
@@ -1046,6 +1050,8 @@ class AppState:
                     self.settings[key] = str(patch[key])
         self.save_app_settings()
         self.clipping_manager.update()
+        if self.time_glitch_hotkey_signature() != previous_time_glitch_hotkey:
+            self.refresh_time_glitch_hotkey()
         if audio_changed and was_running:
             if was_virtual:
                 self.activate_virtual()
@@ -1524,7 +1530,7 @@ class AppState:
             bool(self.effects.time_glitch_enabled),
             str(self.effects.time_glitch_trigger_mode or ""),
             str(self.effects.time_glitch_shortcut_mode or ""),
-            str(self.effects.time_glitch_shortcut or ""),
+            str(self.settings.get("shortcutCommandGlitch") or self.effects.time_glitch_shortcut or ""),
         )
 
     def refresh_time_glitch_hotkey(self) -> None:
@@ -1551,7 +1557,7 @@ class AppState:
             return
 
         hotkey = (
-            str(effects.time_glitch_shortcut or "")
+            str(self.settings.get("shortcutCommandGlitch") or effects.time_glitch_shortcut or "")
             .strip()
             .lower()
             .replace("control", "ctrl")
@@ -1651,39 +1657,49 @@ class AppState:
                 self.virtual_mode_active = True
             self.start()
         except Exception:
-            restore_default_capture_ids(self.saved_capture_defaults)
+            restored = restore_default_capture_ids(self.saved_capture_defaults)
+            if restored:
+                self.saved_capture_defaults = {}
+                if self.saved_capture_defaults_path.exists():
+                    try:
+                        self.saved_capture_defaults_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            self.virtual_mode_active = False
+            raise
+
+    def deactivate_virtual(self) -> None:
+        self.stop()
+        self.restore_microphone_safety()
+        self.virtual_mode_active = False
+
+    def restore_microphone_safety(self) -> bool:
+        restore_mic = bool(self.settings.get("restoreOnDisable", True))
+        default_mic = str(self.settings.get("defaultMicOnClose", "restore"))
+        restored = not restore_mic or default_mic == "keep"
+        if restore_mic:
+            if default_mic == "restore" or default_mic == "choose":
+                restored = restore_default_capture_ids(self.saved_capture_defaults)
+            elif default_mic == "keep":
+                restored = True
+            else:
+                try:
+                    from .windows_audio import set_default_capture_id
+                    set_default_capture_id(default_mic)
+                    restored = True
+                except Exception as e:
+                    print("Erro ao restaurar o microfone selecionado no encerramento:", e)
+                    restored = restore_default_capture_ids(self.saved_capture_defaults)
+        if restored:
             self.saved_capture_defaults = {}
             if self.saved_capture_defaults_path.exists():
                 try:
                     self.saved_capture_defaults_path.unlink(missing_ok=True)
                 except Exception:
                     pass
-            self.virtual_mode_active = False
-            raise
-
-    def deactivate_virtual(self) -> None:
-        self.stop()
-        restore_mic = bool(self.settings.get("restoreOnDisable", True))
-        default_mic = str(self.settings.get("defaultMicOnClose", "restore"))
-        if restore_mic:
-            if default_mic == "restore" or default_mic == "choose":
-                restore_default_capture_ids(self.saved_capture_defaults)
-            elif default_mic == "keep":
-                pass
-            else:
-                try:
-                    from .windows_audio import set_default_capture_id
-                    set_default_capture_id(default_mic)
-                except Exception as e:
-                    print("Erro ao restaurar o microfone selecionado no encerramento:", e)
-                    restore_default_capture_ids(self.saved_capture_defaults)
-        self.saved_capture_defaults = {}
-        if self.saved_capture_defaults_path.exists():
-            try:
-                self.saved_capture_defaults_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-        self.virtual_mode_active = False
+        else:
+            print("Falha ao confirmar restauracao; arquivo de seguranca preservado.", flush=True)
+        return restored
 
     def reset_defaults(self) -> None:
         if self.pc_recorder.running:
@@ -3486,9 +3502,12 @@ class Handler(BaseHTTPRequestHandler):
             return STATE.snapshot()
 
         if path == "/api/shutdown":
-            STATE.deactivate_virtual()
+            STATE.restore_microphone_safety()
+            STATE.stop()
             threading.Thread(target=self.server.shutdown, daemon=True).start()
             return {"ok": True}
+        if path == "/api/microphone/restore":
+            return {"ok": STATE.restore_microphone_safety()}
         raise RuntimeError("Endpoint desconhecido.")
 
     def _read_json(self) -> dict:

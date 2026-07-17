@@ -189,6 +189,10 @@ export function VoiceLabPage({
         { key: "compressor_amount", label: "Compressor / Limiter", icon: SlidersHorizontal, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "compressor_enabled" },
         { key: "wobble_mix", label: "Vibrato Wobble", icon: Sparkle, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "wobble_enabled" },
         { key: "reverse_mix", label: "Reverse", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "reverse_enabled" },
+        { key: "reverse_window_ms", label: "Janela do Reverse", icon: ArrowCounterClockwise, min: 120, max: 1500, step: 10, suffix: "ms", directValue: true, isControl: false, enableKey: "reverse_enabled" },
+        { key: "reverse_speed", label: "Velocidade do Reverse", icon: ArrowCounterClockwise, min: 0.5, max: 2, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "reverse_enabled" },
+        { key: "reverse_pitch_semitones", label: "Pitch do Reverse", icon: WaveSine, min: -24, max: 24, step: 1, suffix: "st", directValue: true, isControl: false, enableKey: "reverse_enabled" },
+        { key: "reverse_gain", label: "Ganho do Reverse", icon: SpeakerHigh, min: 0, max: 3, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "reverse_enabled" },
         { key: "alien_glitch_mix", label: "Glitch Alien", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "alien_glitch_enabled" },
         { key: "glitch_mix", label: "Glitch Digital", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "glitch_enabled" },
         { key: "glitch_rate_hz", label: "Velocidade Glitch", icon: Circuitry, min: 4, max: 60, step: 1, suffix: "Hz", isControl: false, enableKey: "glitch_enabled" },
@@ -198,7 +202,9 @@ export function VoiceLabPage({
         { key: "time_glitch_interval_s", label: "Intervalo entre Travadas", icon: Circuitry, min: 0, max: 5, step: 0.05, suffix: "s", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_fragment_ms", label: "Trecho Capturado", icon: WaveSine, min: 10, max: 1500, step: 10, suffix: "ms", directValue: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_lookback_s", label: "Voltar no Tempo", icon: ArrowCounterClockwise, min: 0.02, max: 2, step: 0.02, suffix: "s", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
-        { key: "time_glitch_repeats", label: "Repetições do Trecho", icon: ArrowCounterClockwise, min: 1, max: 10000, step: 1, suffix: "x", directValue: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_repeats", label: "Repetições do Trecho", icon: ArrowCounterClockwise, min: 1, max: 10000, step: 1, suffix: "x", directValue: true, logScale: true, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_speed", label: "Velocidade da Repetição", icon: Circuitry, min: 0.25, max: 4, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
+        { key: "time_glitch_pitch_semitones", label: "Pitch da Repetição", icon: WaveSine, min: -24, max: 24, step: 1, suffix: "st", directValue: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_repeat_volume", label: "Volume da Repetição", icon: SpeakerHigh, min: 0, max: 3, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_voice_duck", label: "Abaixar Voz Normal", icon: Microphone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
         { key: "time_glitch_reverse_chance", label: "Chance de Reverso", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "time_glitch_enabled" },
@@ -300,8 +306,11 @@ export function VoiceLabPage({
                     <label>
                       <span>Atalho global</span>
                       <HotkeyCaptureButton
-                        value={state.controls.effects.time_glitch_shortcut || ""}
-                        onChange={(value) => updateEffects({ time_glitch_shortcut: value })}
+                        value={state.controls.effects.time_glitch_shortcut || state.settings?.shortcutCommandGlitch || ""}
+                        onChange={(value) => {
+                          updateEffects({ time_glitch_shortcut: value });
+                          call("/api/settings", { shortcutCommandGlitch: value });
+                        }}
                       />
                     </label>
                   </>
@@ -320,7 +329,9 @@ export function VoiceLabPage({
                     const maxVal = item.max;
                     let sliderPct;
                     if (item.directValue) {
-                      sliderPct = Math.max(item.min, Math.min(item.max, Number(raw)));
+                      sliderPct = item.logScale
+                        ? Math.log(Math.max(item.min, Number(raw)) / item.min) / Math.log(item.max / item.min) * 1000
+                        : Math.max(item.min, Math.min(item.max, Number(raw)));
                     } else if (item.key === "pitch") {
                       sliderPct = Math.round(((Number(raw) + 24) / 48) * 1000);
                     } else if (item.key === "robot_rate_hz") {
@@ -337,7 +348,9 @@ export function VoiceLabPage({
                       const pct = Number(e.target.value);
                       let val;
                       if (item.directValue) {
-                        val = pct;
+                        val = item.logScale
+                          ? Math.round(item.min * Math.pow(item.max / item.min, pct / 1000))
+                          : pct;
                       } else if (item.key === "pitch") {
                         val = (pct / 1000) * 48 - 24;
                       } else if (item.key === "robot_rate_hz") {
@@ -389,9 +402,9 @@ export function VoiceLabPage({
                           <div className="voice-lab-effect-slider">
                             <input
                               type="range"
-                              min={item.directValue ? item.min : 0}
-                              max={item.directValue ? item.max : 1000}
-                              step={item.directValue ? item.step : 5}
+                              min={item.directValue && !item.logScale ? item.min : 0}
+                              max={item.directValue && !item.logScale ? item.max : 1000}
+                              step={item.directValue && !item.logScale ? item.step : 1}
                               value={sliderPct}
                               onChange={handleSliderChange}
                               disabled={!enabled && !isControl}

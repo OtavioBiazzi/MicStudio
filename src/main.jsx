@@ -476,7 +476,7 @@ function App() {
     [state, selectedSound]
   );
 
-  const updateControls = (patch) => {
+  const updateControls = (patch, { persistVoiceId = forcedPresetId } = {}) => {
     const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
     const controls = { ...currentControls, ...patch };
     controlsOptimisticRef.current = { controls, until: Date.now() + 1200 };
@@ -491,12 +491,28 @@ function App() {
     }
 
     // Salvar configurações de Voz Personalizada se ativo
-    if (forcedPresetId === "personalizado") {
+    if (persistVoiceId === "personalizado") {
       localStorage.setItem("personalizado_settings", JSON.stringify({
         gain: controls.gain,
         pitch: controls.pitch,
         effects: controls.effects
       }));
+    } else if (
+      persistVoiceId &&
+      persistVoiceId !== "clean" &&
+      stateRef.current?.settings?.voiceEditPersistence !== "reset"
+    ) {
+      try {
+        const savedVoiceEdits = JSON.parse(localStorage.getItem("micfudiddo.voiceEdits") || "{}");
+        savedVoiceEdits[persistVoiceId] = {
+          gain: controls.gain,
+          pitch: controls.pitch,
+          effects: controls.effects
+        };
+        localStorage.setItem("micfudiddo.voiceEdits", JSON.stringify(savedVoiceEdits));
+      } catch {
+        // Storage failures must not interrupt real-time audio controls.
+      }
     }
 
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -521,7 +537,7 @@ function App() {
     updateControls({ effects: { ...(currentControls.effects || {}), ...patch } });
   };
 
-  const applyVoicePreset = (voice) => {
+  const applyVoicePreset = (voice, { resetSaved = false } = {}) => {
     if (!state || !voice) return;
     const currentControls = latestControlsRef.current || stateRef.current?.controls || state.controls;
     setForcedPresetId(voice.id);
@@ -553,9 +569,28 @@ function App() {
       }
     } else {
       targetControls = controlsForPreset(currentControls, voice);
+      if (voice.id !== "clean") {
+        try {
+          const savedVoiceEdits = JSON.parse(localStorage.getItem("micfudiddo.voiceEdits") || "{}");
+          if (resetSaved) {
+            delete savedVoiceEdits[voice.id];
+            localStorage.setItem("micfudiddo.voiceEdits", JSON.stringify(savedVoiceEdits));
+          } else if (stateRef.current?.settings?.voiceEditPersistence !== "reset" && savedVoiceEdits[voice.id]) {
+            const saved = savedVoiceEdits[voice.id];
+            targetControls = {
+              ...targetControls,
+              gain: saved.gain ?? targetControls.gain,
+              pitch: saved.pitch ?? targetControls.pitch,
+              effects: { ...targetControls.effects, ...(saved.effects || {}) }
+            };
+          }
+        } catch {
+          // Fall back to the original preset if saved edits are invalid.
+        }
+      }
     }
 
-    updateControls(targetControls);
+    updateControls(targetControls, { persistVoiceId: voice.id });
   };
 
   const toggleFavorite = (voiceId) => {
@@ -572,19 +607,12 @@ function App() {
     const all = [...voicePresets, ...customVoices];
     if (forcedPresetId) {
       const forced = all.find(p => p.id === forcedPresetId);
-      if (forced) {
-        if (forced.id === "personalizado" || customVoices.some(cv => cv.id === forced.id)) {
-          return forced;
-        }
-        if (isVoicePresetActive(state?.controls, forced)) {
-          return forced;
-        }
-      }
+      if (forced) return forced;
     }
     const matched = all.find((p) => p.id !== "personalizado" && isVoicePresetActive(state?.controls, p));
     if (matched) return matched;
     
-    return all.find(p => p.id === "personalizado") || null;
+    return null;
   }, [state?.controls, customVoices, forcedPresetId]);
 
   function toggleBypass() {

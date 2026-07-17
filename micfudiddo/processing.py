@@ -110,6 +110,10 @@ class EffectsSettings:
     wobble_mix: float = 0.35
     reverse_enabled: bool = False
     reverse_mix: float = 0.65
+    reverse_window_ms: float = 480.0
+    reverse_speed: float = 1.0
+    reverse_pitch_semitones: float = 0.0
+    reverse_gain: float = 1.0
     alien_glitch_enabled: bool = False
     alien_glitch_mix: float = 0.62
     glitch_enabled: bool = False
@@ -130,6 +134,8 @@ class EffectsSettings:
     time_glitch_shortcut: str = ""
     time_glitch_repeat_volume: float = 1.0
     time_glitch_voice_duck: float = 1.0
+    time_glitch_speed: float = 1.0
+    time_glitch_pitch_semitones: float = 0.0
     double_voice_enabled: bool = False
     double_voice_mix: float = 0.4
     double_voice_delay_ms: float = 45.0
@@ -162,6 +168,11 @@ class VoiceEffectsProcessor:
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
         self._time_glitch_trigger = threading.Event()
         self._time_glitch_hold = threading.Event()
+        self._time_glitch_pitch_shifter = DualDelayPitchShifter(self.sample_rate)
+        self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
+        self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
+        self.reverse_window_samples = 0
+        self._reverse_pitch_shifter = DualDelayPitchShifter(self.sample_rate)
         self.echo_feedback = 0.28
         self.echo_delay_samples = max(1, int(self.sample_rate * 0.135))
         self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
@@ -194,6 +205,11 @@ class VoiceEffectsProcessor:
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
         self._time_glitch_trigger.clear()
         self._time_glitch_hold.clear()
+        self._time_glitch_pitch_shifter.reset()
+        self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
+        self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
+        self.reverse_window_samples = 0
+        self._reverse_pitch_shifter.reset()
         self.double_voice_buffer.fill(0.0)
         self.double_voice_pos = 0
         self._double_voice_shifter.reset()
@@ -283,7 +299,14 @@ class VoiceEffectsProcessor:
             y = self._wobble(y, _finite_clamped(settings.wobble_mix, 0.0, 1.0, 0.35))
 
         if settings.reverse_enabled:
-            y = self._reverse_fragments(y, _finite_clamped(settings.reverse_mix, 0.0, 1.0, 0.65))
+            y = self._reverse_fragments(
+                y,
+                _finite_clamped(settings.reverse_mix, 0.0, 1.0, 0.65),
+                _finite_clamped(settings.reverse_window_ms, 120.0, 1500.0, 480.0),
+                _finite_clamped(settings.reverse_speed, 0.5, 2.0, 1.0),
+                _finite_clamped(settings.reverse_pitch_semitones, -24.0, 24.0, 0.0),
+                _finite_clamped(settings.reverse_gain, 0.0, 3.0, 1.0),
+            )
 
         if settings.alien_glitch_enabled:
             y = self._alien_glitch(y, _finite_clamped(settings.alien_glitch_mix, 0.0, 1.0, 0.62))
@@ -312,6 +335,8 @@ class VoiceEffectsProcessor:
                 str(settings.time_glitch_trigger_mode or "automatic"),
                 _finite_clamped(settings.time_glitch_repeat_volume, 0.0, 3.0, 1.0),
                 _finite_clamped(settings.time_glitch_voice_duck, 0.0, 1.0, 1.0),
+                _finite_clamped(settings.time_glitch_speed, 0.25, 4.0, 1.0),
+                _finite_clamped(settings.time_glitch_pitch_semitones, -24.0, 24.0, 0.0),
             )
 
         if settings.ambience_enabled:
@@ -517,28 +542,57 @@ class VoiceEffectsProcessor:
         wet = (samples * wobble.astype(np.float32)).astype(np.float32, copy=False)
         return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
-    def _reverse_fragments(self, samples: np.ndarray, mix: float) -> np.ndarray:
+    def _reverse_fragments(
+        self,
+        samples: np.ndarray,
+        mix: float,
+        window_ms: float = 480.0,
+        speed: float = 1.0,
+        pitch_semitones: float = 0.0,
+        gain: float = 1.0,
+    ) -> np.ndarray:
         if samples.size < 4 or mix <= 0.0:
             return samples.copy()
 
-        grain = max(8, min(samples.size, int(self.sample_rate * 0.014)))
-        reversed_block = np.empty_like(samples)
-        fade_len = min(grain // 3, max(2, samples.size // 8))
+        window_samples = max(64, int(self.sample_rate * window_ms / 1000.0))
+        if window_samples != self.reverse_window_samples:
+            self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
+            self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
+            self.reverse_window_samples = window_samples
 
-        for start in range(0, samples.size, grain):
-            chunk = samples[start : start + grain]
-            flipped = chunk[::-1]
-            if flipped.size >= fade_len * 2:
-                fade = np.linspace(0.35, 1.0, fade_len, dtype=np.float32)
-                flipped = flipped.copy()
-                flipped[:fade_len] *= fade
-                flipped[-fade_len:] *= fade[::-1]
-            reversed_block[start : start + flipped.size] = flipped
+        self.reverse_input_buffer = np.concatenate((self.reverse_input_buffer, samples))
+        while self.reverse_input_buffer.size >= window_samples:
+            chunk = self.reverse_input_buffer[:window_samples].copy()
+            self.reverse_input_buffer = self.reverse_input_buffer[window_samples:]
+            reversed_chunk = chunk[::-1].copy()
 
-        smeared = np.roll(self._bitcrush(reversed_block, 8), grain // 2)
-        smeared = self._band_limited(smeared)
-        safe_mix = min(0.58, mix)
-        return ((samples * (1.0 - safe_mix)) + (smeared * safe_mix)).astype(np.float32, copy=False)
+            if abs(speed - 1.0) > 0.001:
+                positions = (np.arange(window_samples, dtype=np.float64) * speed) % window_samples
+                reversed_chunk = np.interp(
+                    positions,
+                    np.arange(window_samples, dtype=np.float64),
+                    reversed_chunk,
+                ).astype(np.float32)
+
+            if abs(pitch_semitones) > 0.01:
+                self._reverse_pitch_shifter.reset()
+                self._reverse_pitch_shifter.set_pitch_semitones(pitch_semitones)
+                reversed_chunk = self._reverse_pitch_shifter.process(reversed_chunk)
+
+            fade_len = min(max(8, int(self.sample_rate * 0.012)), window_samples // 8)
+            envelope = np.ones(window_samples, dtype=np.float32)
+            fade = np.linspace(0.18, 1.0, fade_len, dtype=np.float32)
+            envelope[:fade_len] = fade
+            envelope[-fade_len:] = fade[::-1]
+            reversed_chunk *= envelope * np.float32(gain)
+            self.reverse_output_buffer = np.concatenate((self.reverse_output_buffer, reversed_chunk))
+
+        if self.reverse_output_buffer.size < samples.size:
+            return samples.copy()
+
+        wet = self.reverse_output_buffer[:samples.size].copy()
+        self.reverse_output_buffer = self.reverse_output_buffer[samples.size:]
+        return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
     def _alien_glitch(self, samples: np.ndarray, mix: float) -> np.ndarray:
         if samples.size < 4 or mix <= 0.0:
@@ -592,6 +646,8 @@ class VoiceEffectsProcessor:
         trigger_mode: str,
         repeat_volume: float,
         voice_duck: float,
+        speed: float,
+        pitch_semitones: float,
     ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
         if samples.size == 0 or mix <= 0.0:
@@ -619,6 +675,8 @@ class VoiceEffectsProcessor:
                     repeats,
                     reverse_chance,
                     pingpong_chance,
+                    speed,
+                    pitch_semitones,
                 )
             elif self.time_glitch_event_remaining <= 0 and not shortcut_mode:
                 self.time_glitch_samples_until_event -= 1
@@ -631,6 +689,8 @@ class VoiceEffectsProcessor:
                         repeats,
                         reverse_chance,
                         pingpong_chance,
+                        speed,
+                        pitch_semitones,
                     )
 
             if self.time_glitch_event_remaining <= 0 or self.time_glitch_grain.size == 0:
@@ -658,6 +718,8 @@ class VoiceEffectsProcessor:
         repeats: int,
         reverse_chance: float,
         pingpong_chance: float,
+        speed: float = 1.0,
+        pitch_semitones: float = 0.0,
     ) -> None:
         jitter = float(self.noise_rng.uniform(0.65, 1.4))
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * interval_s * jitter))
@@ -697,6 +759,19 @@ class VoiceEffectsProcessor:
         elif mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
             slice_size = max(8, grain.size // 3)
             grain = np.tile(grain[:slice_size], 3)
+
+        if abs(speed - 1.0) > 0.001:
+            positions = (np.arange(grain.size, dtype=np.float64) * speed) % grain.size
+            grain = np.interp(
+                positions,
+                np.arange(grain.size, dtype=np.float64),
+                grain,
+            ).astype(np.float32)
+
+        if abs(pitch_semitones) > 0.01:
+            self._time_glitch_pitch_shifter.reset()
+            self._time_glitch_pitch_shifter.set_pitch_semitones(pitch_semitones)
+            grain = self._time_glitch_pitch_shifter.process(grain)
 
         repeat_variation = max(0, int(round(depth * 2.0)))
         actual_repeats = int(

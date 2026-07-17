@@ -170,6 +170,7 @@ export function ConfigPage({
           shortcutRecordVoice: "",
           shortcutRecordPC: "",
           shortcutRecordCombo: "",
+          shortcutCommandGlitch: "Ctrl+Alt+G",
           shortcutClip: "",
           shortcutFocusTtsWidget: ""
         });
@@ -746,6 +747,18 @@ export function ConfigPage({
                     onClear={() => call("/api/settings", { shortcutToggleVoiceChanger: "" })}
                   />
                   <HotkeyInput
+                    label="Disparar Glitch Sob Comando"
+                    value={state.settings?.shortcutCommandGlitch}
+                    onChange={(val) => {
+                      call("/api/settings", { shortcutCommandGlitch: val });
+                      updateEffects({ time_glitch_shortcut: val });
+                    }}
+                    onClear={() => {
+                      call("/api/settings", { shortcutCommandGlitch: "" });
+                      updateEffects({ time_glitch_shortcut: "" });
+                    }}
+                  />
+                  <HotkeyInput
                     label="Gravar Voz (Iniciar/Parar)"
                     value={state.settings?.shortcutRecordVoice}
                     onChange={(val) => call("/api/settings", { shortcutRecordVoice: val })}
@@ -967,6 +980,13 @@ export function ConfigPage({
                     description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo"
                     checked={state.settings?.autoStartVirtual}
                     onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
+                  />
+
+                  <ToggleSetting
+                    label="Salvar modificações de cada voz"
+                    description="Mantém seus ajustes quando você sai e volta para uma voz. Desative para sempre reabrir o preset original."
+                    checked={state.settings?.voiceEditPersistence !== "reset"}
+                    onChange={(v) => call("/api/settings", { voiceEditPersistence: v ? "save" : "reset" })}
                   />
 
                   <ToggleSetting

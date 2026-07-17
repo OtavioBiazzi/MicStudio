@@ -18,6 +18,11 @@ const hotkeyEffectParam = (key, enableKey, label, group = "Efeito") => ({
   target: "effect", key, enableKey, label, group, type: "hotkey"
 });
 
+const logarithmicEffectParam = (key, enableKey, label, min, max, step = 1, unit = "", group = "Efeito") => ({
+  ...effectParam(key, enableKey, label, min, max, step, unit, group),
+  curve: "log"
+});
+
 export const voicePresets = [
   {
     id: "clean", label: "Sem efeito", description: "Voz limpa, ganho normal e efeitos desligados.",
@@ -446,7 +451,7 @@ export const voicePresets = [
       effectParam("time_glitch_interval_s", "time_glitch_enabled", "Intervalo", 0.05, 5, 0.05, "s", "Tempo"),
       effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Tamanho do trecho", 10, 1500, 10, "ms", "Fragmento"),
       effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Fragmento"),
-      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições", 1, 10000, 1, "x", "Fragmento"),
+      logarithmicEffectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições", 1, 10000, 1, "x", "Fragmento"),
       percentParam("time_glitch_reverse_chance", "time_glitch_enabled", "Chance de reverso", "Comportamento"),
       percentParam("time_glitch_pingpong_chance", "time_glitch_enabled", "Chance de ida e volta", "Comportamento"),
       percentParam("time_glitch_depth", "time_glitch_enabled", "Caos", "Comportamento"),
@@ -469,9 +474,11 @@ export const voicePresets = [
       time_glitch_pingpong_chance: 0,
       time_glitch_trigger_mode: "shortcut",
       time_glitch_shortcut_mode: "press",
-      time_glitch_shortcut: "Ctrl+Alt+G",
+      time_glitch_shortcut: "",
       time_glitch_repeat_volume: 1.15,
-      time_glitch_voice_duck: 1
+      time_glitch_voice_duck: 1,
+      time_glitch_speed: 1,
+      time_glitch_pitch_semitones: 0
     },
     controls: [
       hotkeyEffectParam("time_glitch_shortcut", "time_glitch_enabled", "Atalho global", "Disparo"),
@@ -479,11 +486,15 @@ export const voicePresets = [
         { value: "press", label: "Disparar quantidade" },
         { value: "hold", label: "Repetir enquanto segura" }
       ], "Disparo"),
-      effectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições ao disparar", 1, 10000, 1, "x", "Repetição"),
+      logarithmicEffectParam("time_glitch_repeats", "time_glitch_enabled", "Repetições ao disparar", 1, 10000, 1, "x", "Repetição"),
+      effectParam("time_glitch_speed", "time_glitch_enabled", "Velocidade", 0.25, 4, 0.05, "x", "Repetição"),
+      effectParam("time_glitch_pitch_semitones", "time_glitch_enabled", "Pitch da repetição", -24, 24, 1, "st", "Repetição"),
       effectParam("time_glitch_fragment_ms", "time_glitch_enabled", "Trecho capturado", 40, 1500, 10, "ms", "Repetição"),
       effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Repetição"),
       effectParam("time_glitch_repeat_volume", "time_glitch_enabled", "Volume da repetição", 0, 3, 0.05, "x", "Mix"),
-      percentParam("time_glitch_voice_duck", "time_glitch_enabled", "Abaixar voz normal", "Mix")
+      percentParam("time_glitch_voice_duck", "time_glitch_enabled", "Abaixar voz normal", "Mix"),
+      percentParam("time_glitch_reverse_chance", "time_glitch_enabled", "Chance de tocar ao contrário", "Comportamento"),
+      percentParam("time_glitch_pingpong_chance", "time_glitch_enabled", "Chance de ida e volta", "Comportamento")
     ]
   },
   {
@@ -494,7 +505,15 @@ export const voicePresets = [
   {
     id: "voz_dimensao_paralela", label: "Dimensão Paralela", description: "Voz invertida com reverb longo e ecos fantasmagóricos.",
     emoji: "🌀", category: "Exclusivos", gradient: "linear-gradient(135deg, #312e81, #1e1b4b)",
-    gain: 3.0, pitch: -3, effects: { reverse_enabled: true, reverse_mix: 0.55, ghost_enabled: true, ghost_mix: 0.45, reverb_enabled: true, reverb_mix: 0.5 }
+    gain: 2.2, pitch: 0,
+    effects: { reverse_enabled: true, reverse_mix: 0.9, reverse_window_ms: 650, reverse_speed: 1, reverse_pitch_semitones: 0, reverse_gain: 1, ghost_enabled: true, ghost_mix: 0.22, reverb_enabled: true, reverb_mix: 0.28 },
+    controls: [
+      percentParam("reverse_mix", "reverse_enabled", "Voz ao contrário", "Reverso"),
+      effectParam("reverse_window_ms", "reverse_enabled", "Janela de captura", 120, 1500, 10, "ms", "Reverso"),
+      effectParam("reverse_speed", "reverse_enabled", "Velocidade", 0.5, 2, 0.05, "x", "Reverso"),
+      effectParam("reverse_pitch_semitones", "reverse_enabled", "Pitch", -24, 24, 1, "st", "Reverso"),
+      effectParam("reverse_gain", "reverse_enabled", "Ganho", 0, 3, 0.05, "x", "Reverso")
+    ]
   },
   {
     id: "voz_sonho", label: "Voz de Sonho", description: "Reverb enorme com delay modulado para ambiente etéreo.",

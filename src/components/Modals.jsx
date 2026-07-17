@@ -1451,6 +1451,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.0": `### Versão 1.3.0
+* Repetições de 1 a 10.000 agora usam controle logarítmico preciso, sem campo numérico separado.
+* Glitch Sob Comando ganhou velocidade, pitch, volume, redução da voz normal, reverso e ping-pong configuráveis.
+* Reverse reconstruído com buffer de fala real, janela, velocidade, pitch e ganho próprios.
+* Ajustes são salvos por voz por padrão; é possível restaurar uma voz ou desativar a persistência nas configurações.
+* O atalho do Glitch Sob Comando também pode ser configurado em Atalhos Globais.
+* Proteção reforçada para restaurar o microfone original ao fechar, reiniciar ou desligar o Windows.
+* Histórico interno completado para releases que ainda não tinham notas no aplicativo.`,
+
   "v1.2.1": `### Versão 1.2.1
 * Corrige o botão inferior Voz Normal para desligar todos os efeitos sem sobreposição.
 * Controles rápidos agora usam sempre o estado mais recente, evitando efeitos antigos reaparecendo.
@@ -1482,6 +1491,17 @@ const LOCAL_CHANGELOGS = {
   "v1.0.3": `### Versão 1.0.3
 * Criação direta e persistente de abas vazias no Soundboard.
 * Novo efeito Glitched Temporal com repetição, rewind e reversão de microtrechos.`,
+
+  "v1.0.2": `### Versão 1.0.2
+* A escolha das abas de destino passou a aparecer somente durante importações.
+* Importações do YouTube e TikTok ganharam fluxo de destino mais claro.
+* Adicionar ao Soundboard passou a permitir escolher em quais abas o áudio será salvo.`,
+
+  "v1.0.1": `### Versão 1.0.1
+* Restauração do microfone padrão reforçada ao fechar ou interromper a rota virtual.
+* Soundboard ganhou múltiplas abas por áudio e destinos configuráveis de importação.
+* Importador passou a identificar YouTube e TikTok com mensagens e validações próprias.
+* Categorias e metadados de sons ficaram mais resistentes a dados antigos ou incompletos.`,
 
   "v1.0": `### Versao 1.0
 * TTS sem limite agora processa textos longos de verdade: o backend divide blocos gigantes em partes menores, gera cada trecho e junta tudo antes de tocar ou salvar.
@@ -1726,6 +1746,16 @@ const LOCAL_CHANGELOGS = {
 
 const FALLBACK_RELEASES = [
   {
+    id: "v1.3.0",
+    tag_name: "v1.3.0",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.3.0"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.3.0.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.3.0/MicFudiddo-Studio-Setup-1.3.0.exe"
+    }]
+  },
+  {
     id: "v1.2.1",
     tag_name: "v1.2.1",
     published_at: new Date().toISOString(),
@@ -1785,8 +1815,8 @@ const FALLBACK_RELEASES = [
       browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.0.3/MicFudiddo.Studio.Setup.1.0.3.exe"
     }]
   },
-  { id: "v1.0.2", tag_name: "v1.0.2", published_at: "2026-07-06T18:42:11Z", body: "" },
-  { id: "v1.0.1", tag_name: "v1.0.1", published_at: "2026-07-06T18:28:05Z", body: "" },
+  { id: "v1.0.2", tag_name: "v1.0.2", published_at: "2026-07-06T18:42:11Z", body: LOCAL_CHANGELOGS["v1.0.2"] },
+  { id: "v1.0.1", tag_name: "v1.0.1", published_at: "2026-07-06T18:28:05Z", body: LOCAL_CHANGELOGS["v1.0.1"] },
   { id: "v1.0", tag_name: "v1.0", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.47", tag_name: "v0.5.47", published_at: new Date().toISOString(), body: "" },
   { id: "v0.5.46", tag_name: "v0.5.46", published_at: new Date().toISOString(), body: "" },

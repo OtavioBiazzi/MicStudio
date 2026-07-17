@@ -64,6 +64,23 @@ class ProcessingTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(out)))
         self.assertFalse(np.allclose(out, samples))
 
+    def test_reverse_buffers_a_phrase_before_playing_it_backwards(self):
+        processor = VoiceEffectsProcessor(1000)
+        settings = EffectsSettings(
+            reverse_enabled=True,
+            reverse_mix=1.0,
+            reverse_window_ms=120,
+        )
+        phrase = np.linspace(-0.8, 0.8, 120, dtype=np.float32)
+        first = processor.process(phrase[:40], settings)
+        second = processor.process(phrase[40:80], settings)
+        reversed_start = processor.process(phrase[80:], settings)
+
+        self.assertTrue(np.allclose(first, phrase[:40]))
+        self.assertTrue(np.allclose(second, phrase[40:80]))
+        self.assertLess(float(np.mean(np.diff(reversed_start[14:]))), 0.0)
+        self.assertTrue(np.all(np.isfinite(reversed_start)))
+
     def test_glitch_effect_outputs_finite_changed_waveform(self):
         samples = np.sin(np.linspace(0.0, 12.0 * np.pi, 512, dtype=np.float32)) * 0.3
         processor = VoiceEffectsProcessor(48000)
@@ -142,6 +159,30 @@ class ProcessingTests(unittest.TestCase):
             processor.time_glitch_event_total,
             processor.time_glitch_grain.size * 10000,
         )
+
+    def test_command_glitch_applies_independent_speed_and_pitch(self):
+        processors = [VoiceEffectsProcessor(8000), VoiceEffectsProcessor(8000)]
+        for processor in processors:
+            processor.noise_rng = np.random.default_rng(42)
+            processor.time_glitch_history[:] = np.sin(
+                np.linspace(0.0, 60.0 * np.pi, processor.time_glitch_history.size)
+            ).astype(np.float32)
+            processor.time_glitch_history_filled = processor.time_glitch_history.size
+            processor._start_time_glitch_event(
+                depth=0.0,
+                interval_s=0.1,
+                fragment_ms=250,
+                lookback_s=0.5,
+                repeats=3,
+                reverse_chance=0.0,
+                pingpong_chance=0.0,
+                speed=1.0 if processor is processors[0] else 1.8,
+                pitch_semitones=0.0 if processor is processors[0] else 5.0,
+            )
+
+        self.assertEqual(processors[0].time_glitch_grain.shape, processors[1].time_glitch_grain.shape)
+        self.assertFalse(np.allclose(processors[0].time_glitch_grain, processors[1].time_glitch_grain))
+        self.assertTrue(np.all(np.isfinite(processors[1].time_glitch_grain)))
 
     def test_command_glitch_stays_clean_until_triggered(self):
         sample_rate = 8000

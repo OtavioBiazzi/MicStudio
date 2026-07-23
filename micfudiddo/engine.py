@@ -221,6 +221,8 @@ class AudioEngine:
         self._playback_lock = threading.Lock()
         self._recording = False
         self._recorded_chunks: list[np.ndarray] = []
+        self._recorded_frames = 0
+        self._recording_limit_frames = 10 * 60 * 48000
         self._recording_lock = threading.Lock()
 
     @property
@@ -306,7 +308,7 @@ class AudioEngine:
         if block.size == 0:
             return ""
         playback = _Playback(
-            block.copy(),
+            block if block.flags.c_contiguous else np.ascontiguousarray(block),
             sound_id=str(sound_id),
             name=str(name),
             block_voice=bool(block_voice),
@@ -321,6 +323,8 @@ class AudioEngine:
         with self._playback_lock:
             if replace:
                 self._playbacks.clear()
+            elif len(self._playbacks) >= 16:
+                self._playbacks = self._playbacks[-15:]
             self._playbacks.append(playback)
         return playback.playback_id
 
@@ -448,6 +452,8 @@ class AudioEngine:
     def start_recording(self) -> None:
         with self._recording_lock:
             self._recorded_chunks = []
+            self._recorded_frames = 0
+            self._recording_limit_frames = 10 * 60 * max(8000, int(self._sample_rate))
             self._recording = True
 
     def stop_recording(self, output_path: str) -> int:
@@ -460,6 +466,7 @@ class AudioEngine:
             self._recording = False
             chunks = self._recorded_chunks
             self._recorded_chunks = []
+            self._recorded_frames = 0
 
         if chunks:
             audio = np.concatenate(chunks).astype(np.float32, copy=False)
@@ -864,7 +871,15 @@ class AudioEngine:
             if self._recording:
                 with self._recording_lock:
                     if self._recording:
-                        self._recorded_chunks.append(processed.copy())
+                        remaining = self._recording_limit_frames - self._recorded_frames
+                        if remaining > 0:
+                            captured = processed[:remaining].copy()
+                            self._recorded_chunks.append(captured)
+                            self._recorded_frames += int(captured.size)
+                        elif "10 minutos" not in self._last_callback_status:
+                            self._last_callback_status = (
+                                "Gravacao atingiu o limite de seguranca de 10 minutos."
+                            )
             clipping_mgr = getattr(self, "_clipping_manager", None)
             if clipping_mgr:
                 clipping_mgr.write_voice(

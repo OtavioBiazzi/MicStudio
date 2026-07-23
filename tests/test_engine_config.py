@@ -1,7 +1,9 @@
 import unittest
 
+import numpy as np
+
 from micfudiddo.devices import AudioDevice, sample_rate_candidates
-from micfudiddo.engine import block_size_candidates, input_channel_count
+from micfudiddo.engine import AudioEngine, block_size_candidates, input_channel_count
 
 
 def device(inputs=1, samplerate=48000):
@@ -30,6 +32,13 @@ class EngineConfigTests(unittest.TestCase):
     def test_input_channels_are_clamped_to_device_capacity(self):
         self.assertEqual(input_channel_count(device(inputs=1), 2), 1)
         self.assertEqual(input_channel_count(device(inputs=2), 2), 2)
+
+    def test_overlapping_playbacks_are_bounded(self):
+        engine = AudioEngine()
+        samples = np.ones(32, dtype=np.float32)
+        for index in range(30):
+            engine.play_sound(samples, sound_id=str(index), replace=False)
+        self.assertEqual(len(engine.player_states()), 16)
 
 
 if __name__ == "__main__":

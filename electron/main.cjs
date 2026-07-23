@@ -2,9 +2,6 @@ const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray, 
 const path = require("path");
 const { spawn } = require("child_process");
 
-// Desativar aceleração de hardware para evitar telas cinzas e travamentos de GPU na reprodução de mídia
-app.disableHardwareAcceleration();
-
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
 const isDev = !app.isPackaged;
@@ -17,8 +14,8 @@ let sessionEndRestoreStarted = false;
 let shortcutTimer;
 let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
-let STATE_BACKEND_RUNNING_EXTERNALLY = false;
 let shortcutConflicts = new Map();
+let rendererRecoveryAttempts = 0;
 
 function getIconPath() {
   if (isDev) {
@@ -108,6 +105,15 @@ async function waitForBackendHealth(port, timeoutMs = 30000) {
   return false;
 }
 
+async function waitForPortRelease(port, timeoutMs = 5000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!(await checkPortOccupied(port))) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
 function readLogExcerpt(logFile) {
   const fs = require("fs");
   try {
@@ -127,9 +133,21 @@ async function startBackend() {
   if (occupied) {
     const healthy = await pingHealth(port);
     if (healthy) {
-      console.log("Backend já está rodando e saudável na porta " + port + ". Reutilizando...");
-      STATE_BACKEND_RUNNING_EXTERNALLY = true;
-      return;
+      console.log("Backend órfão detectado. Encerrando antes de iniciar uma instância própria...");
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1800);
+        await fetch(`${API}/api/shutdown`, { method: "POST", signal: controller.signal }).catch(() => {});
+        clearTimeout(timeoutId);
+      } catch (_) {}
+      if (!(await waitForPortRelease(port))) {
+        dialog.showErrorBox(
+          "Backend Preso",
+          "Uma instância antiga do servidor de áudio não respondeu ao encerramento. Finalize MicFudiddoBackend.exe no Gerenciador de Tarefas e abra o app novamente."
+        );
+        app.quit();
+        throw new Error("Backend antigo permaneceu preso na porta 38717.");
+      }
     } else {
       dialog.showErrorBox(
         "Conflito de Porta",
@@ -147,15 +165,20 @@ async function startBackend() {
     fs.mkdirSync(logDir, { recursive: true });
   }
   const logFile = path.join(logDir, "backend.log");
-  const logStream = fs.createWriteStream(logFile, { flags: "w" });
+  if (fs.existsSync(logFile) && fs.statSync(logFile).size > 2 * 1024 * 1024) {
+    fs.renameSync(logFile, path.join(logDir, "backend.previous.log"));
+  }
+  const logStream = fs.createWriteStream(logFile, { flags: "a" });
+  logStream.write(`\n--- sessão ${new Date().toISOString()} ---\n`);
+  const backendArgs = ["--port", "38717", "--parent-pid", String(process.pid)];
 
   if (isDev) {
-    backend = spawn(pythonPath(), ["-m", "micfudiddo.backend", "--port", "38717"], {
+    backend = spawn(pythonPath(), ["-m", "micfudiddo.backend", ...backendArgs], {
       cwd: ROOT,
       windowsHide: true
     });
   } else {
-    backend = spawn(path.join(process.resourcesPath, "backend", "MicFudiddoBackend.exe"), ["--port", "38717"], {
+    backend = spawn(path.join(process.resourcesPath, "backend", "MicFudiddoBackend.exe"), backendArgs, {
       windowsHide: true
     });
   }
@@ -167,7 +190,7 @@ async function startBackend() {
       console.error("Erro ao iniciar o backend:", err);
     });
     backend.on("exit", (code) => {
-      if (code !== 0 && !quitting && !STATE_BACKEND_RUNNING_EXTERNALLY) {
+      if (code !== 0 && !quitting) {
         const logExcerpt = readLogExcerpt(logFile);
         
         dialog.showErrorBox(
@@ -191,15 +214,26 @@ async function startBackend() {
 }
 async function stopBackend() {
   stopSoundHotkeys();
+  const child = backend;
+  backend = null;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 800);
+    const timeoutId = setTimeout(() => controller.abort(), 2200);
     await fetch(`${API}/api/shutdown`, { method: "POST", signal: controller.signal }).catch(() => {});
     clearTimeout(timeoutId);
   } catch (_) {}
-  if (backend) {
-    backend.kill();
-    backend = null;
+  if (child && child.exitCode === null) {
+    await Promise.race([
+      new Promise((resolve) => child.once("exit", resolve)),
+      sleep(1800)
+    ]);
+  }
+  if (child && child.exitCode === null) {
+    await new Promise((resolve) => {
+      const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+      killer.once("exit", resolve);
+      killer.once("error", resolve);
+    });
   }
 }
 
@@ -220,7 +254,7 @@ async function restoreMicrophoneBeforeSessionEnd() {
 
 async function refreshSoundHotkeys() {
   try {
-    const res = await fetch(`${API}/api/state`);
+    const res = await fetch(`${API}/api/hotkeys`);
     if (!res.ok) return;
     const data = await res.json();
     
@@ -335,7 +369,7 @@ async function refreshSoundHotkeys() {
 
 function startSoundHotkeys() {
   stopSoundHotkeys();
-  shortcutTimer = setInterval(refreshSoundHotkeys, 2500);
+  shortcutTimer = setInterval(refreshSoundHotkeys, 10000);
   refreshSoundHotkeys();
 }
 
@@ -433,6 +467,25 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
     console.log(`[RENDERER CONSOLE] ${message} (${sourceId}:${line})`);
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    if (quitting || !mainWindow || mainWindow.isDestroyed()) return;
+    console.error("Renderer encerrado inesperadamente:", details);
+    if (rendererRecoveryAttempts < 2) {
+      rendererRecoveryAttempts += 1;
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+      }, 800);
+    } else {
+      dialog.showErrorBox(
+        "Interface Reiniciada",
+        "A interface falhou repetidamente. O servidor de áudio será encerrado para proteger o computador."
+      );
+      quitAppFully();
+    }
+  });
+  mainWindow.webContents.on("did-finish-load", () => {
+    setTimeout(() => { rendererRecoveryAttempts = 0; }, 30000);
   });
 
 
@@ -841,6 +894,12 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   startSoundHotkeys();
+}).catch((error) => {
+  console.error("Falha fatal durante a inicializacao:", error);
+  if (!quitting) {
+    quitting = true;
+    app.quit();
+  }
 });
 
 app.on("second-instance", () => {

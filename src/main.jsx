@@ -471,6 +471,18 @@ function App() {
     applyIncomingState(await res.json());
   };
 
+  const refreshRuntime = async () => {
+    const res = await fetch(`${API}/api/runtime`);
+    if (!res.ok) throw new Error("Backend indisponível");
+    const data = await res.json();
+    const currentRevision = stateRef.current?.libraryRevision;
+    if (currentRevision != null && data.libraryRevision !== currentRevision) {
+      await refresh();
+      return;
+    }
+    applyIncomingState(data);
+  };
+
   const selected = useMemo(
     () => state?.sounds?.find((s) => s.id === selectedSound) || state?.sounds?.[0],
     [state, selectedSound]
@@ -673,13 +685,22 @@ function App() {
 
   useEffect(() => {
     let active = true;
+    let refreshTimer = null;
     
     const runRefresh = async () => {
       try {
-        await refresh();
+        if (stateRef.current) {
+          await refreshRuntime();
+        } else {
+          await refresh();
+        }
         if (active) setBootError(null);
       } catch (err) {
         // Ignore connection errors during polling
+      } finally {
+        if (active) {
+          refreshTimer = setTimeout(runRefresh, document.hidden ? 5000 : 1200);
+        }
       }
     };
 
@@ -691,12 +712,10 @@ function App() {
       }
     }, 20000);
 
-    const intervalId = setInterval(runRefresh, 700);
-    
     return () => {
       active = false;
       clearTimeout(timeoutId);
-      clearInterval(intervalId);
+      if (refreshTimer) clearTimeout(refreshTimer);
       if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     };
   }, []);
@@ -1312,7 +1331,7 @@ function TTSWidget() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API}/api/state`);
+        const res = await fetch(`${API}/api/hotkeys`);
         const json = await res.json();
         if (json && json.settings) {
           setShowSpeed(json.settings.showTtsWidgetSpeed !== false);
@@ -1332,7 +1351,7 @@ function TTSWidget() {
       setAppTheme(currentTheme);
     };
     fetchSettings();
-    const interval = setInterval(fetchSettings, 300);
+    const interval = setInterval(fetchSettings, 2000);
     return () => clearInterval(interval);
   }, []);
 

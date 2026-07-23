@@ -1451,6 +1451,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.1": `### Versão 1.3.1
+* Reduz drasticamente o uso de CPU, memória e rede interna com atualizações leves e sem requisições sobrepostas.
+* Capas do Soundboard agora são carregadas sob demanda, em vez de serem reenviadas dentro de cada atualização.
+* Cache, reprodução simultânea, renderização e gravações ganharam limites de segurança para proteger o computador.
+* O backend agora acompanha o processo correto do aplicativo e sempre encerra junto com ele.
+* Instâncias antigas são encerradas antes da abertura e o aplicativo não reutiliza mais backends órfãos.
+* A interface tenta se recuperar de uma falha isolada e encerra o áudio após falhas repetidas.
+* Logs do backend são preservados e rotacionados para facilitar o diagnóstico de novos problemas.`,
+
   "v1.3.0": `### Versão 1.3.0
 * Repetições de 1 a 10.000 agora usam controle logarítmico preciso, sem campo numérico separado.
 * Glitch Sob Comando ganhou velocidade, pitch, volume, redução da voz normal, reverso e ping-pong configuráveis.
@@ -1745,6 +1754,16 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.3.1",
+    tag_name: "v1.3.1",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.3.1"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.3.1.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.3.1/MicFudiddo-Studio-Setup-1.3.1.exe"
+    }]
+  },
   {
     id: "v1.3.0",
     tag_name: "v1.3.0",

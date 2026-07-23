@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict
 import atexit
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
+import mimetypes
+import os
 import random
 import signal
 import sys
@@ -11,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
 import time
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import numpy as np
 
@@ -803,6 +806,9 @@ class AppState:
         self.engine._clipping_manager = self.clipping_manager
         self.combo_recording = False
         self.sound_cache: dict[str, tuple[float, int, np.ndarray]] = {}
+        self.sound_cache_bytes = 0
+        self.sound_cache_limit_bytes = 64 * 1024 * 1024
+        self.playback_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="micfudiddo-playback")
         self.duration_cache: dict[str, tuple[int, float]] = {}
         self.cover_url_cache: dict[str, tuple[int, str]] = {}
         self.devices: list[AudioDevice] = []
@@ -836,6 +842,7 @@ class AppState:
         self.soundboard_monitor_enabled = True
         self.soundboard_monitor_volume = 0.65
         self.record_selected_indexes: set[int] = set()
+        self.api_port = 38717
         self.saved_capture_defaults_path = self.library.base_dir / "temp_capture_defaults.json"
         self.saved_capture_defaults: dict[int, str] = {}
         if self.saved_capture_defaults_path.exists():
@@ -857,6 +864,7 @@ class AppState:
         self.hotkey_handles = []
         self.time_glitch_hotkey_handles = []
         self.time_glitch_hotkey_down = False
+        self._shutdown_started = False
         
         self.custom_voices_path = self.library.base_dir / "custom_voices.json"
         self.custom_categories_path = self.library.base_dir / "custom_categories.json"
@@ -1611,6 +1619,42 @@ class AppState:
         self.monitor_only_active = False
         self.status = "Processamento desligado"
 
+    def shutdown_resources(self) -> None:
+        with self.lock:
+            if self._shutdown_started:
+                return
+            self._shutdown_started = True
+
+        self.cancel_youtube_import()
+        if self.pc_recorder.running:
+            self.pc_recorder.stop(discard=True)
+        self.combo_recording = False
+        self.clipping_manager.stop_capture()
+        self.stop()
+        self.restore_microphone_safety()
+
+        try:
+            import keyboard
+
+            for handle in self.hotkey_handles:
+                try:
+                    keyboard.remove_hotkey(handle)
+                except Exception:
+                    pass
+            for kind, handle in self.time_glitch_hotkey_handles:
+                try:
+                    if kind == "hotkey":
+                        keyboard.remove_hotkey(handle)
+                    else:
+                        keyboard.unhook(handle)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self.hotkey_handles = []
+        self.time_glitch_hotkey_handles = []
+        self.playback_executor.shutdown(wait=False, cancel_futures=True)
+
     def start_monitor_only(self) -> None:
         input_device = self.device_by_index(self.selected_input)
         monitor_device = self.device_by_index(self.selected_monitor)
@@ -1903,12 +1947,21 @@ class AppState:
         stamp = path.stat().st_mtime
         sr = self.engine.sample_rate or 48000
         with self.lock:
-            cached = self.sound_cache.get(item.id)
+            cached = self.sound_cache.pop(item.id, None)
             if cached and cached[0] == stamp and cached[1] == sr:
+                self.sound_cache[item.id] = cached
                 return cached[2]
+            if cached:
+                self.sound_cache_bytes = max(0, self.sound_cache_bytes - int(cached[2].nbytes))
         audio = load_audio_mono(item.path, sr)
-        with self.lock:
-            self.sound_cache[item.id] = (stamp, sr, audio)
+        if audio.nbytes <= self.sound_cache_limit_bytes:
+            with self.lock:
+                while self.sound_cache and self.sound_cache_bytes + audio.nbytes > self.sound_cache_limit_bytes:
+                    _old_id, old_cached = next(iter(self.sound_cache.items()))
+                    self.sound_cache.pop(_old_id, None)
+                    self.sound_cache_bytes = max(0, self.sound_cache_bytes - int(old_cached[2].nbytes))
+                self.sound_cache[item.id] = (stamp, sr, audio)
+                self.sound_cache_bytes += int(audio.nbytes)
         return audio
 
     def play_online_sound(self, sound_id: str, url: str, name: str) -> None:
@@ -2017,6 +2070,11 @@ class AppState:
             fade_out_ms=item.fade_out_ms,
             sample_rate=self.engine.sample_rate,
         )
+        max_playback_frames = max(1, int(self.engine.sample_rate * 60 * 6))
+        if rendered.size > max_playback_frames:
+            rendered = rendered[:max_playback_frames].copy()
+            with self.lock:
+                self.status = "Áudio limitado a 6 minutos para proteger a memória do sistema."
         replace = bool(item.stop_other_sounds or not self.settings.get("allowMultipleSounds", False))
         if mode == "overlap":
             replace = False
@@ -2134,6 +2192,10 @@ class AppState:
         )
 
     def calculate_total_storage(self) -> int:
+        now = time.monotonic()
+        cached_at, cached_total = getattr(self, "_storage_cache", (0.0, 0))
+        if now - cached_at < 10.0:
+            return cached_total
         total = 0
         try:
             if self.library.sounds_dir.exists():
@@ -2147,7 +2209,53 @@ class AppState:
                         total += f.stat().st_size
         except Exception:
             pass
+        self._storage_cache = (now, total)
         return total
+
+    def runtime_snapshot(self) -> dict:
+        return {
+            "status": self.status,
+            "running": self.engine.running,
+            "monitorOnly": self.monitor_only_active,
+            "sampleRate": self.engine.sample_rate,
+            "blockSize": self.engine.block_size,
+            "level": self.engine.last_level,
+            "lastError": self.engine.last_error,
+            "lastCallbackStatus": self.engine.last_callback_status,
+            "youtubeStatus": self.youtube_status,
+            "clipStats": self.clipping_manager.stats(),
+            "virtualMode": self.virtual_mode_active,
+            "controls": {
+                "gain": self.gain,
+                "pitch": self.pitch,
+                "masterMicGain": self.master_mic_gain,
+                "masterVoiceVolume": self.master_voice_volume,
+                "masterPitch": self.master_pitch,
+                "masterMute": self.master_mute,
+                "monitor": self.monitor_enabled,
+                "monitorVolume": self.monitor_volume,
+                "soundboardMonitor": self.soundboard_monitor_enabled,
+                "soundboardMonitorVolume": self.soundboard_monitor_volume,
+                "effects": asdict(self.effects),
+            },
+            "player": self.engine.player_state(),
+            "players": self.engine.player_states(),
+            "recording": {
+                "voice": self.engine.recording,
+                "pc": self.pc_recorder.running,
+                "combo": self.combo_recording,
+            },
+            "settings": dict(self.settings),
+            "activeVoiceId": self.active_voice_id,
+            "libraryRevision": self.library_revision(),
+            "diagnostics": {
+                "pid": os.getpid(),
+                "threads": threading.active_count(),
+                "soundCacheMb": round(self.sound_cache_bytes / (1024 * 1024), 2),
+                "soundCacheLimitMb": round(self.sound_cache_limit_bytes / (1024 * 1024), 2),
+                "activePlaybacks": len(self.engine.player_states()),
+            },
+        }
 
     def snapshot(self) -> dict:
         input_device = self.device_by_index(self.selected_input)
@@ -2188,6 +2296,8 @@ class AppState:
                 "pitch": self.pitch,
                 "masterMicGain": self.master_mic_gain,
                 "masterVoiceVolume": self.master_voice_volume,
+                "masterPitch": self.master_pitch,
+                "masterMute": self.master_mute,
                 "monitor": self.monitor_enabled,
                 "monitorVolume": self.monitor_volume,
                 "soundboardMonitor": self.soundboard_monitor_enabled,
@@ -2206,7 +2316,7 @@ class AppState:
                     **asdict(item),
                     "plays": item.play_count,
                     "duration": self.cached_audio_duration(item.path),
-                    "coverUrl": self.cached_cover_url(item.cover_path),
+                    "coverUrl": self.cover_http_url(item),
                     "hasOriginal": (self.library.sounds_dir / f"{item.id}.original.wav").exists(),
                     "isClip": Path(item.path).name.startswith("clip_") and (
                         (Path(item.path).parent / f"{Path(item.path).stem}.voice.wav").exists() or
@@ -2242,7 +2352,23 @@ class AppState:
             "soundboardFavorites": self.soundboard_favorites,
             "voiceRecents": self.voice_recents,
             "activeVoiceId": self.active_voice_id,
+            "libraryRevision": self.library_revision(),
         }
+
+    def library_revision(self) -> int:
+        try:
+            return self.library.index_path.stat().st_mtime_ns
+        except OSError:
+            return 0
+
+    def cover_http_url(self, item: SoundItem) -> str:
+        if not item.cover_path:
+            return ""
+        try:
+            stamp = Path(item.cover_path).stat().st_mtime_ns
+        except OSError:
+            return ""
+        return f"http://127.0.0.1:{self.api_port}/api/covers/{item.id}?v={stamp}"
 
 def _optional_int(value, fallback: int | None) -> int | None:
     if value is None or value == "":
@@ -2331,6 +2457,30 @@ class Handler(BaseHTTPRequestHandler):
                 with STATE.lock:
                     self._json(STATE.snapshot())
                 return
+            if path == "/api/runtime":
+                with STATE.lock:
+                    self._json(STATE.runtime_snapshot())
+                return
+            if path == "/api/hotkeys":
+                with STATE.lock:
+                    self._json({"settings": dict(STATE.settings)})
+                return
+            if path.startswith("/api/covers/"):
+                item_id = unquote(path.removeprefix("/api/covers/"))
+                item = STATE.library.by_id(item_id)
+                cover_path = Path(item.cover_path) if item and item.cover_path else None
+                if not cover_path or not cover_path.is_file():
+                    self._empty(404)
+                    return
+                body = cover_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", mimetypes.guess_type(cover_path.name)[0] or "application/octet-stream")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self._cors()
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if path == "/api/health":
                 self._json({"ok": True, "time": time.time()})
                 return
@@ -2359,7 +2509,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         try:
             path = urlparse(self.path).path
-            if path in ("/api/state", "/api/health", "/api/sounds/trending", "/api/sounds/search", "/api/level"):
+            if path in ("/api/state", "/api/runtime", "/api/hotkeys", "/api/health", "/api/sounds/trending", "/api/sounds/search", "/api/level"):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self._cors()
@@ -2399,7 +2549,7 @@ class Handler(BaseHTTPRequestHandler):
                 with STATE.lock:
                     with com_initialized():
                         result = self._route_post(path, data)
-            self._json(result if result is not None else STATE.snapshot())
+            self._json(result if result is not None else STATE.runtime_snapshot())
         except Exception as exc:
             self._json({"error": str(exc)}, 500)
 
@@ -2833,7 +2983,7 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro ao tocar online: {exc}"
 
-            threading.Thread(target=run_play_online, daemon=True).start()
+            STATE.playback_executor.submit(run_play_online)
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/trending":
             from urllib.parse import parse_qs, urlparse
@@ -2979,7 +3129,7 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro ao tocar som: {exc}"
 
-            threading.Thread(target=run_play, daemon=True).start()
+            STATE.playback_executor.submit(run_play)
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/random":
             category = str(data.get("category") or "").strip()
@@ -3000,7 +3150,7 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro ao sortear som: {exc}"
 
-            threading.Thread(target=run_random, daemon=True).start()
+            STATE.playback_executor.submit(run_random)
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/stop":
             playback_id = str(data.get("playbackId") or "")
@@ -3105,7 +3255,7 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro na previa: {exc}"
 
-            threading.Thread(target=run_preview, daemon=True).start()
+            STATE.playback_executor.submit(run_preview)
             return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
         if path == "/api/sounds/save-edited":
             item = STATE.save_sound_edit(data, replace=bool(data.get("replace", False)))
@@ -3502,8 +3652,6 @@ class Handler(BaseHTTPRequestHandler):
             return STATE.snapshot()
 
         if path == "/api/shutdown":
-            STATE.restore_microphone_safety()
-            STATE.stop()
             threading.Thread(target=self.server.shutdown, daemon=True).start()
             return {"ok": True}
         if path == "/api/microphone/restore":
@@ -3623,12 +3771,11 @@ def handle_clip_remix_payload(item, data):
         remix_clip(item.path)
 
 
-def watch_parent_process() -> None:
+def watch_parent_process(parent_pid: int) -> None:
     import os
     import time
     import ctypes
 
-    parent_pid = os.getppid()
     if parent_pid <= 1:
         return
 
@@ -3650,7 +3797,7 @@ def watch_parent_process() -> None:
 
     print("Parent process exited, shutting down backend...", flush=True)
     try:
-        STATE.deactivate_virtual()
+        STATE.shutdown_resources()
     except Exception:
         pass
     os._exit(0)
@@ -3662,6 +3809,7 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=38717)
     parser.add_argument("--youtube-worker", default="")
+    parser.add_argument("--parent-pid", type=int, default=0)
     args = parser.parse_args()
 
     if args.youtube_worker:
@@ -3669,19 +3817,27 @@ def main() -> None:
 
     if STATE is None:
         STATE = AppState()
+    STATE.api_port = args.port
 
     install_microphone_safety_handlers()
 
     import threading
-    threading.Thread(target=watch_parent_process, daemon=True).start()
+    watched_parent_pid = args.parent_pid or os.getppid()
+    threading.Thread(target=watch_parent_process, args=(watched_parent_pid,), daemon=True).start()
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server.daemon_threads = True
     print(f"MicFudiddo backend listening on http://{args.host}:{args.port}", flush=True)
     try:
         server.serve_forever()
     finally:
-        with STATE.lock:
-            STATE.deactivate_virtual()
+        try:
+            server.server_close()
+            STATE.shutdown_resources()
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(0)
 
 
 if __name__ == "__main__":

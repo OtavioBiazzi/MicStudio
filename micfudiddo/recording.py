@@ -61,6 +61,9 @@ class MultiDeviceRecorder:
         self._pa = None
         self._streams = []
         self._chunks: dict[int, list[np.ndarray]] = {}
+        self._captured_frames: dict[int, int] = {}
+        self._max_frames_per_device = 10 * 60 * self.sample_rate
+        self.limit_reached = False
         self._devices: list[RecordDevice] = []
         self._lock = threading.Lock()
         self._running = False
@@ -82,6 +85,8 @@ class MultiDeviceRecorder:
         self._pa = pyaudio.PyAudio()
         self._devices = devices
         self._chunks = {device.index: [] for device in devices}
+        self._captured_frames = {device.index: 0 for device in devices}
+        self.limit_reached = False
         self._streams = []
         self._started_at = time.strftime("%Y%m%d_%H%M%S")
 
@@ -142,11 +147,13 @@ class MultiDeviceRecorder:
         if discard:
             with self._lock:
                 self._chunks = {}
+                self._captured_frames = {}
             return []
 
         with self._lock:
             chunks = {index: list(values) for index, values in self._chunks.items()}
             self._chunks = {}
+            self._captured_frames = {}
 
         written: list[Path] = []
         mono_tracks: list[np.ndarray] = []
@@ -190,7 +197,14 @@ class MultiDeviceRecorder:
                 mono = _resample_linear(mono, int(stream_rate), self.sample_rate)
             with self._lock:
                 if device.index in self._chunks:
-                    self._chunks[device.index].append(mono.copy())
+                    captured = self._captured_frames.get(device.index, 0)
+                    remaining = self._max_frames_per_device - captured
+                    if remaining > 0:
+                        block = mono[:remaining].copy()
+                        self._chunks[device.index].append(block)
+                        self._captured_frames[device.index] = captured + int(block.size)
+                    else:
+                        self.limit_reached = True
             return (None, pyaudio.paContinue)
 
         return callback

@@ -296,6 +296,7 @@ DEFAULT_APP_SETTINGS = {
     "confirmClose": True,
     "closeBehavior": "ask",
     "onlinePlaybackRoute": "both",
+    "onlinePreviewVolume": "0.25",
     "maxSoundVolume": "1.0",
     "clipEnabled": False,
     "clipDuration": "30",
@@ -1577,8 +1578,12 @@ class AppState:
             return
 
         hold_mode = effects.time_glitch_shortcut_mode == "hold"
+        registered_signature = self.time_glitch_hotkey_signature()
 
         def trigger() -> None:
+            # Ignore callbacks racing with a refresh or a voice change.
+            if self.time_glitch_hotkey_signature() != registered_signature:
+                return
             if hold_mode:
                 if self.time_glitch_hotkey_down:
                     return
@@ -2014,7 +2019,8 @@ class AppState:
             name=f"Online: {name}",
             replace=False,
             loop=False,
-            output_route=route
+            output_route=route,
+            initial_volume=max(0.0, min(1.0, float(self.settings.get("onlinePreviewVolume", "0.25"))))
         )
         
         with self.lock:

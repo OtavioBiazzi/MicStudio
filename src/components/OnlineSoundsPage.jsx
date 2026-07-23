@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, FadersHorizontal, YoutubeLogo, Lightning, ChartBar,
-  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone, X
+  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone, X, SpeakerHigh
 } from "@phosphor-icons/react";
 import { formatTime } from "../utils";
 import { YoutubeImportModal, TTSModal } from "./Modals";
@@ -335,6 +335,23 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
                 borderRadius: "var(--radius-md)",
                 flexWrap: "wrap"
               }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 240 }}>
+                  <SpeakerHigh size={16} color="var(--cyan)" />
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 112 }}>Volume da prévia</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100)}
+                    onChange={(e) => call("/api/settings", { onlinePreviewVolume: String(Number(e.target.value) / 100) })}
+                    style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2, accentColor: "var(--cyan)" }}
+                    aria-label="Volume da prévia dos sons online"
+                  />
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)", minWidth: 34, textAlign: "right" }}>
+                    {Math.round(Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100)}%
+                  </span>
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>
                   <Lightning size={16} color="var(--cyan)" />
                   <span>Filtrar Duração (s):</span>

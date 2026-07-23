@@ -197,7 +197,7 @@ export function FloatingDock({
               value={Math.round((state.controls?.monitorVolume ?? 1) * 100)}
               onChange={(e) => {
                 const vol = Number(e.target.value) / 100;
-                updateControls({ monitorVolume: vol, soundboardMonitorVolume: vol });
+                updateControls({ monitorVolume: vol });
               }}
               style={{ width: 80 }}
             />

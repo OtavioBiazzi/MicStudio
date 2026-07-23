@@ -271,6 +271,21 @@ class ProcessingTests(unittest.TestCase):
         processor.process(clean[3200:], settings)
         self.assertEqual(processor.time_glitch_event_remaining, 0)
 
+    def test_command_glitch_release_clears_pending_trigger(self):
+        sample_rate = 8000
+        processor = VoiceEffectsProcessor(sample_rate)
+        settings = EffectsSettings(
+            time_glitch_enabled=True,
+            time_glitch_mix=1.0,
+            time_glitch_trigger_mode="shortcut",
+        )
+        clean = np.sin(np.linspace(0.0, 20.0 * np.pi, 2400, dtype=np.float32)) * 0.25
+        processor.process(clean[:1600], settings)
+        processor.trigger_time_glitch()
+        processor.release_time_glitch()
+        after = processor.process(clean[1600:], settings)
+        self.assertTrue(np.allclose(after, clean[1600:]))
+
     def test_double_voice_keeps_streaming_state_and_changes_audio(self):
         sample_rate = 48000
         processor = VoiceEffectsProcessor(sample_rate)

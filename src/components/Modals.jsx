@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.3": `### Versão 1.3.3
+* Volume separado para as prévias do Explorar Sons, com ajuste direto na tela e nas configurações.
+* A barra rápida de retorno de voz não altera mais o volume do Soundboard.
+* O volume do Soundboard continua disponível no mixer próprio do botão direito.
+* Disparos antigos do Glitch Sob Comando são cancelados ao trocar/desativar o modo.
+* Proteção contra callbacks de atalhos que chegam atrasados durante a troca de voz.`,
+
   "v1.3.2": `### Versão 1.3.2
 * Reverb, eco e delay foram reconstruídos com buffers independentes e caudas contínuas.
 * Delay de áudios curtos agora continua audível na prévia e no arquivo salvo.

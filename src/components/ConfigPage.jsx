@@ -537,6 +537,19 @@ export function ConfigPage({
                       Teto máximo de volume permitido para todos os sons do Soundboard (padrão: 100%).
                     </small>
                   </div>
+                  <div style={{ padding: "6px 0" }}>
+                    <Slider
+                      label="Volume das prévias do Explorar Sons"
+                      value={Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100}
+                      min={0}
+                      max={100}
+                      suffix="%"
+                      onChange={(v) => call("/api/settings", { onlinePreviewVolume: String(v / 100) })}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--text-muted)", display: "block", marginTop: 6 }}>
+                      Controla somente o botão de ouvir prévias na biblioteca online; não altera sons importados.
+                    </small>
+                  </div>
                 </div>
               </div>
 

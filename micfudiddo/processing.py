@@ -408,6 +408,7 @@ class VoiceEffectsProcessor:
         self._time_glitch_trigger.set()
 
     def release_time_glitch(self) -> None:
+        self._time_glitch_trigger.clear()
         self._time_glitch_hold.clear()
         fade_samples = max(1, int(self.sample_rate * 0.01))
         if self.time_glitch_event_remaining > fade_samples:

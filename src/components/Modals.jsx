@@ -1451,6 +1451,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.4": `### Versão 1.3.4
+* Corrigido o volume das prévias do Explorar Sons: 0% agora fica realmente silencioso.
+* O valor configurado passa a ser aplicado no multiplicador real de reprodução do áudio.
+* Adicionado teste de regressão para garantir o volume inicial das prévias.`,
+
   "v1.3.3": `### Versão 1.3.3
 * Volume separado para as prévias do Explorar Sons, com ajuste direto na tela e nas configurações.
 * A barra rápida de retorno de voz não altera mais o volume do Soundboard.

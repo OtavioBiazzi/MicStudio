@@ -186,6 +186,10 @@ class _Playback:
     initial_volume: float = 1.0
     initial_speed: float = 1.0
 
+    def __post_init__(self) -> None:
+        self.volume_override = max(0.0, float(self.initial_volume))
+        self.speed_override = max(0.05, float(self.initial_speed))
+
 
 class AudioEngine:
     def __init__(self) -> None:

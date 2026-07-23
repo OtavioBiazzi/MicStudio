@@ -40,6 +40,12 @@ class EngineConfigTests(unittest.TestCase):
             engine.play_sound(samples, sound_id=str(index), replace=False)
         self.assertEqual(len(engine.player_states()), 16)
 
+    def test_initial_playback_volume_is_applied(self):
+        engine = AudioEngine()
+        samples = np.ones(32, dtype=np.float32)
+        engine.play_sound(samples, sound_id="preview", initial_volume=0.0)
+        self.assertEqual(engine.player_states()[0]["volume"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

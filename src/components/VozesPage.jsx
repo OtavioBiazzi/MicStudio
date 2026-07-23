@@ -625,6 +625,12 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                         step={item.step || 1}
                         unit={item.unit || ""}
                         curve={item.curve}
+                        enabled={item.target === "effect" && item.enableKey
+                          ? Boolean(controls.effects?.[item.enableKey])
+                          : undefined}
+                        onToggle={item.target === "effect" && item.enableKey
+                          ? () => updateEffects({ [item.enableKey]: !Boolean(controls.effects?.[item.enableKey]) })
+                          : undefined}
                         onChange={(value) => updateParameter(item, value)}
                       />
                     );
@@ -775,7 +781,18 @@ function PanelField({ label, children }) {
 }
 
 // --- PanelSlider ---
-export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit = "", curve, onChange }) {
+export function PanelSlider({
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  unit = "",
+  curve,
+  enabled,
+  onToggle,
+  onChange
+}) {
   const safeValue = Math.max(min, Math.min(max, Number(value) || 0));
   const decimals = String(step).includes(".") ? String(step).split(".")[1].length : 0;
   const formatted = decimals ? safeValue.toFixed(decimals) : Math.round(safeValue);
@@ -793,8 +810,16 @@ export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit =
     onChange(Math.max(min, Math.min(max, Math.round(mapped / step) * step)));
   };
   return (
-    <div className="panelSlider">
-      <span className="sliderLabel">{label}</span>
+    <div className={`panelSlider ${enabled === false ? "disabled" : ""}`}>
+      <span className="sliderLabel">
+        {onToggle && (
+          <label className="effectToggle" title={enabled ? "Desativar efeito" : "Ativar efeito"}>
+            <input type="checkbox" checked={Boolean(enabled)} onChange={onToggle} />
+            <span className="etTrack" />
+          </label>
+        )}
+        {label}
+      </span>
       <input
         type="range"
         min={logarithmic ? 0 : min}
@@ -802,6 +827,7 @@ export function PanelSlider({ label, value, min = 0, max = 100, step = 1, unit =
         step={logarithmic ? 1 : step}
         value={sliderValue}
         onChange={handleChange}
+        disabled={enabled === false}
       />
       <span className="sliderValue">{formatted}{unit}</span>
     </div>

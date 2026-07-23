@@ -158,6 +158,19 @@ class SoundboardTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(effected)))
         self.assertFalse(np.allclose(clean, effected))
 
+    def test_short_sound_delay_keeps_audible_tail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "short.wav"
+            audio = np.zeros(2400, dtype=np.float32)
+            audio[0] = 0.8
+            sf.write(source, audio, 48000)
+            effected, _ = render_audio_file_edit(
+                str(source),
+                effects=EffectsSettings(delay_enabled=True, delay_mix=0.8),
+            )
+        self.assertGreater(effected.size, audio.size + 12000)
+        self.assertGreater(float(np.max(np.abs(effected[audio.size :]))), 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

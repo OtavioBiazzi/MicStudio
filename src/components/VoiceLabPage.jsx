@@ -157,7 +157,7 @@ export function VoiceLabPage({
 
   const modules = [
     {
-      title: "🚀 Controles Principais de Áudio (Escala até 1000%)",
+      title: "🚀 Controles Principais de Áudio",
       items: [
         { key: "pitch", label: "Tom (Pitch)", icon: WaveSine, min: -36, max: 36, step: 1, suffix: "st", isControl: true },
         { key: "gain", label: "Ganho de Entrada", icon: Microphone, min: 0, max: 100, step: 0.1, suffix: "x", isControl: true },
@@ -168,7 +168,7 @@ export function VoiceLabPage({
       ]
     },
     {
-      title: "🌌 Espaço & Textura (Escala até 1000%)",
+      title: "🌌 Espaço & Textura",
       items: [
         { key: "echo_mix", label: "Eco / Retardo", icon: Phone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "echo_enabled" },
         { key: "delay_mix", label: "Delay Tridimensional", icon: Phone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "delay_enabled" },
@@ -179,7 +179,7 @@ export function VoiceLabPage({
       ]
     },
     {
-      title: "👾 Efeitos Especiais Extremos (Escala até 1000%)",
+      title: "👾 Efeitos Especiais Extremos",
       items: [
         { key: "megaphone_drive", label: "Megafone", icon: Megaphone, min: 1, max: 40, step: 0.5, suffix: "x", isControl: false, enableKey: "megaphone_enabled" },
         { key: "telephone_mix", label: "Telefone", icon: Phone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "telephone_enabled" },
@@ -326,42 +326,16 @@ export function VoiceLabPage({
                     const enabled = isControl ? true : Boolean(state.controls?.effects?.[item.enableKey]);
                     const raw = isControl ? state.controls?.[item.key] : (state.controls?.effects?.[item.key] ?? effectDefaults[item.key]);
                     
-                    const maxVal = item.max;
-                    let sliderPct;
-                    if (item.directValue) {
-                      sliderPct = item.logScale
-                        ? Math.log(Math.max(item.min, Number(raw)) / item.min) / Math.log(item.max / item.min) * 1000
-                        : Math.max(item.min, Math.min(item.max, Number(raw)));
-                    } else if (item.key === "pitch") {
-                      sliderPct = Math.round(((Number(raw) + 24) / 48) * 1000);
-                    } else if (item.key === "robot_rate_hz") {
-                      sliderPct = Math.round(((Number(raw) - 5) / 245) * 1000);
-                    } else if (item.key === "alien_rate_hz") {
-                      sliderPct = Math.round(((Number(raw) - 20) / 280) * 1000);
-                    } else if (item.key === "bitcrush_bits") {
-                      sliderPct = Math.round(((Number(raw) - 3) / 9) * 1000);
-                    } else {
-                      sliderPct = Math.round((Number(raw) / maxVal) * 100);
-                    }
+                    const numericRaw = Math.max(item.min, Math.min(item.max, Number(raw)));
+                    const sliderValue = item.logScale
+                      ? Math.log(Math.max(item.min, numericRaw) / item.min) / Math.log(item.max / item.min) * 1000
+                      : numericRaw;
 
                     const handleSliderChange = (e) => {
-                      const pct = Number(e.target.value);
-                      let val;
-                      if (item.directValue) {
-                        val = item.logScale
-                          ? Math.round(item.min * Math.pow(item.max / item.min, pct / 1000))
-                          : pct;
-                      } else if (item.key === "pitch") {
-                        val = (pct / 1000) * 48 - 24;
-                      } else if (item.key === "robot_rate_hz") {
-                        val = (pct / 1000) * 245 + 5;
-                      } else if (item.key === "alien_rate_hz") {
-                        val = (pct / 1000) * 280 + 20;
-                      } else if (item.key === "bitcrush_bits") {
-                        val = Math.round((pct / 1000) * 9 + 3);
-                      } else {
-                        val = (pct / 100) * maxVal;
-                      }
+                      const sliderInput = Number(e.target.value);
+                      const val = item.logScale
+                        ? Math.round(item.min * Math.pow(item.max / item.min, sliderInput / 1000))
+                        : sliderInput;
                       
                       if (isControl) {
                         updateControls({ [item.key]: val });
@@ -376,7 +350,7 @@ export function VoiceLabPage({
                     };
 
                     const Icon = item.icon;
-                    const showClipping = !item.directValue && sliderPct > 200;
+                    const showClipping = ["gain", "distortion_drive", "output_volume"].includes(item.key) && numericRaw > 10;
 
                     return (
                       <div key={item.key} className={`voice-lab-effect-card ${enabled ? "active" : ""}`}>
@@ -402,22 +376,19 @@ export function VoiceLabPage({
                           <div className="voice-lab-effect-slider">
                             <input
                               type="range"
-                              min={item.directValue && !item.logScale ? item.min : 0}
-                              max={item.directValue && !item.logScale ? item.max : 1000}
-                              step={item.directValue && !item.logScale ? item.step : 1}
-                              value={sliderPct}
+                              min={item.logScale ? 0 : item.min}
+                              max={item.logScale ? 1000 : item.max}
+                              step={item.logScale ? 1 : item.step}
+                              value={sliderValue}
                               onChange={handleSliderChange}
                               disabled={!enabled && !isControl}
                               style={{ width: "100%", cursor: enabled || isControl ? "pointer" : "not-allowed" }}
                             />
                           </div>
                           <span className="voice-lab-effect-value">
-                            {item.directValue
-                              ? `${Number(raw).toFixed(item.decimals || 0)}${item.suffix}`
-                              : isControl
-                              ? (item.key === "pitch" ? `${Number(raw).toFixed(0)}st` : `${Number(raw).toFixed(1)}x`)
-                              : `${Math.round(sliderPct)}%`
-                            }
+                            {item.isPercent
+                              ? `${Math.round(numericRaw * 100)}%`
+                              : `${numericRaw.toFixed(item.decimals ?? (item.step < 1 ? 1 : 0))}${item.suffix}`}
                           </span>
                         </div>
                         {item.key === "harmony_mix" && enabled && (

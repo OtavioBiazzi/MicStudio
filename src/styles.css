@@ -919,11 +919,61 @@ html,body,#root {
 }
 
 .panelSlider .sliderLabel {
+  display:flex;
+  align-items:center;
+  gap:6px;
   font-size:12px;
   font-weight:500;
   color:var(--text-secondary);
     width:105px;
   flex-shrink:0
+}
+
+.panelSlider .effectToggle {
+  width:26px;
+  height:14px;
+  position:relative;
+  cursor:pointer;
+  flex-shrink:0
+}
+
+.panelSlider .effectToggle input {
+  opacity:0;
+  position:absolute;
+  width:0;
+  height:0
+}
+
+.panelSlider .effectToggle .etTrack {
+  position:absolute;
+  inset:0;
+  border-radius:7px;
+  background:var(--bg-card-secondary);
+  transition:var(--transition)
+}
+
+.panelSlider .effectToggle .etTrack:after {
+  content:"";
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background:#fff;
+  transition:var(--transition)
+}
+
+.panelSlider .effectToggle input:checked+.etTrack {
+  background:var(--purple)
+}
+
+.panelSlider .effectToggle input:checked+.etTrack:after {
+  transform:translate(12px)
+}
+
+.panelSlider.disabled {
+  opacity:.58
 }
 
 .panelSlider input[type=range] {
@@ -1008,6 +1058,10 @@ html,body,#root {
   color:var(--text-secondary);
   font:700 11px var(--font);
   cursor:pointer
+}
+
+.panelSlider input[type=range]:disabled {
+  cursor:not-allowed
 }
 
 .hotkeyCapture button:first-child {

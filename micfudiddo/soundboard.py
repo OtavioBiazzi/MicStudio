@@ -965,8 +965,36 @@ def render_audio_file_edit(
     if effects is not None:
         if isinstance(effects, dict):
             effects = EffectsSettings(**{**asdict(EffectsSettings()), **effects})
-        rendered = VoiceEffectsProcessor(int(sample_rate)).process(rendered, effects)
+        processor = VoiceEffectsProcessor(int(sample_rate))
+        rendered = processor.process(rendered, effects)
+        tail_seconds = _effect_tail_seconds(effects)
+        if tail_seconds > 0.0:
+            tail = processor.process(
+                np.zeros(max(1, int(sample_rate * tail_seconds)), dtype=np.float32),
+                effects,
+            )
+            audible = np.flatnonzero(np.abs(tail) > 1e-5)
+            if audible.size:
+                tail_end = min(tail.size, int(audible[-1]) + max(1, int(sample_rate * 0.02)))
+                rendered = np.concatenate((rendered, tail[:tail_end]))
     return rendered, int(sample_rate)
+
+
+def _effect_tail_seconds(effects: EffectsSettings) -> float:
+    durations = [0.0]
+    if effects.echo_enabled:
+        durations.append(1.2)
+    if effects.delay_enabled:
+        durations.append(2.4)
+    if effects.reverb_enabled:
+        durations.append(1.2)
+    if effects.ghost_enabled:
+        durations.append(1.8)
+    if effects.chorus_enabled:
+        durations.append(0.06)
+    if effects.flanger_enabled:
+        durations.append(0.04)
+    return max(durations)
 
 
 def resample_linear(samples: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:

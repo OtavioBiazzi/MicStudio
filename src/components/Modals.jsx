@@ -1451,6 +1451,16 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.2": `### Versão 1.3.2
+* Reverb, eco e delay foram reconstruídos com buffers independentes e caudas contínuas.
+* Delay de áudios curtos agora continua audível na prévia e no arquivo salvo.
+* Chorus, flanger e fantasma mantêm continuidade entre blocos sem misturar memória com outros efeitos.
+* Desligar um efeito limpa sua cauda imediatamente e impede áudio antigo de reaparecer.
+* Sliders do VoiceLab agora usam valores e escalas corretos para todos os módulos.
+* Controles específicos de cada voz ganharam interruptores para ativar e desativar os efeitos.
+* Robô Quebrado, Glitched Temporal e Glitch Sob Comando foram testados e corrigidos no fluxo completo.
+* Processamento dos efeitos temporais foi otimizado para reduzir falhas e cortes em tempo real.`,
+
   "v1.3.1": `### Versão 1.3.1
 * Reduz drasticamente o uso de CPU, memória e rede interna com atualizações leves e sem requisições sobrepostas.
 * Capas do Soundboard agora são carregadas sob demanda, em vez de serem reenviadas dentro de cada atualização.
@@ -1754,6 +1764,16 @@ const LOCAL_CHANGELOGS = {
 };
 
 const FALLBACK_RELEASES = [
+  {
+    id: "v1.3.2",
+    tag_name: "v1.3.2",
+    published_at: new Date().toISOString(),
+    body: LOCAL_CHANGELOGS["v1.3.2"],
+    assets: [{
+      name: "MicFudiddo-Studio-Setup-1.3.2.exe",
+      browser_download_url: "https://github.com/OtavioBiazzi/MicStudio/releases/download/v1.3.2/MicFudiddo-Studio-Setup-1.3.2.exe"
+    }]
+  },
   {
     id: "v1.3.1",
     tag_name: "v1.3.1",

@@ -173,10 +173,34 @@ class VoiceEffectsProcessor:
         self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_window_samples = 0
         self._reverse_pitch_shifter = DualDelayPitchShifter(self.sample_rate)
-        self.echo_feedback = 0.28
-        self.echo_delay_samples = max(1, int(self.sample_rate * 0.135))
-        self.echo_buffer = np.zeros(max(self.echo_delay_samples + 1, int(self.sample_rate * 0.5)), dtype=np.float32)
+        self.echo_delay_samples = max(1, int(self.sample_rate * 0.16))
+        self.echo_buffer = np.zeros(self.echo_delay_samples + 1, dtype=np.float32)
         self.echo_pos = 0
+        self.delay_delay_samples = max(1, int(self.sample_rate * 0.32))
+        self.delay_buffer = np.zeros(self.delay_delay_samples + 1, dtype=np.float32)
+        self.delay_pos = 0
+        self.reverb_buffers = [
+            np.zeros(max(2, int(self.sample_rate * seconds)), dtype=np.float32)
+            for seconds in (0.0297, 0.0371, 0.0411, 0.0437)
+        ]
+        self.reverb_positions = [0] * len(self.reverb_buffers)
+        self.ghost_delay_samples = max(1, int(self.sample_rate * 0.21))
+        self.ghost_buffer = np.zeros(self.ghost_delay_samples + 1, dtype=np.float32)
+        self.ghost_pos = 0
+        self.chorus_buffer = np.zeros(max(64, int(self.sample_rate * 0.05)), dtype=np.float32)
+        self.chorus_pos = 0
+        self.chorus_phase = 0.0
+        self.flanger_buffer = np.zeros(max(64, int(self.sample_rate * 0.015)), dtype=np.float32)
+        self.flanger_pos = 0
+        self.flanger_phase = 0.0
+        self._temporal_enabled = {
+            "echo": False,
+            "delay": False,
+            "reverb": False,
+            "ghost": False,
+            "chorus": False,
+            "flanger": False,
+        }
         self.noise_rng = np.random.default_rng()
         self.double_voice_buffer = np.zeros(max(64, int(self.sample_rate * 0.3)), dtype=np.float32)
         self.double_voice_pos = 0
@@ -216,11 +240,27 @@ class VoiceEffectsProcessor:
         self._ambience_sample_index = 0
         self.echo_buffer.fill(0.0)
         self.echo_pos = 0
+        self.delay_buffer.fill(0.0)
+        self.delay_pos = 0
+        for buffer in self.reverb_buffers:
+            buffer.fill(0.0)
+        self.reverb_positions = [0] * len(self.reverb_buffers)
+        self.ghost_buffer.fill(0.0)
+        self.ghost_pos = 0
+        self.chorus_buffer.fill(0.0)
+        self.chorus_pos = 0
+        self.chorus_phase = 0.0
+        self.flanger_buffer.fill(0.0)
+        self.flanger_pos = 0
+        self.flanger_phase = 0.0
+        for key in self._temporal_enabled:
+            self._temporal_enabled[key] = False
 
     def process(self, samples: np.ndarray, settings: EffectsSettings) -> np.ndarray:
         y = np.asarray(samples, dtype=np.float32).reshape(-1).copy()
         if y.size == 0:
             return y
+        self._sync_temporal_effect_state(settings)
 
         if settings.noise_gate_enabled:
             y = self._noise_gate(y, _finite_clamped(settings.noise_gate_threshold, 0.0, 0.4, 0.08))
@@ -239,7 +279,7 @@ class VoiceEffectsProcessor:
             y = self._echo(y, _finite_clamped(settings.echo_mix, 0.0, 1.0, 0.25))
 
         if settings.delay_enabled:
-            y = self._echo(y, _finite_clamped(settings.delay_mix, 0.0, 1.0, 0.3))
+            y = self._delay(y, _finite_clamped(settings.delay_mix, 0.0, 1.0, 0.3))
 
         if settings.tremolo_enabled:
             y = self._tremolo(y, _finite_clamped(settings.tremolo_rate_hz, 1.0, 30.0, 8.0))
@@ -373,6 +413,43 @@ class VoiceEffectsProcessor:
         if self.time_glitch_event_remaining > fade_samples:
             self.time_glitch_event_remaining = fade_samples
 
+    def _sync_temporal_effect_state(self, settings: EffectsSettings) -> None:
+        current = {
+            "echo": bool(settings.echo_enabled),
+            "delay": bool(settings.delay_enabled),
+            "reverb": bool(settings.reverb_enabled),
+            "ghost": bool(settings.ghost_enabled),
+            "chorus": bool(settings.chorus_enabled),
+            "flanger": bool(settings.flanger_enabled),
+        }
+        for key, enabled in current.items():
+            if self._temporal_enabled[key] and not enabled:
+                self._clear_temporal_state(key)
+            self._temporal_enabled[key] = enabled
+
+    def _clear_temporal_state(self, key: str) -> None:
+        if key == "echo":
+            self.echo_buffer.fill(0.0)
+            self.echo_pos = 0
+        elif key == "delay":
+            self.delay_buffer.fill(0.0)
+            self.delay_pos = 0
+        elif key == "reverb":
+            for buffer in self.reverb_buffers:
+                buffer.fill(0.0)
+            self.reverb_positions = [0] * len(self.reverb_buffers)
+        elif key == "ghost":
+            self.ghost_buffer.fill(0.0)
+            self.ghost_pos = 0
+        elif key == "chorus":
+            self.chorus_buffer.fill(0.0)
+            self.chorus_pos = 0
+            self.chorus_phase = 0.0
+        elif key == "flanger":
+            self.flanger_buffer.fill(0.0)
+            self.flanger_pos = 0
+            self.flanger_phase = 0.0
+
     def _ring_modulate(self, samples: np.ndarray, rate_hz: float) -> np.ndarray:
         indexes = np.arange(samples.size, dtype=np.float32)
         phase_step = (2.0 * math.pi * rate_hz) / self.sample_rate
@@ -405,13 +482,51 @@ class VoiceEffectsProcessor:
         return ((warm * (1.0 - tone)) + (bright * tone)).astype(np.float32, copy=False)
 
     def _echo(self, samples: np.ndarray, mix: float) -> np.ndarray:
-        out = np.empty_like(samples)
-        for i, sample in enumerate(samples):
-            delayed = self.echo_buffer[self.echo_pos]
-            out[i] = sample + (delayed * mix)
-            self.echo_buffer[self.echo_pos] = sample + (delayed * self.echo_feedback)
-            self.echo_pos = (self.echo_pos + 1) % self.echo_buffer.size
+        out, self.echo_pos = self._feedback_delay(
+            samples,
+            mix,
+            self.echo_buffer,
+            self.echo_pos,
+            self.echo_delay_samples,
+            feedback=0.34,
+        )
         return out
+
+    def _delay(self, samples: np.ndarray, mix: float) -> np.ndarray:
+        out, self.delay_pos = self._feedback_delay(
+            samples,
+            mix,
+            self.delay_buffer,
+            self.delay_pos,
+            self.delay_delay_samples,
+            feedback=0.48,
+        )
+        return out
+
+    @staticmethod
+    def _feedback_delay(
+        samples: np.ndarray,
+        mix: float,
+        buffer: np.ndarray,
+        position: int,
+        delay_samples: int,
+        *,
+        feedback: float,
+    ) -> tuple[np.ndarray, int]:
+        out = np.empty_like(samples)
+        size = buffer.size
+        offset = 0
+        while offset < samples.size:
+            take = min(delay_samples, samples.size - offset)
+            indexes = (position + np.arange(take)) % size
+            read_indexes = (indexes - delay_samples) % size
+            delayed = buffer[read_indexes].copy()
+            chunk = samples[offset : offset + take]
+            out[offset : offset + take] = chunk + delayed * np.float32(mix)
+            buffer[indexes] = chunk + delayed * np.float32(feedback)
+            position = (position + take) % size
+            offset += take
+        return out, position
 
     def _bitcrush(self, samples: np.ndarray, bits: int) -> np.ndarray:
         bits = int(_finite_clamped(float(bits), 3.0, 12.0, 8.0))
@@ -451,9 +566,25 @@ class VoiceEffectsProcessor:
         return ((samples * (1.0 - mix)) + (narrow * mix)).astype(np.float32, copy=False)
 
     def _reverb(self, samples: np.ndarray, mix: float) -> np.ndarray:
-        wet = self._echo(samples, mix * 0.55)
-        wet = self._echo(wet, mix * 0.35)
-        return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
+        wet = np.zeros_like(samples)
+        for buffer_index, buffer in enumerate(self.reverb_buffers):
+            position = self.reverb_positions[buffer_index]
+            offset = 0
+            while offset < samples.size:
+                take = min(buffer.size, samples.size - offset)
+                indexes = (position + np.arange(take)) % buffer.size
+                delayed = buffer[indexes].copy()
+                chunk = samples[offset : offset + take]
+                wet[offset : offset + take] += delayed
+                buffer[indexes] = chunk + delayed * np.float32(0.68 + buffer_index * 0.025)
+                position = (position + take) % buffer.size
+                offset += take
+            self.reverb_positions[buffer_index] = position
+        wet *= np.float32(1.0 / len(self.reverb_buffers))
+        return (
+            samples * np.float32(1.0 - mix * 0.18)
+            + wet * np.float32(mix * 0.9)
+        ).astype(np.float32, copy=False)
 
     def _demon(self, samples: np.ndarray, drive: float) -> np.ndarray:
         growl = self._ring_modulate(samples, 31.0)
@@ -465,28 +596,49 @@ class VoiceEffectsProcessor:
         return ((samples * 0.35) + (carrier * 0.85)).astype(np.float32, copy=False)
 
     def _ghost(self, samples: np.ndarray, mix: float) -> np.ndarray:
-        airy = self._echo(samples, mix)
+        airy, self.ghost_pos = self._feedback_delay(
+            samples,
+            0.8,
+            self.ghost_buffer,
+            self.ghost_pos,
+            self.ghost_delay_samples,
+            feedback=0.42,
+        )
         airy = self._tremolo(airy, 2.8)
         return ((samples * (1.0 - mix)) + (airy * mix)).astype(np.float32, copy=False)
 
     def _chorus(self, samples: np.ndarray, mix: float) -> np.ndarray:
-        if samples.size < 12 or mix <= 0.0:
+        if samples.size == 0 or mix <= 0.0:
             return samples.copy()
-        delay_a = max(2, int(self.sample_rate * 0.012))
-        delay_b = max(3, int(self.sample_rate * 0.019))
-        wet = np.zeros_like(samples)
-        wet[delay_a:] += samples[:-delay_a] * np.float32(0.62)
-        wet[delay_b:] += samples[:-delay_b] * np.float32(0.38)
-        wet = self._tremolo(wet, 1.6)
-        return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
+        wet = np.empty_like(samples)
+        phase_step = (2.0 * math.pi * 0.8) / self.sample_rate
+        for index, sample in enumerate(samples):
+            delay_ms = 15.0 + 4.0 * math.sin(self.chorus_phase)
+            delay_samples = max(1, int(self.sample_rate * delay_ms / 1000.0))
+            read_position = (self.chorus_pos - delay_samples) % self.chorus_buffer.size
+            wet[index] = self.chorus_buffer[read_position]
+            self.chorus_buffer[self.chorus_pos] = sample
+            self.chorus_pos = (self.chorus_pos + 1) % self.chorus_buffer.size
+            self.chorus_phase = (self.chorus_phase + phase_step) % (2.0 * math.pi)
+        return (
+            samples * np.float32(1.0 - mix * 0.2)
+            + wet * np.float32(mix * 0.85)
+        ).astype(np.float32, copy=False)
 
     def _flanger(self, samples: np.ndarray, mix: float) -> np.ndarray:
-        if samples.size < 8 or mix <= 0.0:
+        if samples.size == 0 or mix <= 0.0:
             return samples.copy()
-        delay = max(1, int(self.sample_rate * 0.004))
-        wet = np.zeros_like(samples)
-        wet[delay:] = samples[:-delay]
-        wet = np.tanh(samples + wet * np.float32(0.82)).astype(np.float32, copy=False)
+        wet = np.empty_like(samples)
+        phase_step = (2.0 * math.pi * 0.28) / self.sample_rate
+        for index, sample in enumerate(samples):
+            delay_ms = 2.4 + 2.0 * math.sin(self.flanger_phase)
+            delay_samples = max(1, int(self.sample_rate * delay_ms / 1000.0))
+            read_position = (self.flanger_pos - delay_samples) % self.flanger_buffer.size
+            delayed = self.flanger_buffer[read_position]
+            wet[index] = delayed
+            self.flanger_buffer[self.flanger_pos] = sample + delayed * np.float32(0.35)
+            self.flanger_pos = (self.flanger_pos + 1) % self.flanger_buffer.size
+            self.flanger_phase = (self.flanger_phase + phase_step) % (2.0 * math.pi)
         return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
     def _whisper(self, samples: np.ndarray, mix: float) -> np.ndarray:

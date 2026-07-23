@@ -34,6 +34,49 @@ class ProcessingTests(unittest.TestCase):
         out = processor.process(samples, EffectsSettings())
         self.assertTrue(np.allclose(out, samples))
 
+    def test_echo_delay_and_reverb_produce_independent_streaming_tails(self):
+        block_size = 1024
+        impulse = np.zeros(block_size, dtype=np.float32)
+        impulse[0] = 0.8
+        silence = np.zeros(block_size, dtype=np.float32)
+
+        cases = (
+            EffectsSettings(echo_enabled=True, echo_mix=0.7),
+            EffectsSettings(delay_enabled=True, delay_mix=0.7),
+            EffectsSettings(reverb_enabled=True, reverb_mix=0.7),
+        )
+        for settings in cases:
+            processor = VoiceEffectsProcessor(48000)
+            rendered = [processor.process(impulse, settings)]
+            rendered.extend(processor.process(silence, settings) for _ in range(18))
+            tail = np.concatenate(rendered)[block_size:]
+            self.assertGreater(float(np.max(np.abs(tail))), 0.05)
+
+    def test_disabling_temporal_effect_is_immediate_and_clears_its_tail(self):
+        processor = VoiceEffectsProcessor(48000)
+        enabled = EffectsSettings(echo_enabled=True, echo_mix=0.9)
+        disabled = EffectsSettings()
+        impulse = np.zeros(1024, dtype=np.float32)
+        impulse[0] = 1.0
+        processor.process(impulse, enabled)
+
+        clean_input = np.linspace(-0.2, 0.2, 1024, dtype=np.float32)
+        clean_output = processor.process(clean_input, disabled)
+        self.assertTrue(np.allclose(clean_output, clean_input))
+
+        reenabled = processor.process(np.zeros(8192, dtype=np.float32), enabled)
+        self.assertTrue(np.allclose(reenabled, 0.0))
+
+    def test_echo_history_does_not_leak_into_delay(self):
+        processor = VoiceEffectsProcessor(48000)
+        impulse = np.zeros(1024, dtype=np.float32)
+        impulse[0] = 1.0
+        processor.process(impulse, EffectsSettings(echo_enabled=True, echo_mix=1.0))
+
+        delay_only = EffectsSettings(delay_enabled=True, delay_mix=1.0)
+        before_delay_time = processor.process(np.zeros(8192, dtype=np.float32), delay_only)
+        self.assertTrue(np.allclose(before_delay_time, 0.0))
+
     def test_output_volume_effect_boosts_when_enabled(self):
         samples = np.array([0.1, -0.2], dtype=np.float32)
         processor = VoiceEffectsProcessor(48000)

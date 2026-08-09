@@ -280,6 +280,7 @@ def fetch_myinstants_search(query: str, page: int) -> list[dict]:
 
 DEFAULT_APP_SETTINGS = {
     "autoStartVirtual": True,
+    "launchAtStartup": False,
     "restoreOnDisable": True,
     "minimizeToTray": True,
     "allowMultipleSounds": False,
@@ -1630,13 +1631,15 @@ class AppState:
                 return
             self._shutdown_started = True
 
+        # Restore the Windows capture endpoint before audio streams and workers are
+        # stopped, because Windows can end child processes very quickly on shutdown.
+        self.restore_microphone_safety()
         self.cancel_youtube_import()
         if self.pc_recorder.running:
             self.pc_recorder.stop(discard=True)
         self.combo_recording = False
         self.clipping_manager.stop_capture()
         self.stop()
-        self.restore_microphone_safety()
 
         try:
             import keyboard
@@ -1690,13 +1693,16 @@ class AppState:
 
     def activate_virtual(self) -> None:
         self.monitor_only_active = False
+        if self.saved_capture_defaults:
+            # Keep the original device captured before a previous interrupted shutdown.
+            restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
         if not self.saved_capture_defaults:
             self.saved_capture_defaults = get_default_capture_ids()
             try:
                 import json
-                self.saved_capture_defaults_path.write_text(
-                    json.dumps(self.saved_capture_defaults), encoding="utf-8"
-                )
+                temporary_path = self.saved_capture_defaults_path.with_suffix(".tmp")
+                temporary_path.write_text(json.dumps(self.saved_capture_defaults), encoding="utf-8")
+                temporary_path.replace(self.saved_capture_defaults_path)
             except Exception as e:
                 print("Erro ao persistir microfone padrao temporario:", e)
         endpoint = find_virtual_microphone_endpoint()
@@ -1706,7 +1712,7 @@ class AppState:
                 self.virtual_mode_active = True
             self.start()
         except Exception:
-            restored = restore_default_capture_ids(self.saved_capture_defaults)
+            restored = restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
             if restored:
                 self.saved_capture_defaults = {}
                 if self.saved_capture_defaults_path.exists():
@@ -1728,7 +1734,7 @@ class AppState:
         restored = not restore_mic or default_mic == "keep"
         if restore_mic:
             if default_mic == "restore" or default_mic == "choose":
-                restored = restore_default_capture_ids(self.saved_capture_defaults)
+                restored = restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
             elif default_mic == "keep":
                 restored = True
             else:
@@ -1738,7 +1744,7 @@ class AppState:
                     restored = True
                 except Exception as e:
                     print("Erro ao restaurar o microfone selecionado no encerramento:", e)
-                    restored = restore_default_capture_ids(self.saved_capture_defaults)
+                    restored = restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
         if restored:
             self.saved_capture_defaults = {}
             if self.saved_capture_defaults_path.exists():
@@ -3658,8 +3664,9 @@ class Handler(BaseHTTPRequestHandler):
             return STATE.snapshot()
 
         if path == "/api/shutdown":
+            restored = STATE.restore_microphone_safety()
             threading.Thread(target=self.server.shutdown, daemon=True).start()
-            return {"ok": True}
+            return {"ok": restored}
         if path == "/api/microphone/restore":
             return {"ok": STATE.restore_microphone_safety()}
         raise RuntimeError("Endpoint desconhecido.")
@@ -3790,7 +3797,7 @@ def watch_parent_process(parent_pid: int) -> None:
     kernel32 = ctypes.windll.kernel32
 
     while True:
-        time.sleep(2.0)
+        time.sleep(0.25)
         handle = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, parent_pid)
         if not handle:
             break

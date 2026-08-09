@@ -216,6 +216,7 @@ async function stopBackend() {
   stopSoundHotkeys();
   const child = backend;
   backend = null;
+  await restoreMicrophoneBeforeSessionEnd();
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2200);
@@ -240,14 +241,36 @@ async function stopBackend() {
 async function restoreMicrophoneBeforeSessionEnd() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1400);
-    await fetch(`${API}/api/microphone/restore`, {
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const response = await fetch(`${API}/api/microphone/restore`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
       signal: controller.signal
-    }).catch(() => {});
+    }).catch(() => null);
     clearTimeout(timeoutId);
+    return Boolean(response?.ok);
+  } catch (_) {}
+  return false;
+}
+
+function setLaunchAtStartup(enabled) {
+  if (isDev) return false;
+  app.setLoginItemSettings({
+    openAtLogin: Boolean(enabled),
+    openAsHidden: false,
+    args: []
+  });
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+async function syncLaunchAtStartupFromBackend() {
+  if (isDev) return;
+  try {
+    const response = await fetch(`${API}/api/runtime`);
+    if (!response.ok) return;
+    const state = await response.json();
+    setLaunchAtStartup(Boolean(state?.settings?.launchAtStartup));
   } catch (_) {}
 }
 
@@ -623,6 +646,14 @@ ipcMain.handle("window:quit-app", () => {
   return quitAppFully();
 });
 
+ipcMain.handle("app:set-launch-at-startup", (_event, enabled) => {
+  return setLaunchAtStartup(enabled);
+});
+
+ipcMain.handle("app:get-launch-at-startup", () => {
+  return isDev ? false : app.getLoginItemSettings().openAtLogin;
+});
+
 ipcMain.handle("shell:open-external", async (_event, url) => {
   if (url) {
     try {
@@ -891,6 +922,7 @@ function cleanOldVersion() {
 app.whenReady().then(async () => {
   cleanOldVersion();
   await startBackend();
+  await syncLaunchAtStartupFromBackend();
   createWindow();
   createTray();
   startSoundHotkeys();

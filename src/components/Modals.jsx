@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.5": `### Versão 1.3.5
+* Nova opção para abrir o MicFudiddo junto com o Windows, desativada por padrão.
+* A restauração do microfone acontece antes do encerramento dos streams de áudio.
+* Backup do microfone original passa a ser salvo de forma atômica para resistir a desligamentos abruptos.
+* O processo de áudio detecta o encerramento do app mais rápido e tenta restaurar o microfone por mais tempo.
+* Encerrar pelo aplicativo agora solicita a restauração antes de desligar o backend.`,
+
   "v1.3.4": `### Versão 1.3.4
 * Corrigido o volume das prévias do Explorar Sons: 0% agora fica realmente silencioso.
 * O valor configurado passa a ser aplicado no multiplicador real de reprodução do áudio.

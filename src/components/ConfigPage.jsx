@@ -996,6 +996,20 @@ export function ConfigPage({
                   />
 
                   <ToggleSetting
+                    label="Abrir junto com o Windows"
+                    description="Inicia o MicFudiddo depois de entrar no Windows. Vem desativado por padrão."
+                    checked={state.settings?.launchAtStartup === true}
+                    onChange={async (enabled) => {
+                      await call("/api/settings", { launchAtStartup: enabled });
+                      try {
+                        await window.micfudiddo?.setLaunchAtStartup?.(enabled);
+                      } catch {
+                        setToast?.("Não foi possível atualizar a inicialização do Windows.");
+                      }
+                    }}
+                  />
+
+                  <ToggleSetting
                     label="Salvar modificações de cada voz"
                     description="Mantém seus ajustes quando você sai e volta para uma voz. Desative para sempre reabrir o preset original."
                     checked={state.settings?.voiceEditPersistence !== "reset"}

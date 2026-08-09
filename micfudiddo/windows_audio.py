@@ -186,7 +186,7 @@ def set_default_capture_id(device_id: str) -> None:
             policy.SetDefaultEndpoint(device_id, role)
 
 
-def restore_default_capture_ids(defaults: dict[int, str], attempts: int = 3) -> bool:
+def restore_default_capture_ids(defaults: dict[int, str], attempts: int = 8, retry_delay: float = 0.12) -> bool:
     if not defaults:
         return True
     expected = {int(role): device_id for role, device_id in defaults.items() if device_id}
@@ -205,7 +205,7 @@ def restore_default_capture_ids(defaults: dict[int, str], attempts: int = 3) -> 
         if all(current.get(role) == device_id for role, device_id in expected.items()):
             return True
         if attempt + 1 < attempts:
-            time.sleep(0.05)
+            time.sleep(max(0.0, float(retry_delay)))
     return False
 
 

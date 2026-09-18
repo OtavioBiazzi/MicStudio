@@ -15,6 +15,7 @@ import re
 import unicodedata
 
 from .processing import DualDelayPitchShifter, EffectsSettings, VoiceEffectsProcessor
+from .storage import atomic_write_json, load_json_with_backup
 
 
 def sanitize_sound_name(name: str) -> str:
@@ -121,9 +122,8 @@ class SoundLibrary:
             self.items = []
             return self.items
 
-        try:
-            raw_items = json.loads(self.index_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        raw_items = load_json_with_backup(self.index_path, [], list)
+        if not isinstance(raw_items, list):
             self.items = []
             return self.items
 
@@ -144,17 +144,14 @@ class SoundLibrary:
         return self.items
 
     def save(self) -> None:
-        self.index_path.write_text(
-            json.dumps([asdict(item) for item in self.items], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(self.index_path, [asdict(item) for item in self.items])
 
     def load_settings(self) -> SoundDefaults:
         if not self.settings_path.exists():
             self.defaults = SoundDefaults()
             return self.defaults
         try:
-            raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            raw = load_json_with_backup(self.settings_path, {}, dict)
             self.defaults = SoundDefaults(**_dataclass_payload(SoundDefaults, raw.get("sound_defaults", {})))
             self._sanitize_defaults()
         except (OSError, json.JSONDecodeError, TypeError):
@@ -163,7 +160,7 @@ class SoundLibrary:
 
     def save_settings(self) -> None:
         data = {"sound_defaults": asdict(self.defaults)}
-        self.settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.settings_path, data)
 
     def add_file(
         self,

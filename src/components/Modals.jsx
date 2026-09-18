@@ -1451,6 +1451,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.6": `### Versão 1.3.6
+* A janela do aplicativo aparece imediatamente enquanto o sistema de áudio termina de iniciar.
+* Backend empacotado em formato mais rápido e confiável, sem extração temporária a cada abertura.
+* Configurações, perfil, soundboard, categorias, temas e lixeira agora usam escrita atômica com backup automático.
+* Arquivos corrompidos durante desligamentos são recuperados do último backup válido em vez de resetar silenciosamente.
+* A interface reconhece quando o backend reinicia e recarrega todo o estado do aplicativo.
+* Atalhos antigos do Menu Iniciar são removidos para evitar a abertura de instalações legadas.
+* Restauração do microfone ganhou fallback pelo nome do dispositivo quando o Windows altera seu identificador.`,
+
   "v1.3.5": `### Versão 1.3.5
 * Nova opção para abrir o MicFudiddo junto com o Windows, desativada por padrão.
 * A restauração do microfone acontece antes do encerramento dos streams de áudio.

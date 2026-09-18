@@ -41,6 +41,7 @@ from .soundboard import (
     render_sound_for_playback,
     resample_linear,
 )
+from .storage import atomic_write_json, load_json_with_backup
 from .windows_audio import (
     com_initialized,
     find_virtual_microphone_endpoint,
@@ -852,7 +853,11 @@ class AppState:
                 import json
                 raw = json.loads(self.saved_capture_defaults_path.read_text(encoding="utf-8"))
                 self.saved_capture_defaults = {int(k): v for k, v in raw.items()}
-                if self.saved_capture_defaults and restore_default_capture_ids(self.saved_capture_defaults):
+                restored = bool(self.saved_capture_defaults) and restore_default_capture_ids(self.saved_capture_defaults)
+                if not restored:
+                    selected_names = self.profile.get("selected_names", {})
+                    restored = self.restore_capture_by_name(str(selected_names.get("input") or ""))
+                if restored:
                     self.saved_capture_defaults_path.unlink(missing_ok=True)
                     self.saved_capture_defaults = {}
                     print("Microfone padrao restaurado apos encerramento inesperado.", flush=True)
@@ -888,16 +893,11 @@ class AppState:
         self.clipping_manager.update()
 
     def load_custom_voices(self) -> list:
-        if not self.custom_voices_path.exists():
-            return []
-        try:
-            raw = json.loads(self.custom_voices_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and "voices" in raw:
-                return raw["voices"]
-            if isinstance(raw, list):
-                return raw
-        except Exception:
-            pass
+        raw = load_json_with_backup(self.custom_voices_path, [])
+        if isinstance(raw, dict) and isinstance(raw.get("voices"), list):
+            return raw["voices"]
+        if isinstance(raw, list):
+            return raw
         return []
 
     def save_custom_voices(self) -> None:
@@ -905,7 +905,7 @@ class AppState:
             "version": "1.0",
             "voices": self.custom_voices
         }
-        self.custom_voices_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.custom_voices_path, data)
 
     def load_custom_categories(self) -> dict:
         default_cats = {
@@ -913,21 +913,16 @@ class AppState:
             "soundboard": ["Geral", "Memes", "Anime", "Jogos", "Troll", "Notificações", "Customizados", "Gravações"],
             "voices": ["Humanos", "Robôs", "Monstros", "Anime", "Jogos", "Sci-Fi", "Memes", "Customizadas"]
         }
-        if not self.custom_categories_path.exists():
-            return default_cats
-        try:
-            raw = json.loads(self.custom_categories_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                for key in ["soundboard", "voices"]:
-                    if key not in raw or not isinstance(raw[key], list):
-                        raw[key] = default_cats[key]
-                return raw
-        except Exception:
-            pass
+        raw = load_json_with_backup(self.custom_categories_path, {}, dict)
+        if isinstance(raw, dict):
+            for key in ["soundboard", "voices"]:
+                if key not in raw or not isinstance(raw[key], list):
+                    raw[key] = default_cats[key]
+            return raw
         return default_cats
 
     def save_custom_categories(self) -> None:
-        self.custom_categories_path.write_text(json.dumps(self.custom_categories, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.custom_categories_path, self.custom_categories)
 
     def load_theme_settings(self) -> dict:
         default_theme = {
@@ -943,34 +938,21 @@ class AppState:
             "darknessLevel": "normal",
             "savedThemes": []
         }
-        if not self.theme_settings_path.exists():
-            return default_theme
-        try:
-            raw = json.loads(self.theme_settings_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                theme = dict(default_theme)
-                theme.update(raw)
-                return theme
-        except Exception:
-            pass
+        raw = load_json_with_backup(self.theme_settings_path, {}, dict)
+        if isinstance(raw, dict):
+            theme = dict(default_theme)
+            theme.update(raw)
+            return theme
         return default_theme
 
     def save_theme_settings(self) -> None:
-        self.theme_settings_path.write_text(json.dumps(self.theme_settings, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.theme_settings_path, self.theme_settings)
 
     def load_trash_bin(self) -> list:
-        if not self.trash_path.exists():
-            return []
-        try:
-            raw = json.loads(self.trash_path.read_text(encoding="utf-8"))
-            if isinstance(raw, list):
-                return raw
-        except Exception:
-            pass
-        return []
+        return load_json_with_backup(self.trash_path, [], list)
 
     def save_trash_bin(self) -> None:
-        self.trash_path.write_text(json.dumps(self.trash_bin, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.trash_path, self.trash_bin)
 
     def clean_online_cache(self) -> None:
         try:
@@ -1018,22 +1000,14 @@ class AppState:
         return cover_url
 
     def load_app_settings(self) -> dict:
-        if not self.app_settings_path.exists():
-            return dict(DEFAULT_APP_SETTINGS)
-        try:
-            raw = json.loads(self.app_settings_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return dict(DEFAULT_APP_SETTINGS)
+        raw = load_json_with_backup(self.app_settings_path, {}, dict)
         settings = dict(DEFAULT_APP_SETTINGS)
         if isinstance(raw, dict):
             settings.update({key: raw[key] for key in DEFAULT_APP_SETTINGS if key in raw})
         return settings
 
     def save_app_settings(self) -> None:
-        self.app_settings_path.write_text(
-            json.dumps(self.settings, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        atomic_write_json(self.app_settings_path, self.settings)
 
     def update_settings(self, patch: dict) -> None:
         patch = dict(patch or {})
@@ -1297,12 +1271,7 @@ class AppState:
                 pass
 
     def load_profile(self) -> dict:
-        if not self.profile_path.exists():
-            return json.loads(json.dumps(DEFAULT_PROFILE))
-        try:
-            raw = json.loads(self.profile_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return json.loads(json.dumps(DEFAULT_PROFILE))
+        raw = load_json_with_backup(self.profile_path, {}, dict)
         profile = json.loads(json.dumps(DEFAULT_PROFILE))
         if isinstance(raw, dict):
             for key in DEFAULT_PROFILE:
@@ -1437,7 +1406,7 @@ class AppState:
             "voiceRecents": self.voice_recents,
             "activeVoiceId": self.active_voice_id,
         }
-        self.profile_path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(self.profile_path, self.profile)
 
     def refresh_devices(self) -> None:
         self.devices = query_audio_devices()
@@ -1728,6 +1697,33 @@ class AppState:
         self.restore_microphone_safety()
         self.virtual_mode_active = False
 
+    def restore_capture_by_name(self, preferred_name: str) -> bool:
+        preferred = str(preferred_name or "").strip().casefold()
+        if not preferred:
+            return False
+        try:
+            endpoints = list_capture_endpoints()
+        except Exception:
+            return False
+        candidates = [
+            endpoint for endpoint in endpoints
+            if "cable output" not in endpoint.name.casefold() and "vb-audio" not in endpoint.name.casefold()
+        ]
+        match = next((endpoint for endpoint in candidates if endpoint.name.casefold() == preferred), None)
+        if match is None:
+            match = next(
+                (endpoint for endpoint in candidates if preferred in endpoint.name.casefold() or endpoint.name.casefold() in preferred),
+                None,
+            )
+        if match is None:
+            return False
+        try:
+            set_default_capture_id(match.id)
+            current_defaults = get_default_capture_ids()
+            return bool(current_defaults) and all(device_id == match.id for device_id in current_defaults.values())
+        except Exception:
+            return False
+
     def restore_microphone_safety(self) -> bool:
         restore_mic = bool(self.settings.get("restoreOnDisable", True))
         default_mic = str(self.settings.get("defaultMicOnClose", "restore"))
@@ -1745,6 +1741,8 @@ class AppState:
                 except Exception as e:
                     print("Erro ao restaurar o microfone selecionado no encerramento:", e)
                     restored = restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
+            if not restored:
+                restored = self.restore_capture_by_name(self.selected_input_name)
         if restored:
             self.saved_capture_defaults = {}
             if self.saved_capture_defaults_path.exists():

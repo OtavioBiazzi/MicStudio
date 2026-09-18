@@ -468,6 +468,7 @@ function App() {
 
   const refresh = async () => {
     const res = await fetch(`${API}/api/state`);
+    if (!res.ok) throw new Error("Backend indisponível");
     applyIncomingState(await res.json());
   };
 
@@ -475,6 +476,11 @@ function App() {
     const res = await fetch(`${API}/api/runtime`);
     if (!res.ok) throw new Error("Backend indisponível");
     const data = await res.json();
+    const currentPid = stateRef.current?.diagnostics?.pid;
+    if (currentPid != null && data.diagnostics?.pid !== currentPid) {
+      await refresh();
+      return;
+    }
     const currentRevision = stateRef.current?.libraryRevision;
     if (currentRevision != null && data.libraryRevision !== currentRevision) {
       await refresh();

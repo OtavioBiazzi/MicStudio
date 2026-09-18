@@ -852,11 +852,15 @@ function cleanOldVersion() {
 
   // 2. Limpar pastas antigas do Menu Iniciar
   if (appData) {
-    const oldStartMenuFolder = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs\\MicFudiddo");
-    if (fs.existsSync(oldStartMenuFolder)) {
-      try {
-        fs.rmSync(oldStartMenuFolder, { recursive: true, force: true });
-      } catch (_) {}
+    const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
+    const oldStartMenuFolders = ["MicFudiddo", "MicFudiddo Studio"];
+    for (const folderName of oldStartMenuFolders) {
+      const oldStartMenuFolder = path.join(startMenuProgramsDir, folderName);
+      if (fs.existsSync(oldStartMenuFolder)) {
+        try {
+          fs.rmSync(oldStartMenuFolder, { recursive: true, force: true });
+        } catch (_) {}
+      }
     }
   }
 
@@ -921,10 +925,10 @@ function cleanOldVersion() {
 
 app.whenReady().then(async () => {
   cleanOldVersion();
-  await startBackend();
-  await syncLaunchAtStartupFromBackend();
   createWindow();
   createTray();
+  await startBackend();
+  await syncLaunchAtStartupFromBackend();
   startSoundHotkeys();
 }).catch((error) => {
   console.error("Falha fatal durante a inicializacao:", error);

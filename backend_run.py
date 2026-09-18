@@ -2,17 +2,27 @@ import sys
 import imageio_ffmpeg
 import yt_dlp
 
-if sys.stdout is None:
-    class DummyWriter:
-        def write(self, *args, **kwargs): pass
-        def flush(self, *args, **kwargs): pass
-    sys.stdout = DummyWriter()
 
-if sys.stderr is None:
-    class DummyWriter:
-        def write(self, *args, **kwargs): pass
-        def flush(self, *args, **kwargs): pass
-    sys.stderr = DummyWriter()
+class SafeWriter:
+    def __init__(self, stream):
+        self.stream = stream
+
+    def write(self, value):
+        try:
+            return self.stream.write(value) if self.stream is not None else 0
+        except (OSError, ValueError):
+            return 0
+
+    def flush(self):
+        try:
+            if self.stream is not None:
+                self.stream.flush()
+        except (OSError, ValueError):
+            pass
+
+
+sys.stdout = SafeWriter(sys.stdout)
+sys.stderr = SafeWriter(sys.stderr)
 
 try:
     from micfudiddo.backend import main

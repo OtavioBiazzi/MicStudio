@@ -1314,6 +1314,81 @@ class AppState:
         self.selected_monitor_name = monitor_dev.name if monitor_dev else None
         self.selected_monitor_hostapi = monitor_dev.hostapi if monitor_dev else None
 
+    def _validated_device_index(self, value, direction: str, *, allow_none: bool = False) -> int | None:
+        if value is None or value == "":
+            if allow_none:
+                return None
+            raise RuntimeError("Selecione um dispositivo de audio valido.")
+        try:
+            index = int(value)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("Dispositivo de audio invalido.") from exc
+        device = self.device_by_index(index)
+        if device is None:
+            raise RuntimeError("O dispositivo selecionado nao esta mais disponivel. Atualize a lista.")
+        if direction == "input" and device.max_input_channels <= 0:
+            raise RuntimeError("O dispositivo selecionado nao possui entrada de audio.")
+        if direction == "output" and device.max_output_channels <= 0:
+            raise RuntimeError("O dispositivo selecionado nao possui saida de audio.")
+        return index
+
+    def _restart_after_device_change(self, monitor_only: bool) -> None:
+        errors: list[str] = []
+        for delay in (0.08, 0.2, 0.4):
+            time.sleep(delay)
+            try:
+                if monitor_only:
+                    self.start_monitor_only()
+                else:
+                    self.start()
+                return
+            except Exception as exc:
+                errors.append(str(exc))
+                self.engine.stop()
+                self.monitor_only_active = False
+        raise RuntimeError(errors[-1] if errors else "Nao foi possivel reiniciar o audio.")
+
+    def change_device_selection(self, selected: dict) -> None:
+        previous = (self.selected_input, self.selected_output, self.selected_monitor)
+        next_input, next_output, next_monitor = previous
+        if "input" in selected:
+            next_input = self._validated_device_index(selected.get("input"), "input")
+        if "output" in selected:
+            next_output = self._validated_device_index(selected.get("output"), "output")
+        if "monitor" in selected:
+            next_monitor = self._validated_device_index(selected.get("monitor"), "output", allow_none=True)
+        next_selection = (next_input, next_output, next_monitor)
+        if next_selection == previous:
+            return
+
+        was_running = self.engine.running
+        was_monitor_only = self.monitor_only_active
+        if was_running:
+            self.stop()
+
+        self.selected_input, self.selected_output, self.selected_monitor = next_selection
+        self.update_device_names()
+        try:
+            if was_running:
+                self._restart_after_device_change(was_monitor_only)
+        except Exception as switch_error:
+            self.engine.stop()
+            self.monitor_only_active = False
+            self.selected_input, self.selected_output, self.selected_monitor = previous
+            self.update_device_names()
+            rollback_error = None
+            try:
+                self._restart_after_device_change(was_monitor_only)
+            except Exception as exc:
+                rollback_error = exc
+            if rollback_error is not None:
+                self.status = f"Falha ao trocar e restaurar o dispositivo: {rollback_error}"
+            else:
+                self.status = "Troca cancelada; dispositivo anterior restaurado."
+            raise RuntimeError(f"Nao foi possivel usar o dispositivo selecionado: {switch_error}") from switch_error
+
+        self.save_profile()
+
     def apply_profile(self) -> None:
         self.gain = max(0.0, float(self.profile.get("gain", 1.0)))
         self.pitch = float(self.profile.get("pitch", 0.0))
@@ -2422,7 +2497,7 @@ def _sanitize_color(value) -> str:
     return "#25a7f2"
 
 
-STATE = None if "--youtube-worker" in sys.argv else AppState()
+STATE = None
 
 
 def emergency_restore_microphone() -> None:
@@ -2582,28 +2657,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/api/selection":
             selected = data.get("selected", data)
-            was_running = STATE.engine.running
-            was_monitor_only = STATE.monitor_only_active
-            if was_running or was_monitor_only:
-                STATE.stop()
-            if "input" in selected:
-                STATE.selected_input = _optional_int(selected.get("input"), STATE.selected_input)
-            if "output" in selected:
-                STATE.selected_output = _optional_int(selected.get("output"), STATE.selected_output)
-            if "monitor" in selected:
-                STATE.selected_monitor = _optional_int(selected.get("monitor"), STATE.selected_monitor)
-            STATE.update_device_names()
-            STATE.save_profile()
-            if was_running:
-                try:
-                    STATE.start()
-                except Exception as e:
-                    STATE.status = f"Erro ao reiniciar: {e}"
-            elif was_monitor_only:
-                try:
-                    STATE.start_monitor_only()
-                except Exception as e:
-                    STATE.status = f"Erro ao reiniciar monitoramento: {e}"
+            STATE.change_device_selection(selected)
             return None
         if path == "/api/controls":
             controls = data.get("controls", data)

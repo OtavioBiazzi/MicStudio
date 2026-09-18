@@ -104,9 +104,26 @@ export function ConfigPage({
 }) {
   const [tab, setTab] = useState("audio");
   const [recordDevicesExpanded, setRecordDevicesExpanded] = useState(false);
+  const [deviceChanging, setDeviceChanging] = useState("");
 
   const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
   const storageLimitMB = Number(state.settings?.maxSoundboardStorage ?? 0);
+
+  const changeDevice = async (kind, value) => {
+    if (deviceChanging) return;
+    setDeviceChanging(kind);
+    try {
+      const next = await call("/api/selection", { [kind]: value });
+      const devices = kind === "input" ? next.devices?.inputs : next.devices?.outputs;
+      const selectedDevice = (devices || []).find((device) => device.index === value);
+      setToast(`${selectedDevice?.name || "Dispositivo"} conectado!`);
+    } catch (error) {
+      setToast(`Não foi possível trocar o dispositivo: ${error.message}`);
+      await call("/api/devices/refresh").catch(() => {});
+    } finally {
+      setDeviceChanging("");
+    }
+  };
 
   const resetTabSettings = async (tabName) => {
     const tabNamesMap = {
@@ -298,20 +315,23 @@ export function ConfigPage({
                     label="Microfone (Dispositivo de Entrada)"
                     value={state.selected?.input}
                     items={state.devices?.inputs || []}
-                    onChange={(v) => call("/api/selection", { input: v })}
+                    onChange={(v) => changeDevice("input", v)}
+                    disabled={Boolean(deviceChanging)}
                   />
                   <SelectField
                     label="Cabo Virtual (VB-CABLE / Saída de Áudio)"
                     value={state.selected?.output}
                     items={state.devices?.outputs || []}
-                    onChange={(v) => call("/api/selection", { output: v })}
+                    onChange={(v) => changeDevice("output", v)}
+                    disabled={Boolean(deviceChanging)}
                   />
                   <SelectField
                     label="Fone de Ouvido / Auto-falante (Para você se ouvir / Monitoramento)"
                     value={state.selected?.monitor}
                     items={state.devices?.outputs || []}
-                    onChange={(v) => call("/api/selection", { monitor: v })}
+                    onChange={(v) => changeDevice("monitor", v)}
                     allowNone
+                    disabled={Boolean(deviceChanging)}
                   />
                 </div>
 
@@ -1338,11 +1358,11 @@ export function StatusLine({ label, value, active }) {
 }
 
 // --- SelectField ---
-export function SelectField({ label, value, items, onChange, allowNone }) {
+export function SelectField({ label, value, items, onChange, allowNone, disabled = false }) {
   return (
     <div className="selectField">
       <label>{label}</label>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}>
+      <select disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}>
         {allowNone && <option value="">Nenhum</option>}
         {(items || []).map((item) => (
           <option key={item.index} value={item.index}>{item.name}</option>

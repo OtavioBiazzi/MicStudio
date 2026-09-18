@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.8": `### Versão 1.3.8
+* Trocas de microfone, cabo virtual e fone passam a valer imediatamente, sem reiniciar o aplicativo.
+* O Windows recebe novas tentativas curtas para liberar a saída anterior antes de abrir o dispositivo escolhido.
+* Uma escolha só é salva depois que o novo stream de áudio abre com sucesso.
+* Em caso de falha, o aplicativo restaura automaticamente o dispositivo anterior e informa o erro na tela.
+* Corrigida a inicialização indevida do estado de áudio ao apenas importar o módulo do backend.`,
+
   "v1.3.7": `### Versão 1.3.7
 * Removido o corte fixo que encerrava sons após 6 minutos.
 * Áudios longos comuns agora são reproduzidos em fluxo diretamente do disco, mantendo o uso de memória controlado.

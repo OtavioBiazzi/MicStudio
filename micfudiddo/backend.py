@@ -34,6 +34,7 @@ from .recording import MultiDeviceRecorder, query_record_devices
 from .soundboard import (
     SoundDefaults,
     SoundLibrary,
+    StreamingAudioSource,
     audio_duration_seconds,
     image_data_url,
     load_audio_mono,
@@ -2065,26 +2066,37 @@ class AppState:
         elif mode == "restart":
             self.engine.stop_sound(sound_id=item.id)
 
-        source = self.load_sound_source(item)
         max_vol = float(self.settings.get("maxSoundVolume", "1.0"))
         effective_volume = min(float(item.volume), max_vol)
-        rendered = render_sound_for_playback(
-            source,
-            effective_volume,
-            item.pitch_semitones,
-            item.repeats,
-            pitch_mode=item.pitch_mode,
-            speed=item.speed,
-            normalize=item.normalize,
-            fade_in_ms=item.fade_in_ms,
-            fade_out_ms=item.fade_out_ms,
-            sample_rate=self.engine.sample_rate,
+        duration = self.cached_audio_duration(item.path)
+        can_stream = (
+            duration > 6 * 60
+            and abs(float(item.pitch_semitones)) < 0.0001
+            and int(item.repeats) == 1
+            and not item.normalize
+            and float(item.fade_in_ms) <= 0.0
+            and float(item.fade_out_ms) <= 0.0
         )
-        max_playback_frames = max(1, int(self.engine.sample_rate * 60 * 6))
-        if rendered.size > max_playback_frames:
-            rendered = rendered[:max_playback_frames].copy()
-            with self.lock:
-                self.status = "Áudio limitado a 6 minutos para proteger a memória do sistema."
+        if can_stream:
+            rendered = StreamingAudioSource(item.path, self.engine.sample_rate)
+            playback_volume = effective_volume
+            playback_speed = item.speed
+        else:
+            source = self.load_sound_source(item)
+            rendered = render_sound_for_playback(
+                source,
+                effective_volume,
+                item.pitch_semitones,
+                item.repeats,
+                pitch_mode=item.pitch_mode,
+                speed=item.speed,
+                normalize=item.normalize,
+                fade_in_ms=item.fade_in_ms,
+                fade_out_ms=item.fade_out_ms,
+                sample_rate=self.engine.sample_rate,
+            )
+            playback_volume = effective_volume
+            playback_speed = item.speed
         replace = bool(item.stop_other_sounds or not self.settings.get("allowMultipleSounds", False))
         if mode == "overlap":
             replace = False
@@ -2099,8 +2111,8 @@ class AppState:
             start_seconds=start_seconds,
             loop=loop,
             output_route=item.output_route,
-            initial_volume=effective_volume,
-            initial_speed=item.speed,
+            initial_volume=playback_volume,
+            initial_speed=playback_speed,
         )
         with self.lock:
             self.library.record_play(item.id)

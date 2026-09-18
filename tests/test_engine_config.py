@@ -1,9 +1,13 @@
 import unittest
 
 import numpy as np
+import soundfile as sf
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from micfudiddo.devices import AudioDevice, sample_rate_candidates
 from micfudiddo.engine import AudioEngine, block_size_candidates, input_channel_count
+from micfudiddo.soundboard import StreamingAudioSource
 
 
 def device(inputs=1, samplerate=48000):
@@ -45,6 +49,31 @@ class EngineConfigTests(unittest.TestCase):
         samples = np.ones(32, dtype=np.float32)
         engine.play_sound(samples, sound_id="preview", initial_volume=0.0)
         self.assertEqual(engine.player_states()[0]["volume"], 0.0)
+
+    def test_streaming_playback_can_exceed_six_minutes(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "long.wav"
+            sample_rate = 10
+            sf.write(path, np.ones(sample_rate * 361, dtype=np.float32) * 0.25, sample_rate)
+            source = StreamingAudioSource(str(path), sample_rate)
+            engine = AudioEngine()
+            engine._sample_rate = sample_rate
+            playback_id = engine.play_sound(source, sound_id="long")
+
+            state = engine.player_states()[0]
+            self.assertGreater(state["duration"], 360.0)
+            engine.seek_sound(360.0, playback_id=playback_id)
+            mixed, _local, _blocked = engine._read_soundboard_mix(5)
+            self.assertTrue(np.all(mixed > 0.0))
+            engine.stop_sounds()
+
+            loop_source = StreamingAudioSource(str(path), sample_rate)
+            loop_id = engine.play_sound(loop_source, sound_id="long-loop", loop=True, initial_speed=2.0)
+            engine.seek_sound(360.8, playback_id=loop_id)
+            looped, _local, _blocked = engine._read_soundboard_mix(5)
+            self.assertTrue(np.all(looped > 0.0))
+            self.assertLess(engine.player_states()[0]["current"], 1.0)
+            engine.stop_sounds()
 
 
 if __name__ == "__main__":

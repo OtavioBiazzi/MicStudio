@@ -170,7 +170,7 @@ class _SplitPrimaryStreams:
 
 @dataclass
 class _Playback:
-    samples: np.ndarray
+    samples: object
     playback_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     sound_id: str = ""
     name: str = ""
@@ -296,7 +296,7 @@ class AudioEngine:
 
     def play_sound(
         self,
-        samples: np.ndarray,
+        samples,
         block_voice: bool = False,
         mute_others: bool = False,
         sound_id: str = "",
@@ -308,11 +308,15 @@ class AudioEngine:
         initial_volume: float = 1.0,
         initial_speed: float = 1.0,
     ) -> str:
-        block = np.asarray(samples, dtype=np.float32).reshape(-1)
+        if getattr(samples, "is_streaming_audio", False):
+            block = samples
+        else:
+            block = np.asarray(samples, dtype=np.float32).reshape(-1)
         if block.size == 0:
+            self._close_playback_samples(block)
             return ""
         playback = _Playback(
-            block if block.flags.c_contiguous else np.ascontiguousarray(block),
+            block if getattr(block, "is_streaming_audio", False) or block.flags.c_contiguous else np.ascontiguousarray(block),
             sound_id=str(sound_id),
             name=str(name),
             block_voice=bool(block_voice),
@@ -326,26 +330,44 @@ class AudioEngine:
         playback.position = start_frame % playback.samples.size if playback.loop else min(start_frame, float(playback.samples.size))
         with self._playback_lock:
             if replace:
+                for current in self._playbacks:
+                    self._close_playback_samples(current.samples)
                 self._playbacks.clear()
             elif len(self._playbacks) >= 16:
+                for current in self._playbacks[:-15]:
+                    self._close_playback_samples(current.samples)
                 self._playbacks = self._playbacks[-15:]
             self._playbacks.append(playback)
         return playback.playback_id
 
+    @staticmethod
+    def _close_playback_samples(samples) -> None:
+        close = getattr(samples, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+
     def stop_sounds(self) -> None:
         with self._playback_lock:
+            for playback in self._playbacks:
+                self._close_playback_samples(playback.samples)
             self._playbacks.clear()
 
     def stop_sound(self, sound_id: str = "", playback_id: str = "") -> int:
         sound_id = str(sound_id or "")
         playback_id = str(playback_id or "")
         with self._playback_lock:
+            kept = []
+            for item in self._playbacks:
+                matched = (sound_id and item.sound_id == sound_id) or (playback_id and item.playback_id == playback_id)
+                if matched:
+                    self._close_playback_samples(item.samples)
+                else:
+                    kept.append(item)
             before = len(self._playbacks)
-            self._playbacks = [
-                item
-                for item in self._playbacks
-                if not ((sound_id and item.sound_id == sound_id) or (playback_id and item.playback_id == playback_id))
-            ]
+            self._playbacks = kept
             return before - len(self._playbacks)
 
     def pause_sounds(self) -> None:
@@ -987,6 +1009,8 @@ class AudioEngine:
                     priority_active = priority_active or bool(playback.mute_others)
                 if playback.loop or playback.position < playback.samples.size:
                     remaining.append(playback)
+                else:
+                    self._close_playback_samples(playback.samples)
             self._playbacks = remaining
         if priority_active:
             return virtual_priority_mix, local_priority_mix, block_voice

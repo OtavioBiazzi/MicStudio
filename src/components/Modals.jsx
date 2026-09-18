@@ -1451,6 +1451,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.7": `### Versão 1.3.7
+* Removido o corte fixo que encerrava sons após 6 minutos.
+* Áudios longos comuns agora são reproduzidos em fluxo diretamente do disco, mantendo o uso de memória controlado.
+* Reprodução longa suporta busca, pausa, loop e ajuste de velocidade durante o play.`,
+
   "v1.3.6": `### Versão 1.3.6
 * A janela do aplicativo aparece imediatamente enquanto o sistema de áudio termina de iniciar.
 * Backend empacotado em formato mais rápido e confiável, sem extração temporária a cada abertura.

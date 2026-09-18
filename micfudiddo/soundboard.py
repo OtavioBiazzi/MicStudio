@@ -7,6 +7,7 @@ import mimetypes
 from pathlib import Path
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 
@@ -47,6 +48,73 @@ SUPPORTED_AUDIO_TYPES = (
     ("Audio e video curto", "*.wav *.flac *.ogg *.aiff *.aif *.mp3 *.m4a *.aac *.opus *.wma *.mp4 *.mov *.mkv *.webm"),
     ("Todos os arquivos", "*.*"),
 )
+
+
+class StreamingAudioSource:
+    """Random-access mono audio reader that keeps long files off the heap."""
+
+    is_streaming_audio = True
+
+    def __init__(self, path: str, target_sample_rate: int) -> None:
+        try:
+            import soundfile as sf
+        except Exception as exc:  # pragma: no cover - depends on user environment
+            raise RuntimeError("A biblioteca soundfile nao esta instalada.") from exc
+
+        self._file = sf.SoundFile(str(path), mode="r")
+        self._lock = threading.Lock()
+        self._source_rate = max(1, int(self._file.samplerate))
+        self._target_rate = max(1, int(target_sample_rate))
+        self._source_frames = max(0, int(len(self._file)))
+        self.size = max(0, int(round(self._source_frames * self._target_rate / self._source_rate)))
+
+    def close(self) -> None:
+        with self._lock:
+            if not self._file.closed:
+                self._file.close()
+
+    def __getitem__(self, key):
+        scalar = isinstance(key, (int, np.integer))
+        if scalar:
+            positions = np.asarray([int(key)], dtype=np.float64)
+        elif isinstance(key, slice):
+            start, stop, step = key.indices(self.size)
+            positions = np.arange(start, stop, step, dtype=np.float64)
+        else:
+            positions = np.asarray(key, dtype=np.float64).reshape(-1)
+
+        if positions.size == 0:
+            result = np.zeros(0, dtype=np.float32)
+        else:
+            result = self._read_target_positions(positions)
+        return np.float32(result[0]) if scalar else result
+
+    def _read_target_positions(self, target_positions: np.ndarray) -> np.ndarray:
+        wraps = np.flatnonzero(np.diff(target_positions) < 0) + 1
+        if wraps.size:
+            return np.concatenate(
+                [self._read_target_positions(part) for part in np.split(target_positions, wraps) if part.size]
+            ).astype(np.float32, copy=False)
+
+        source_positions = target_positions * (self._source_rate / self._target_rate)
+        first = max(0, int(np.floor(float(np.min(source_positions)))))
+        last = min(self._source_frames, int(np.ceil(float(np.max(source_positions)))) + 2)
+        if last <= first:
+            return np.zeros(target_positions.size, dtype=np.float32)
+
+        with self._lock:
+            if self._file.closed:
+                return np.zeros(target_positions.size, dtype=np.float32)
+            self._file.seek(first)
+            data = self._file.read(last - first, dtype="float32", always_2d=True)
+        if data.size == 0:
+            return np.zeros(target_positions.size, dtype=np.float32)
+
+        mono = data.mean(axis=1).astype(np.float32, copy=False)
+        local_positions = np.clip(source_positions - first, 0.0, max(0.0, mono.size - 1.0))
+        if mono.size == 1:
+            return np.full(target_positions.size, mono[0], dtype=np.float32)
+        return np.interp(local_positions, np.arange(mono.size), mono).astype(np.float32)
 
 
 @dataclass

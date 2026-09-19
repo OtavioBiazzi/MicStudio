@@ -80,7 +80,7 @@ function pingHealth(port) {
       res.on("end", () => {
         try {
           const parsed = JSON.parse(body);
-          resolve(parsed && parsed.ok === true);
+          resolve(parsed && parsed.ok === true && parsed.ready !== false);
         } catch (_) {
           resolve(false);
         }
@@ -201,7 +201,7 @@ async function startBackend() {
     });
   }
 
-  const healthy = await waitForBackendHealth(port, isDev ? 15000 : 45000);
+  const healthy = await waitForBackendHealth(port, isDev ? 30000 : 90000);
   if (!healthy) {
     const logExcerpt = readLogExcerpt(logFile);
     dialog.showErrorBox(
@@ -930,10 +930,10 @@ function cleanOldVersion() {
 
 app.whenReady().then(async () => {
   cleanOldVersion();
-  createWindow();
-  createTray();
   await startBackend();
   await syncLaunchAtStartupFromBackend();
+  createWindow();
+  createTray();
   startSoundHotkeys();
 }).catch((error) => {
   console.error("Falha fatal durante a inicializacao:", error);

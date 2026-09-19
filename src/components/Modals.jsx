@@ -1451,6 +1451,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.10": `### Versão 1.3.10
+* Corrigido o carregamento parcial da interface durante a preparação do backend.
+* A janela só é exibida depois que o estado de áudio está pronto para uso.
+* A espera de inicialização agora diferencia backend respondendo de backend pronto.
+* O tempo máximo de preparação foi ampliado para evitar falsos erros em computadores mais lentos.`,
+
   "v1.3.9": `### Versão 1.3.9
 * Corrigido o alerta falso de backend indisponível durante a inicialização.
 * A porta de saúde responde imediatamente enquanto os dispositivos de áudio são preparados.

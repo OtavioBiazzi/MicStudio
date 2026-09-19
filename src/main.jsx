@@ -712,11 +712,19 @@ function App() {
 
     runRefresh();
     
-    const timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(async () => {
+      if (!active || stateRef.current) return;
+      try {
+        const health = await fetch(`${API}/api/health`);
+        const details = await health.json().catch(() => ({}));
+        if (health.ok && details?.ok) return;
+      } catch {
+        // Show the boot error only when the backend itself is unreachable.
+      }
       if (active && !stateRef.current) {
         setBootError("Não foi possível conectar ao backend. Verifique se outra instância do MicFudiddo está em execução ou se há um conflito de porta (38717).");
       }
-    }, 20000);
+    }, 60000);
 
     return () => {
       active = false;

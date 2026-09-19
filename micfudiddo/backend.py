@@ -2550,6 +2550,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         try:
             path = urlparse(self.path).path
+            if path == "/api/health":
+                self._json({"ok": True, "ready": STATE is not None, "time": time.time()})
+                return
+            if STATE is None:
+                self._json({"error": "Backend inicializando", "initializing": True}, 503)
+                return
             if path == "/api/state":
                 with STATE.lock:
                     self._json(STATE.snapshot())
@@ -2577,9 +2583,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._cors()
                 self.end_headers()
                 self.wfile.write(body)
-                return
-            if path == "/api/health":
-                self._json({"ok": True, "time": time.time()})
                 return
             if path == "/api/level":
                 self._json({"level": STATE.engine.last_level if STATE.engine else 0.0})
@@ -2624,6 +2627,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             data = self._read_json()
+            if STATE is None:
+                self._json({"error": "Backend inicializando", "initializing": True}, 503)
+                return
             # If the path is a slow audio rendering path, run it without holding the global STATE.lock
             # to prevent blocking other HTTP requests (like /api/state polling) during loading & DSP.
             slow_paths = {
@@ -3892,25 +3898,26 @@ def main() -> None:
     if args.youtube_worker:
         raise SystemExit(run_youtube_download_worker(args.youtube_worker))
 
-    if STATE is None:
-        STATE = AppState()
-    STATE.api_port = args.port
-
-    install_microphone_safety_handlers()
-
-    import threading
     watched_parent_pid = args.parent_pid or os.getppid()
-    threading.Thread(target=watch_parent_process, args=(watched_parent_pid,), daemon=True).start()
-
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True, name="micfudiddo-http")
+    server_thread.start()
     print(f"MicFudiddo backend listening on http://{args.host}:{args.port}", flush=True)
     try:
-        server.serve_forever()
+        # Keep health available while Windows audio/device enumeration finishes.
+        threading.Thread(target=watch_parent_process, args=(watched_parent_pid,), daemon=True).start()
+        install_microphone_safety_handlers()
+        STATE = AppState()
+        STATE.api_port = args.port
+        while server_thread.is_alive():
+            server_thread.join(timeout=0.5)
     finally:
         try:
+            server.shutdown()
             server.server_close()
-            STATE.shutdown_resources()
+            if STATE is not None:
+                STATE.shutdown_resources()
         finally:
             sys.stdout.flush()
             sys.stderr.flush()

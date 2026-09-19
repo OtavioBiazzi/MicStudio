@@ -266,12 +266,17 @@ function setLaunchAtStartup(enabled) {
 
 async function syncLaunchAtStartupFromBackend() {
   if (isDev) return;
-  try {
-    const response = await fetch(`${API}/api/runtime`);
-    if (!response.ok) return;
-    const state = await response.json();
-    setLaunchAtStartup(Boolean(state?.settings?.launchAtStartup));
-  } catch (_) {}
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const response = await fetch(`${API}/api/runtime`);
+      if (response.ok) {
+        const state = await response.json();
+        setLaunchAtStartup(Boolean(state?.settings?.launchAtStartup));
+        return;
+      }
+    } catch (_) {}
+    await sleep(250);
+  }
 }
 
 

@@ -1451,6 +1451,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.9": `### Versão 1.3.9
+* Corrigido o alerta falso de backend indisponível durante a inicialização.
+* A porta de saúde responde imediatamente enquanto os dispositivos de áudio são preparados.
+* A interface aguarda o estado pronto sem tratar essa preparação como conflito de porta.
+* A sincronização de iniciar com o Windows agora espera o backend terminar de carregar.
+* O estado de áudio não é mais inicializado antes do servidor começar a responder.`,
+
   "v1.3.8": `### Versão 1.3.8
 * Trocas de microfone, cabo virtual e fone passam a valer imediatamente, sem reiniciar o aplicativo.
 * O Windows recebe novas tentativas curtas para liberar a saída anterior antes de abrir o dispositivo escolhido.

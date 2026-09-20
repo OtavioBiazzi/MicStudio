@@ -1451,6 +1451,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.3.11": `### Versão 1.3.11
+* Corrigida a falha fatal incorreta quando o backend demora para preparar o áudio.
+* O aplicativo permanece na tela de carregamento e se recupera automaticamente quando o backend fica pronto.
+* Inicializações lentas não fecham mais o aplicativo nem exibem alerta de antivírus sem evidência.
+* Os logs agora registram o executável, PID, criação, encerramento e estado real do backend.`,
+
   "v1.3.10": `### Versão 1.3.10
 * Corrigido o carregamento parcial da interface durante a preparação do backend.
 * A janela só é exibida depois que o estado de áudio está pronto para uso.

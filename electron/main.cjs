@@ -66,7 +66,7 @@ function checkPortOccupied(port) {
   });
 }
 
-function pingHealth(port) {
+function pingHealth(port, requireReady = true) {
   return new Promise((resolve) => {
     const req = http.request({
       host: "127.0.0.1",
@@ -80,7 +80,7 @@ function pingHealth(port) {
       res.on("end", () => {
         try {
           const parsed = JSON.parse(body);
-          resolve(parsed && parsed.ok === true && parsed.ready !== false);
+          resolve(Boolean(parsed && parsed.ok === true && (!requireReady || parsed.ready !== false)));
         } catch (_) {
           resolve(false);
         }
@@ -131,7 +131,7 @@ async function startBackend() {
   const port = 38717;
   const occupied = await checkPortOccupied(port);
   if (occupied) {
-    const healthy = await pingHealth(port);
+    const healthy = await pingHealth(port, false);
     if (healthy) {
       console.log("Backend órfão detectado. Encerrando antes de iniciar uma instância própria...");
       try {
@@ -171,14 +171,18 @@ async function startBackend() {
   const logStream = fs.createWriteStream(logFile, { flags: "a" });
   logStream.write(`\n--- sessão ${new Date().toISOString()} ---\n`);
   const backendArgs = ["--port", "38717", "--parent-pid", String(process.pid)];
+  const backendExecutable = isDev
+    ? pythonPath()
+    : path.join(process.resourcesPath, "backend", "MicFudiddoBackend.exe");
+  logStream.write(`[electron] iniciando backend: ${backendExecutable}\n`);
 
   if (isDev) {
-    backend = spawn(pythonPath(), ["-m", "micfudiddo.backend", ...backendArgs], {
+    backend = spawn(backendExecutable, ["-m", "micfudiddo.backend", ...backendArgs], {
       cwd: ROOT,
       windowsHide: true
     });
   } else {
-    backend = spawn(path.join(process.resourcesPath, "backend", "MicFudiddoBackend.exe"), backendArgs, {
+    backend = spawn(backendExecutable, backendArgs, {
       windowsHide: true
     });
   }
@@ -186,10 +190,15 @@ async function startBackend() {
   if (backend) {
     backend.stdout.pipe(logStream);
     backend.stderr.pipe(logStream);
+    backend.on("spawn", () => {
+      logStream.write(`[electron] processo criado: pid=${backend?.pid || "desconhecido"}\n`);
+    });
     backend.on("error", (err) => {
+      logStream.write(`[electron] falha ao criar processo: ${err?.stack || err}\n`);
       console.error("Erro ao iniciar o backend:", err);
     });
     backend.on("exit", (code) => {
+      logStream.write(`[electron] backend encerrado: codigo=${code}\n`);
       if (code !== 0 && !quitting) {
         const logExcerpt = readLogExcerpt(logFile);
         
@@ -201,16 +210,16 @@ async function startBackend() {
     });
   }
 
-  const healthy = await waitForBackendHealth(port, isDev ? 30000 : 90000);
+  const healthy = await waitForBackendHealth(port, isDev ? 15000 : 30000);
   if (!healthy) {
-    const logExcerpt = readLogExcerpt(logFile);
-    dialog.showErrorBox(
-      "Falha ao Iniciar o Backend",
-      `O servidor de audio demorou para responder na porta ${port}.\n\nLogs recentes:\n${logExcerpt || "Sem logs disponiveis."}\n\nTente abrir novamente ou verifique se o antivirus bloqueou o backend.`
+    const processAlive = Boolean(backend && backend.exitCode === null && !backend.killed);
+    const serverResponding = await pingHealth(port, false);
+    logStream.write(
+      `[electron] preparacao continua em segundo plano: processoAtivo=${processAlive} servidorRespondendo=${serverResponding}\n`
     );
-    app.quit();
-    process.exit(1);
+    console.warn("Backend ainda preparando; a interface continuará aguardando em segundo plano.");
   }
+  return healthy;
 }
 async function stopBackend() {
   stopSoundHotkeys();
@@ -266,7 +275,7 @@ function setLaunchAtStartup(enabled) {
 
 async function syncLaunchAtStartupFromBackend() {
   if (isDev) return;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
       const response = await fetch(`${API}/api/runtime`);
       if (response.ok) {
@@ -275,7 +284,7 @@ async function syncLaunchAtStartupFromBackend() {
         return;
       }
     } catch (_) {}
-    await sleep(250);
+    await sleep(500);
   }
 }
 
@@ -930,10 +939,12 @@ function cleanOldVersion() {
 
 app.whenReady().then(async () => {
   cleanOldVersion();
-  await startBackend();
-  await syncLaunchAtStartupFromBackend();
   createWindow();
   createTray();
+  await startBackend();
+  syncLaunchAtStartupFromBackend().catch((error) => {
+    console.error("Falha ao sincronizar inicializacao com o Windows:", error);
+  });
   startSoundHotkeys();
 }).catch((error) => {
   console.error("Falha fatal durante a inicializacao:", error);

@@ -11,12 +11,15 @@ import {
   isVoicePresetActive,
   ErrorBoundary
 } from "./utils";
+import { effectDefaults } from "./utils";
+import { restoreVoiceEdits, voiceEditSnapshot } from "./voiceState";
 
 // Voice Presets
 import { voicePresets } from "./voicePresets";
 
 // API Client
 import { API } from "./apiClient";
+import packageMetadata from "../package.json";
 
 const TTS_CHARACTER_LIMIT = 10000;
 
@@ -99,6 +102,10 @@ function App() {
   const controlsOptimisticRef = useRef(null);
   const lastYoutubeStatusRef = useRef("");
   const controlsTimerRef = useRef(null);
+  const controlsFlushRef = useRef(null);
+  const controlsQueueRef = useRef(Promise.resolve());
+  const controlsRevisionRef = useRef(0);
+  const controlsPendingResetRef = useRef(false);
   const latestControlsRef = useRef(null);
   const stateRef = useRef(state);
   const categoriesHydratedRef = useRef(false);
@@ -193,7 +200,7 @@ function App() {
     try { return JSON.parse(localStorage.getItem("micfudiddo.soundboardFavorites") || "[]"); } catch { return []; }
   });
 
-  const [appVersion, setAppVersion] = useState("v0.5.2");
+  const [appVersion, setAppVersion] = useState(`v${packageMetadata.version}`);
   const [updateAvailable, setUpdateAvailable] = useState(null);
   const [showReleasesModal, setShowReleasesModal] = useState(false);
 
@@ -426,6 +433,12 @@ function App() {
       }
       if (!prev) return normalizedData;
       const nextState = { ...prev, ...normalizedData };
+      if (data.controlsRevision != null && prev.controlsRevision > data.controlsRevision &&
+          prev.diagnostics?.pid === data.diagnostics?.pid) {
+        nextState.controls = prev.controls;
+        nextState.activeVoiceId = prev.activeVoiceId;
+        nextState.controlsRevision = prev.controlsRevision;
+      }
       if (optimistic && Date.now() < optimistic.until && nextState.controls) {
         nextState.controls = { ...nextState.controls, ...optimistic.controls };
       } else {
@@ -437,6 +450,10 @@ function App() {
   };
 
   const call = async (path, body = {}) => {
+    if (path === "/api/glitch/trigger") {
+      controlsFlushRef.current?.();
+      await controlsQueueRef.current;
+    }
     const res = await fetch(`${API}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -494,12 +511,16 @@ function App() {
     [state, selectedSound]
   );
 
-  const updateControls = (patch, { persistVoiceId = forcedPresetId } = {}) => {
+  const updateControls = (patch, { persistVoiceId = forcedPresetId || stateRef.current?.activeVoiceId, persist = true, resetVoice = false } = {}) => {
+    if (resetVoice) controlsPendingResetRef.current = true;
     const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
-    const controls = { ...currentControls, ...patch };
-    controlsOptimisticRef.current = { controls, until: Date.now() + 1200 };
+    const editingVoice = persist && ["gain", "pitch", "effects"].some((key) => key in patch);
+    const controls = { ...currentControls, ...(currentControls.voiceBypassed && editingVoice ? savedCustomControls || {} : {}), ...patch };
+    if (editingVoice && !("voiceBypassed" in patch)) controls.voiceBypassed = false;
+    const revision = ++controlsRevisionRef.current;
+    controlsOptimisticRef.current = { controls, until: Infinity };
     latestControlsRef.current = controls;
-    setState((currentState) => ({ ...currentState, controls }));
+    setState((currentState) => ({ ...currentState, controls, activeVoiceId: persistVoiceId || currentState?.activeVoiceId }));
 
     // Se mudou algum controle não-limpo enquanto em bypassActive, desativa o bypass
     const isCurrentlyClean = Math.abs(Number(controls.pitch ?? 0)) < 0.05 && 
@@ -509,24 +530,21 @@ function App() {
     }
 
     // Salvar configurações de Voz Personalizada se ativo
-    if (persistVoiceId === "personalizado") {
+    const editsVoice = persist && !controls.voiceBypassed && ["gain", "pitch", "effects"].some((key) => key in patch);
+    if (editsVoice && persistVoiceId === "personalizado") {
       localStorage.setItem("personalizado_settings", JSON.stringify({
         gain: controls.gain,
         pitch: controls.pitch,
         effects: controls.effects
       }));
     } else if (
-      persistVoiceId &&
+      editsVoice && persistVoiceId &&
       persistVoiceId !== "clean" &&
       stateRef.current?.settings?.voiceEditPersistence !== "reset"
     ) {
       try {
         const savedVoiceEdits = JSON.parse(localStorage.getItem("micfudiddo.voiceEdits") || "{}");
-        savedVoiceEdits[persistVoiceId] = {
-          gain: controls.gain,
-          pitch: controls.pitch,
-          effects: controls.effects
-        };
+        savedVoiceEdits[persistVoiceId] = voiceEditSnapshot(controls);
         localStorage.setItem("micfudiddo.voiceEdits", JSON.stringify(savedVoiceEdits));
       } catch {
         // Storage failures must not interrupt real-time audio controls.
@@ -535,13 +553,34 @@ function App() {
 
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     
-    controlsTimerRef.current = setTimeout(() => {
+    const sendControls = () => {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
+      controlsFlushRef.current = null;
       const controlsToSend = latestControlsRef.current;
-      call("/api/controls", { controls: controlsToSend }).catch((e) => {
-        controlsOptimisticRef.current = null;
+      controlsQueueRef.current = controlsQueueRef.current.catch(() => {}).then(async () => {
+        if (revision !== controlsRevisionRef.current) return;
+        const resetVoice = controlsPendingResetRef.current;
+        controlsPendingResetRef.current = false;
+        const response = await fetch(`${API}/api/controls`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({ controls: controlsToSend, activeVoiceId: persistVoiceId,
+            voiceBypassed: controlsToSend.voiceBypassed ?? false, resetVoice })
+        });
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error || "Erro no backend");
+        if (revision === controlsRevisionRef.current) {
+          controlsOptimisticRef.current = null;
+          applyIncomingState(data);
+        }
+      }).catch((e) => {
+        if (revision === controlsRevisionRef.current) controlsOptimisticRef.current = null;
         setToast(e.message);
       });
-    }, 60);
+    };
+    controlsFlushRef.current = sendControls;
+    controlsTimerRef.current = setTimeout(sendControls, 60);
   };
 
   const toggleMute = () => {
@@ -552,7 +591,8 @@ function App() {
 
   const updateEffects = (patch) => {
     const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
-    updateControls({ effects: { ...(currentControls.effects || {}), ...patch } });
+    const baseEffects = currentControls.voiceBypassed ? savedCustomControls?.effects || currentControls.effects : currentControls.effects;
+    updateControls({ effects: { ...(baseEffects || {}), ...patch } });
   };
 
   const applyVoicePreset = (voice, { resetSaved = false } = {}) => {
@@ -594,13 +634,7 @@ function App() {
             delete savedVoiceEdits[voice.id];
             localStorage.setItem("micfudiddo.voiceEdits", JSON.stringify(savedVoiceEdits));
           } else if (stateRef.current?.settings?.voiceEditPersistence !== "reset" && savedVoiceEdits[voice.id]) {
-            const saved = savedVoiceEdits[voice.id];
-            targetControls = {
-              ...targetControls,
-              gain: saved.gain ?? targetControls.gain,
-              pitch: saved.pitch ?? targetControls.pitch,
-              effects: { ...targetControls.effects, ...(saved.effects || {}) }
-            };
+            targetControls = restoreVoiceEdits(targetControls, savedVoiceEdits[voice.id], effectDefaults);
           }
         } catch {
           // Fall back to the original preset if saved edits are invalid.
@@ -608,7 +642,7 @@ function App() {
       }
     }
 
-    updateControls(targetControls, { persistVoiceId: voice.id });
+    updateControls({ ...targetControls, voiceBypassed: false }, { persistVoiceId: voice.id, resetVoice: true });
   };
 
   const toggleFavorite = (voiceId) => {
@@ -623,15 +657,15 @@ function App() {
 
   const activePreset = useMemo(() => {
     const all = [...voicePresets, ...customVoices];
-    if (forcedPresetId) {
-      const forced = all.find(p => p.id === forcedPresetId);
+    if (forcedPresetId || state?.activeVoiceId !== "clean") {
+      const forced = all.find(p => p.id === (forcedPresetId || state?.activeVoiceId));
       if (forced) return forced;
     }
     const matched = all.find((p) => p.id !== "personalizado" && isVoicePresetActive(state?.controls, p));
     if (matched) return matched;
     
     return null;
-  }, [state?.controls, customVoices, forcedPresetId]);
+  }, [state?.controls, state?.activeVoiceId, customVoices, forcedPresetId]);
 
   function toggleBypass() {
     if (!state) return;
@@ -657,16 +691,18 @@ function App() {
           ...makeDisabledEffects(),
           output_volume: 1.0,
           output_volume_enabled: false
-        }
-      });
+        },
+        voiceBypassed: true
+      }, { persist: false });
     } else {
       setBypassActive(false);
       if (savedCustomControls) {
         updateControls({
           gain: savedCustomControls.gain,
           pitch: savedCustomControls.pitch,
-          effects: savedCustomControls.effects
-        });
+          effects: savedCustomControls.effects,
+          voiceBypassed: false
+        }, { persist: false });
       } else {
         const targetId = lastActivePresetId || "alien";
         const all = [...voicePresets, ...customVoices];

@@ -223,8 +223,7 @@ class ProcessingTests(unittest.TestCase):
                 pitch_semitones=0.0 if processor is processors[0] else 5.0,
             )
 
-        self.assertEqual(processors[0].time_glitch_grain.shape, processors[1].time_glitch_grain.shape)
-        self.assertFalse(np.allclose(processors[0].time_glitch_grain, processors[1].time_glitch_grain))
+        self.assertAlmostEqual(processors[0].time_glitch_grain.size / processors[1].time_glitch_grain.size, 1.8, places=2)
         self.assertTrue(np.all(np.isfinite(processors[1].time_glitch_grain)))
 
     def test_command_glitch_stays_clean_until_triggered(self):

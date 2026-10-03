@@ -66,7 +66,7 @@ export const voicePresets = [
     gain: 2.4, pitch: 0, effects: { echo_enabled: true, echo_mix: 0.7, reverb_enabled: true, reverb_mix: 0.35 }
   },
   {
-    id: "delay_sfx", label: "Delay", description: "Delay estéreo clássico para dar dimensão à fala.",
+    id: "delay_sfx", label: "Delay", description: "Repetições da fala com tempo e decaimento ajustáveis.",
     emoji: "⏳", category: "Reverb", gradient: "linear-gradient(135deg, #3a2a0d, #5a4a1a)",
     gain: 2.2, pitch: 0, effects: { delay_enabled: true, delay_mix: 0.55 }
   },
@@ -176,7 +176,7 @@ export const voicePresets = [
     gain: 3.2, pitch: 0, effects: { robot_enabled: true, robot_rate_hz: 90, compressor_enabled: true, compressor_amount: 0.7 }
   },
   {
-    id: "autotune", label: "Auto-Tune", description: "Efeito pop-trap digital de sintonia vocal.",
+    id: "autotune", label: "Pop Digital", description: "Pitch agudo com chorus, compressão e reverb. Sem correção automática de notas.",
     emoji: "🎵", category: "Música", gradient: "linear-gradient(135deg, #ec4899, #d946ef)",
     gain: 2.8, pitch: 2, effects: { chorus_enabled: true, chorus_mix: 0.5, reverb_enabled: true, reverb_mix: 0.35, compressor_enabled: true, compressor_amount: 0.5 }
   },
@@ -186,7 +186,7 @@ export const voicePresets = [
     gain: 2.8, pitch: 1, effects: { chorus_enabled: true, chorus_mix: 0.25, reverb_enabled: true, reverb_mix: 0.2, compressor_enabled: true, compressor_amount: 0.45 }
   },
   {
-    id: "cantor_trap", label: "Cantor Trap", description: "Modulador forte de formante com delay ideal para trap.",
+    id: "cantor_trap", label: "Cantor Trap", description: "Modulação metálica com eco e delay para uma textura sintética.",
     emoji: "💸", category: "Música", gradient: "linear-gradient(135deg, #030712, #1f2937)",
     gain: 3.0, pitch: -1, effects: { robot_enabled: true, robot_rate_hz: 120, echo_enabled: true, echo_mix: 0.4, delay_enabled: true, delay_mix: 0.4 }
   },
@@ -196,9 +196,9 @@ export const voicePresets = [
     gain: 3.0, pitch: 0, effects: { distortion_enabled: true, distortion_drive: 3.5, chorus_enabled: true, chorus_mix: 0.2, compressor_enabled: true, compressor_amount: 0.6 }
   },
   {
-    id: "harmonizador", label: "Harmonizador", description: "Adiciona sub-vozes para criar harmonia estéreo.",
+    id: "harmonizador", label: "Harmonizador", description: "Adiciona vozes em intervalos fixos de terça e quinta.",
     emoji: "🎼", category: "Música", gradient: "linear-gradient(135deg, #0891b2, #4f46e5)",
-    gain: 3.0, pitch: 0, effects: { chorus_enabled: true, chorus_mix: 0.6, flanger_enabled: true, flanger_mix: 0.3, reverb_enabled: true, reverb_mix: 0.25 }
+    gain: 1.4, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Major", harmony_mix: 0.6, reverb_enabled: true, reverb_mix: 0.25 }
   },
   {
     id: "coral_automatico", label: "Coral Automático", description: "Chorus extremo com reverb longo simulando coral.",
@@ -248,12 +248,12 @@ export const voicePresets = [
     gain: 2.6, pitch: 14, effects: { compressor_enabled: true, compressor_amount: 0.22 }
   },
   {
-    id: "voz_lenta_exagerada", label: "Voz Lenta", description: "Grave lento com tremolo de decaimento longo.",
+    id: "voz_lenta_exagerada", label: "Grave Sonolento", description: "Voz grave com tremolo lento, sem mudar a duração da fala.",
     emoji: "🐌", category: "Humor", gradient: "linear-gradient(135deg, #78350f, #92400e)",
     gain: 2.2, pitch: -6, effects: { tremolo_enabled: true, tremolo_rate_hz: 4 }
   },
   {
-    id: "voz_acelerada", label: "Voz Acelerada", description: "Voz rápida, aguda e trêmula de energia.",
+    id: "voz_acelerada", label: "Voz Hiperativa", description: "Voz aguda com pulsação rápida, sem acelerar a fala ao vivo.",
     emoji: "🏃", category: "Humor", gradient: "linear-gradient(135deg, #047857, #059669)",
     gain: 2.4, pitch: 6, effects: { tremolo_enabled: true, tremolo_rate_hz: 18 }
   },
@@ -468,11 +468,12 @@ export const voicePresets = [
       time_glitch_mix: 1,
       time_glitch_depth: 0.15,
       time_glitch_fragment_ms: 360,
-      time_glitch_lookback_s: 0.5,
+      time_glitch_lookback_s: 0.02,
       time_glitch_repeats: 8,
       time_glitch_reverse_chance: 0,
       time_glitch_pingpong_chance: 0,
       time_glitch_trigger_mode: "shortcut",
+      time_glitch_direction: "forward",
       time_glitch_shortcut_mode: "press",
       time_glitch_shortcut: "",
       time_glitch_repeat_volume: 1.15,
@@ -493,8 +494,10 @@ export const voicePresets = [
       effectParam("time_glitch_lookback_s", "time_glitch_enabled", "Voltar no tempo", 0.02, 2, 0.02, "s", "Repetição"),
       effectParam("time_glitch_repeat_volume", "time_glitch_enabled", "Volume da repetição", 0, 3, 0.05, "x", "Mix"),
       percentParam("time_glitch_voice_duck", "time_glitch_enabled", "Abaixar voz normal", "Mix"),
-      percentParam("time_glitch_reverse_chance", "time_glitch_enabled", "Chance de tocar ao contrário", "Comportamento"),
-      percentParam("time_glitch_pingpong_chance", "time_glitch_enabled", "Chance de ida e volta", "Comportamento")
+      selectEffectParam("time_glitch_direction", "time_glitch_enabled", "Direção", [
+        { value: "forward", label: "Normal" }, { value: "reverse", label: "Ao contrário" },
+        { value: "pingpong", label: "Ida e volta" }, { value: "random", label: "Aleatória" }
+      ], "Comportamento")
     ]
   },
   {
@@ -571,12 +574,12 @@ export const voicePresets = [
     gain: 2.5, pitch: 0, effects: { drum_loop_enabled: true, drum_loop_bpm: 90, drum_loop_volume: 0.35, harmony_enabled: true, harmony_mode: "Major", harmony_mix: 0.3 }
   },
   {
-    id: "magic_chords_major", label: "Magic Chords Major", description: "Transforma sua voz em um coral afinado na escala maior.",
+    id: "magic_chords_major", label: "Magic Chords Major", description: "Coral com intervalos fixos de um acorde maior, sem correção de afinação.",
     emoji: "🎵", category: "Música", gradient: "linear-gradient(135deg, #0d5880, #06b6d4)",
     gain: 2.2, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Major", harmony_mix: 0.55, reverb_enabled: true, reverb_mix: 0.3 }
   },
   {
-    id: "magic_chords_minor", label: "Magic Chords Minor", description: "Transforma sua voz em um coral afinado na escala menor (melancólica).",
+    id: "magic_chords_minor", label: "Magic Chords Minor", description: "Coral com intervalos fixos de um acorde menor, sem correção de afinação.",
     emoji: "🎶", category: "Música", gradient: "linear-gradient(135deg, #581c87, #701a75)",
     gain: 2.2, pitch: 0, effects: { harmony_enabled: true, harmony_mode: "Minor", harmony_mix: 0.55, reverb_enabled: true, reverb_mix: 0.3 }
   },
@@ -599,6 +602,90 @@ export const voicePresets = [
     id: "radio_quebrado", label: "Radio Quebrado", description: "Voz de radio falhando com recortes digitais e compressao forte.",
     emoji: "R", category: "Radio", gradient: "linear-gradient(135deg, #172554, #7f1d1d)",
     gain: 4.2, pitch: -1, effects: { glitch_enabled: true, glitch_mix: 0.55, glitch_rate_hz: 18, radio_enabled: true, radio_mix: 0.86, compressor_enabled: true, compressor_amount: 0.75 }
+  },
+  {
+    id: "banana_caotica", label: "Banana Caótica", description: "Agudo cartunesco com duplicação grave e tremedeira.",
+    emoji: "B", category: "Humor", isNew: true, tags: ["cartoon", "dupla", "meme"],
+    gradient: "linear-gradient(135deg, #157647, #d3c928)", gain: 1.3, pitch: 9,
+    effects: { double_voice_enabled: true, double_voice_mix: 0.38, double_voice_pitch_semitones: -12, double_voice_delay_ms: 35, wobble_enabled: true, wobble_mix: 0.45, wobble_rate_hz: 7 }
+  },
+  {
+    id: "bebe_revoltado", label: "Bebê Revoltado", description: "Voz miúda com saturação e compressão de protesto.",
+    emoji: "B", category: "Humor", isNew: true, tags: ["agudo", "saturado"],
+    gradient: "linear-gradient(135deg, #e85c91, #53ccd0)", gain: 1.2, pitch: 11,
+    effects: { distortion_enabled: true, distortion_drive: 1.7, compressor_enabled: true, compressor_amount: 0.45, equalizer_enabled: true, equalizer_tone: 0.72 }
+  },
+  {
+    id: "desenho_emborrachado", label: "Desenho Emborrachado", description: "Personagem agudo com flanger elástico e coro curto.",
+    emoji: "D", category: "Humor", isNew: true, tags: ["cartoon", "elástico"],
+    gradient: "linear-gradient(135deg, #cd356e, #36b8a6)", gain: 1.3, pitch: 7,
+    effects: { flanger_enabled: true, flanger_mix: 0.66, chorus_enabled: true, chorus_mix: 0.3, wobble_enabled: true, wobble_mix: 0.28, wobble_rate_hz: 2.5 }
+  },
+  {
+    id: "voz_gelatina", label: "Voz de Gelatina", description: "Tremedeira lenta com um segundo timbre derretido.",
+    emoji: "G", category: "Humor", isNew: true, tags: ["wobble", "trêmulo"],
+    gradient: "linear-gradient(135deg, #179759, #38bdbc)", gain: 1.5, pitch: -2,
+    effects: { wobble_enabled: true, wobble_mix: 0.95, wobble_rate_hz: 3.2, double_voice_enabled: true, double_voice_mix: 0.3, double_voice_pitch_semitones: -4, double_voice_delay_ms: 65 }
+  },
+  {
+    id: "palhaco_digital", label: "Palhaço Digital", description: "Agudo metálico com falhas de brinquedo eletrônico.",
+    emoji: "P", category: "Humor", isNew: true, tags: ["digital", "meme"],
+    gradient: "linear-gradient(135deg, #dc3670, #d8c93b)", gain: 1.25, pitch: 6,
+    effects: { robot_enabled: true, robot_rate_hz: 52, bitcrush_enabled: true, bitcrush_bits: 7, glitch_enabled: true, glitch_mix: 0.38, glitch_rate_hz: 9 }
+  },
+  {
+    id: "dupla_desafinada", label: "Dupla Desafinada", description: "Sua voz e um parceiro grave cantando juntos fora do tom.",
+    emoji: "2", category: "Humor", isNew: true, tags: ["dupla", "coro"],
+    gradient: "linear-gradient(135deg, #14a7a0, #e14671)", gain: 1.25, pitch: 1,
+    effects: { double_voice_enabled: true, double_voice_mix: 0.85, double_voice_delay_ms: 80, double_voice_pitch_semitones: -7, chorus_enabled: true, chorus_mix: 0.2 }
+  },
+  {
+    id: "npc_travado", label: "NPC Travado", description: "A fala engasga em sílabas curtas, como diálogo de jogo travado.",
+    emoji: "N", category: "Jogos e Streaming", isNew: true, tags: ["repetição", "npc"],
+    gradient: "linear-gradient(135deg, #24986a, #226cb4)", gain: 1.4, pitch: 1,
+    effects: { time_glitch_enabled: true, time_glitch_mix: 0.88, time_glitch_depth: 0.1, time_glitch_interval_s: 0.45, time_glitch_fragment_ms: 120, time_glitch_lookback_s: 0.08, time_glitch_repeats: 3, time_glitch_direction: "forward" }
+  },
+  {
+    id: "internet_batata", label: "Internet de Batata", description: "Chamada comprimida com cortes e pacotes de voz corrompidos.",
+    emoji: "IP", category: "Humor", isNew: true, tags: ["chamada", "falhas"],
+    gradient: "linear-gradient(135deg, #687778, #36979a)", gain: 1.35, pitch: 0,
+    effects: { telephone_enabled: true, telephone_mix: 0.88, bitcrush_enabled: true, bitcrush_bits: 5, glitch_enabled: true, glitch_mix: 0.7, glitch_rate_hz: 8 }
+  },
+  {
+    id: "robo_brinquedo", label: "Robô de Brinquedo", description: "Robotização leve e voz aguda de brinquedo falante.",
+    emoji: "R", category: "Robótica", isNew: true, tags: ["robô", "agudo"],
+    gradient: "linear-gradient(135deg, #379cb1, #d15667)", gain: 1.5, pitch: 5,
+    effects: { robot_enabled: true, robot_rate_hz: 38, bitcrush_enabled: true, bitcrush_bits: 8, echo_enabled: true, echo_mix: 0.2, echo_time_ms: 85, echo_feedback: 0.15 }
+  },
+  {
+    id: "interfone_caos", label: "Interfone do Caos", description: "Interfone rachado com chiado e retorno curto.",
+    emoji: "I", category: "Humor", isNew: true, tags: ["rádio", "chiado"],
+    gradient: "linear-gradient(135deg, #5b7776, #c14e65)", gain: 1.15, pitch: -1,
+    effects: { megaphone_enabled: true, megaphone_drive: 4.5, radio_static_enabled: true, radio_static_mix: 0.16, radio_crackle_rate_hz: 12, echo_enabled: true, echo_mix: 0.28, echo_time_ms: 65, echo_feedback: 0.22 }
+  },
+  {
+    id: "locutor_promocao", label: "Locutor de Promoção", description: "Anúncio exagerado com grave presente e eco de loja.",
+    emoji: "L", category: "Humor", isNew: true, tags: ["locutor", "eco"],
+    gradient: "linear-gradient(135deg, #cc3c59, #c5b337)", gain: 1.3, pitch: -3,
+    effects: { compressor_enabled: true, compressor_amount: 0.75, equalizer_enabled: true, equalizer_tone: 0.65, delay_enabled: true, delay_mix: 0.3, delay_time_ms: 240, delay_feedback: 0.25 }
+  },
+  {
+    id: "fita_derretendo", label: "Fita Derretendo", description: "Grave de fita velha com pulsação lenta e flanger.",
+    emoji: "F", category: "Humor", isNew: true, tags: ["fita", "wobble"],
+    gradient: "linear-gradient(135deg, #627877, #b53d7b)", gain: 1.45, pitch: -5,
+    effects: { wobble_enabled: true, wobble_mix: 0.8, wobble_rate_hz: 0.65, flanger_enabled: true, flanger_mix: 0.35, radio_enabled: true, radio_mix: 0.3 }
+  },
+  {
+    id: "eco_escadinha", label: "Eco Escadinha", description: "Sua voz acompanhada por uma cópia aguda e ecos em cascata.",
+    emoji: "E", category: "Reverb", isNew: true, tags: ["eco", "dupla", "agudo"],
+    gradient: "linear-gradient(135deg, #239e8c, #3578b9)", gain: 1.15, pitch: 0,
+    effects: { double_voice_enabled: true, double_voice_mix: 0.6, double_voice_pitch_semitones: 7, double_voice_delay_ms: 130, delay_enabled: true, delay_mix: 0.65, delay_time_ms: 380, delay_feedback: 0.62 }
+  },
+  {
+    id: "rewind_meme", label: "Rewind de Meme", description: "Captura a fala e repete ao contrário pelo atalho, sem alterar a voz antes do disparo.",
+    emoji: "RW", category: "Humor", isNew: true, tags: ["reverso", "atalho"],
+    gradient: "linear-gradient(135deg, #2eab95, #d04172)", gain: 1, pitch: 0,
+    effects: { time_glitch_enabled: true, time_glitch_mix: 1, time_glitch_trigger_mode: "shortcut", time_glitch_direction: "reverse", time_glitch_fragment_ms: 700, time_glitch_lookback_s: 0.02, time_glitch_repeats: 3, time_glitch_repeat_volume: 1, time_glitch_voice_duck: 0.8 }
   }
 ];
 

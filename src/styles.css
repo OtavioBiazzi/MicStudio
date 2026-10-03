@@ -521,7 +521,7 @@ html,body,#root {
 
 .voiceGridArea {
   display:grid;
-  grid-template-columns:1fr var(--side-panel-width);
+  grid-template-columns:minmax(0,1fr) minmax(320px,360px);
   gap:16px;
   min-height:0
 }
@@ -760,7 +760,7 @@ html,body,#root {
 
 .voiceSidePanel .panelImage {
   width:100%;
-  aspect-ratio:1;
+  height:120px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -775,12 +775,12 @@ html,body,#root {
 }
 
 .voiceSidePanel .panelImage .panelEmoji {
-  font-size:80px;
+  font-size:48px;
   z-index:1
 }
 
 .voiceSidePanel .panelBody {
-  padding:20px;
+  padding:16px;
   min-width:0
 }
 
@@ -911,7 +911,8 @@ html,body,#root {
 }
 
 .panelSlider {
-  display:flex;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
   align-items:center;
   gap:12px;
   margin-bottom:10px;
@@ -925,8 +926,9 @@ html,body,#root {
   font-size:12px;
   font-weight:500;
   color:var(--text-secondary);
-    width:105px;
-  flex-shrink:0
+  width:auto;
+  min-width:0;
+  overflow-wrap:anywhere
 }
 
 .panelSlider .effectToggle {
@@ -977,6 +979,8 @@ html,body,#root {
 }
 
 .panelSlider input[type=range] {
+  grid-column:1 / -1;
+  grid-row:2;
   flex:1;
   width:100%;
   min-width:0;
@@ -1011,7 +1015,7 @@ html,body,#root {
   font-size:12px;
   font-weight:700;
   color:var(--purple);
-    width:58px;
+  width:auto;
   text-align:right;
   flex-shrink:0
 }
@@ -1023,6 +1027,16 @@ html,body,#root {
   margin-bottom:10px;
   min-width:0
 }
+
+.sliderStepper { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:4px }
+.sliderStepper button { display:grid; place-items:center; width:28px; height:24px; border-radius:4px; background:var(--bg-input); border:1px solid var(--border); color:var(--text); cursor:pointer }
+.sliderStepper button:disabled { opacity:.35; cursor:default }
+.glitchTestActions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:14px 0 }
+.glitchTestActions button { display:flex; justify-content:center; align-items:center; gap:6px; min-height:36px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-input); color:var(--text); cursor:pointer }
+.glitchTestActions button.primary { flex:1; background:var(--purple-soft); border-color:var(--purple) }
+.glitchTestActions button:disabled { opacity:.45; cursor:default }
+.glitchTestStatus { flex-basis:100%; color:var(--text-muted); font-size:11px }
+.voiceSidePanel .panelName { overflow-wrap:anywhere }
 
 .panelField>span {
   color:var(--text-secondary);
@@ -2511,11 +2525,11 @@ html,body,#root {
 
 @media(max-width:1200px) {
   .voiceGridArea {
-    grid-template-columns:1fr
+    grid-template-columns:minmax(0,1fr) minmax(320px,360px)
   }
 
   .voiceSidePanel {
-    display:none
+    display:block
   }
 
   .soundboardLayout,.labGrid {
@@ -2525,6 +2539,8 @@ html,body,#root {
 }
 
 @media(max-width:900px) {
+  .voiceGridArea { grid-template-columns:minmax(0,1fr) }
+  .voiceSidePanel { order:-1; position:relative; top:0; max-height:65vh }
   :root {
     --sidebar-width: 60px
   }
@@ -2553,6 +2569,11 @@ html,body,#root {
 }
 
 @media(max-width:700px) {
+  .pageToolbar { flex-wrap:wrap }
+  .pageToolbar .toolbarLeft { flex:1 1 100% !important; min-width:0 }
+  .pageToolbar .searchBar { max-width:none !important; width:100% }
+  .pageToolbar .toolbarRight { flex:1; flex-wrap:wrap }
+  .pageToolbar .toolbarRight button { flex:1; justify-content:center }
   .sidebar {
     display:none
   }

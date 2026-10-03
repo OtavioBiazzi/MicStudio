@@ -5,6 +5,7 @@ import {
   FloppyDisk, Play, Export, UploadSimple, Trash, FadersHorizontal
 } from "@phosphor-icons/react";
 import { effectDefaults, countEnabledEffects, HotkeyCaptureButton } from "../utils";
+import { GlitchCommandControls } from "./GlitchCommandControls";
 
 const voiceCategories = [
   "Todas", "Favoritas", "Recentes", "Reverb", "Fina e Aguda", "Grave", "Robótica", "Música", "Rádio", "Humor", "Monstros", "Jogos e Streaming", "Avançados", "Exclusivos", "Especiais", "Customizadas"
@@ -171,7 +172,11 @@ export function VoiceLabPage({
       title: "🌌 Espaço & Textura",
       items: [
         { key: "echo_mix", label: "Eco / Retardo", icon: Phone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "echo_enabled" },
+        { key: "echo_time_ms", label: "Tempo do Eco", icon: Phone, min: 20, max: 1500, step: 10, suffix: "ms", enableKey: "echo_enabled" },
+        { key: "echo_feedback", label: "Decaimento do Eco", icon: Phone, min: 0, max: 0.9, step: 0.01, isPercent: true, enableKey: "echo_enabled" },
         { key: "delay_mix", label: "Delay Tridimensional", icon: Phone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "delay_enabled" },
+        { key: "delay_time_ms", label: "Tempo do Delay", icon: Phone, min: 20, max: 1500, step: 10, suffix: "ms", enableKey: "delay_enabled" },
+        { key: "delay_feedback", label: "Decaimento do Delay", icon: Phone, min: 0, max: 0.9, step: 0.01, isPercent: true, enableKey: "delay_enabled" },
         { key: "chorus_mix", label: "Stereo Width (Chorus)", icon: Sparkle, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "chorus_enabled" },
         { key: "flanger_mix", label: "Flanger", icon: Circuitry, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "flanger_enabled" },
         { key: "bitcrush_bits", label: "Bitcrush (Redução)", icon: Circuitry, min: 3, max: 12, step: 1, suffix: "bits", isControl: false, enableKey: "bitcrush_enabled" },
@@ -188,6 +193,7 @@ export function VoiceLabPage({
         { key: "whisper_mix", label: "Sussurro", icon: Microphone, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "whisper_enabled" },
         { key: "compressor_amount", label: "Compressor / Limiter", icon: SlidersHorizontal, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "compressor_enabled" },
         { key: "wobble_mix", label: "Vibrato Wobble", icon: Sparkle, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "wobble_enabled" },
+        { key: "wobble_rate_hz", label: "Velocidade Wobble", icon: Sparkle, min: 0.2, max: 20, step: 0.1, suffix: "Hz", enableKey: "wobble_enabled" },
         { key: "reverse_mix", label: "Reverse", icon: ArrowCounterClockwise, min: 0, max: 1.0, step: 0.01, suffix: "%", isPercent: true, isControl: false, enableKey: "reverse_enabled" },
         { key: "reverse_window_ms", label: "Janela do Reverse", icon: ArrowCounterClockwise, min: 120, max: 1500, step: 10, suffix: "ms", directValue: true, isControl: false, enableKey: "reverse_enabled" },
         { key: "reverse_speed", label: "Velocidade do Reverse", icon: ArrowCounterClockwise, min: 0.5, max: 2, step: 0.05, suffix: "x", directValue: true, decimals: 2, isControl: false, enableKey: "reverse_enabled" },
@@ -274,7 +280,7 @@ export function VoiceLabPage({
         <div className="voice-lab-card-modular">
           <div className="voice-lab-module-title">
             <FadersHorizontal size={18} color="var(--cyan)" />
-            <span>Painel Modular de Efeitos (Escala Premium 0% a 1000%)</span>
+            <span>Painel de efeitos</span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20, maxHeight: "68vh", overflowY: "auto", paddingRight: 6 }}>
@@ -306,13 +312,20 @@ export function VoiceLabPage({
                     <label>
                       <span>Atalho global</span>
                       <HotkeyCaptureButton
-                        value={state.controls.effects.time_glitch_shortcut || state.settings?.shortcutCommandGlitch || ""}
+                        value={state.settings?.shortcutCommandGlitch || ""}
                         onChange={(value) => {
-                          updateEffects({ time_glitch_shortcut: value });
                           call("/api/settings", { shortcutCommandGlitch: value });
                         }}
                       />
                     </label>
+                    <label>
+                      <span>Direção da repetição</span>
+                      <select value={state.controls.effects.time_glitch_direction || "random"} onChange={(event) => updateEffects({ time_glitch_direction: event.target.value })}>
+                        <option value="forward">Normal</option><option value="reverse">Ao contrário</option>
+                        <option value="pingpong">Ida e volta</option><option value="random">Aleatória</option>
+                      </select>
+                    </label>
+                    <GlitchCommandControls state={state} call={call} setToast={setToast} />
                   </>
                 )}
               </div>
@@ -380,6 +393,13 @@ export function VoiceLabPage({
                               max={item.logScale ? 1000 : item.max}
                               step={item.logScale ? 1 : item.step}
                               value={sliderValue}
+                              aria-label={item.label}
+                              onKeyDown={(event) => {
+                                if (!item.logScale || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+                                event.preventDefault();
+                                const delta = ["ArrowRight", "ArrowUp"].includes(event.key) ? 1 : -1;
+                                updateEffects({ [item.key]: Math.max(item.min, Math.min(item.max, numericRaw + delta)) });
+                              }}
                               onChange={handleSliderChange}
                               disabled={!enabled && !isControl}
                               style={{ width: "100%", cursor: enabled || isControl ? "pointer" : "not-allowed" }}

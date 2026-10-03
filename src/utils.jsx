@@ -20,8 +20,8 @@ export const effectDefaults = {
   robot_enabled: false, robot_rate_hz: 35,
   noise_gate_enabled: false, noise_gate_threshold: 0.08,
   equalizer_enabled: false, equalizer_tone: 0.55,
-  echo_enabled: false, echo_mix: 0.25,
-  delay_enabled: false, delay_mix: 0.3,
+  echo_enabled: false, echo_mix: 0.25, echo_time_ms: 160, echo_feedback: 0.34,
+  delay_enabled: false, delay_mix: 0.3, delay_time_ms: 320, delay_feedback: 0.48,
   tremolo_enabled: false, tremolo_rate_hz: 8,
   bitcrush_enabled: false, bitcrush_bits: 8,
   radio_enabled: false, radio_mix: 0.7,
@@ -36,7 +36,7 @@ export const effectDefaults = {
   flanger_enabled: false, flanger_mix: 0.24,
   whisper_enabled: false, whisper_mix: 0.35,
   compressor_enabled: false, compressor_amount: 0.45,
-  wobble_enabled: false, wobble_mix: 0.35,
+  wobble_enabled: false, wobble_mix: 0.35, wobble_rate_hz: 4.4,
   reverse_enabled: false, reverse_mix: 0.65, reverse_window_ms: 480, reverse_speed: 1,
   reverse_pitch_semitones: 0, reverse_gain: 1,
   alien_glitch_enabled: false, alien_glitch_mix: 0.62,
@@ -46,7 +46,7 @@ export const effectDefaults = {
   time_glitch_repeats: 4, time_glitch_reverse_chance: 0.38, time_glitch_pingpong_chance: 0.28,
   time_glitch_trigger_mode: "automatic", time_glitch_shortcut_mode: "press", time_glitch_shortcut: "",
   time_glitch_repeat_volume: 1, time_glitch_voice_duck: 1,
-  time_glitch_speed: 1, time_glitch_pitch_semitones: 0,
+  time_glitch_speed: 1, time_glitch_pitch_semitones: 0, time_glitch_direction: "random",
   double_voice_enabled: false, double_voice_mix: 0.4, double_voice_delay_ms: 45, double_voice_pitch_semitones: -5,
   ambience_enabled: false, ambience_mode: "space", ambience_volume: 0.12,
   harmony_enabled: false, harmony_mode: "Major", harmony_mix: 0.5,
@@ -163,14 +163,14 @@ export function deviceName(items, idx) {
 
 export function displayEffectValue(key, value) {
   const isNormalizedVolume = key.endsWith("_volume") && key !== "output_volume";
-  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || isNormalizedVolume)
+  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || key.endsWith("_feedback") || isNormalizedVolume)
     return Math.round(Number(value) * 100);
   return Math.round(Number(value));
 }
 
 export function storeEffectValue(key, value) {
   const isNormalizedVolume = key.endsWith("_volume") && key !== "output_volume";
-  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || isNormalizedVolume)
+  if (key.endsWith("_mix") || key.endsWith("_amount") || key.endsWith("_tone") || key.endsWith("_threshold") || key.endsWith("_chance") || key.endsWith("_depth") || key.endsWith("_feedback") || isNormalizedVolume)
     return Number(value) / 100;
   return Number(value);
 }
@@ -419,7 +419,11 @@ export const effectGroups = [
     title: "Espaço",
     items: [
       ["echo_enabled", "echo_mix", "Eco curto", "%", 0, 90],
+      ["echo_enabled", "echo_time_ms", "Tempo do eco", "ms", 20, 1500],
+      ["echo_enabled", "echo_feedback", "Decaimento do eco", "%", 0, 90],
       ["delay_enabled", "delay_mix", "Delay", "%", 0, 90],
+      ["delay_enabled", "delay_time_ms", "Tempo do delay", "ms", 20, 1500],
+      ["delay_enabled", "delay_feedback", "Decaimento do delay", "%", 0, 90],
       ["reverb_enabled", "reverb_mix", "Reverb", "%", 0, 90],
       ["ghost_enabled", "ghost_mix", "Fantasma", "%", 0, 90],
       ["chorus_enabled", "chorus_mix", "Chorus", "%", 0, 90],
@@ -436,6 +440,7 @@ export const effectGroups = [
       ["whisper_enabled", "whisper_mix", "Sussurro digital", "%", 0, 90],
       ["compressor_enabled", "compressor_amount", "Compressor", "%", 0, 100],
       ["wobble_enabled", "wobble_mix", "Vibrato estranho", "%", 0, 90],
+      ["wobble_enabled", "wobble_rate_hz", "Velocidade wobble", "Hz", 0.2, 20],
       ["reverse_enabled", "reverse_mix", "Reverse estranho", "%", 0, 100],
       ["alien_glitch_enabled", "alien_glitch_mix", "Glitch alien", "%", 0, 100],
       ["glitch_enabled", "glitch_mix", "Glitch digital", "%", 0, 100],

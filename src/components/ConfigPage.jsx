@@ -784,11 +784,9 @@ export function ConfigPage({
                     value={state.settings?.shortcutCommandGlitch}
                     onChange={(val) => {
                       call("/api/settings", { shortcutCommandGlitch: val });
-                      updateEffects({ time_glitch_shortcut: val });
                     }}
                     onClear={() => {
                       call("/api/settings", { shortcutCommandGlitch: "" });
-                      updateEffects({ time_glitch_shortcut: "" });
                     }}
                   />
                   <HotkeyInput

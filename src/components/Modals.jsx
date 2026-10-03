@@ -1451,6 +1451,16 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.4.0": `### Versão 1.4.0
+* 14 novas vozes: Banana Caótica, Bebê Revoltado, Desenho Emborrachado, Voz de Gelatina, Palhaço Digital, Dupla Desafinada, NPC Travado, Internet de Batata, Robô de Brinquedo, Interfone do Caos, Locutor de Promoção, Fita Derretendo, Eco Escadinha e Rewind de Meme.
+* Glitch Sob Comando com captura e contagem exatas de 1 a 10.000 repetições, direção normal, reversa ou ida e volta, velocidade, pitch, volume independente e redução da voz original.
+* Disparo e parada na lateral e no Voice Lab. Segurar funciona até soltar a tecla ou o botão, sem repetir automaticamente ao manter uma tecla no modo de disparo.
+* Desativar temporariamente a voz não grava mais os efeitos desligados no preset. Ajustes antigos recuperam os efeitos principais ao selecionar a voz.
+* Atalho global preservado entre vozes e ajustes enviados em ordem, sem respostas antigas sobrescrevendo controles novos.
+* Wobble contínuo com velocidade ajustável. Eco e delay com controles de tempo e decaimento.
+* Limpeza dos buffers ao desligar efeitos temporais e trocar de voz. Pitch e repetição processados em blocos para reduzir o trabalho no áudio.
+* Lateral responsiva, sliders sem corte, controles específicos por voz, filtro Novas, Recentes corrigido e busca por tags.
+* Descrições corrigidas para distinguir efeitos sintéticos de correção automática de afinação. Histórico disponível também offline.`,
   "v1.3.11": `### Versão 1.3.11
 * Corrigida a falha fatal incorreta quando o backend demora para preparar o áudio.
 * O aplicativo permanece na tela de carregamento e se recupera automaticamente quando o backend fica pronto.
@@ -1971,6 +1981,12 @@ const FALLBACK_RELEASES = [
 ];
 
 // --- ReleasesModal ---
+const OFFLINE_RELEASES = [
+  ...Object.entries(LOCAL_CHANGELOGS).filter(([tag]) => !FALLBACK_RELEASES.some((release) => release.tag_name === tag))
+    .map(([tag, body]) => ({ id: tag, tag_name: tag, body })),
+  ...FALLBACK_RELEASES
+].sort((a, b) => b.tag_name.localeCompare(a.tag_name, undefined, { numeric: true }));
+
 export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1989,12 +2005,12 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
         return res.json();
       })
       .then((data) => {
-        setReleases(data && data.length ? data : FALLBACK_RELEASES);
+        setReleases(data && data.length ? data : OFFLINE_RELEASES);
         setLoading(false);
       })
       .catch((err) => {
         console.warn("Falha ao buscar releases do GitHub, usando dados estáticos:", err);
-        setReleases(FALLBACK_RELEASES);
+        setReleases(OFFLINE_RELEASES);
         setLoading(false);
       });
   };

@@ -1402,12 +1402,14 @@ class AppState:
         self.soundboard_monitor_volume = max(0.0, min(3.0, float(self.profile.get("soundboardMonitorVolume", 0.65))))
         effects = self.profile.get("effects", {})
         if isinstance(effects, dict):
-            self.effects = EffectsSettings(**{**asdict(EffectsSettings()), **effects})
+            self.effects = EffectsSettings.from_mapping(effects)
 
         self.voice_favorites = list(self.profile.get("voiceFavorites", []))
         self.soundboard_favorites = list(self.profile.get("soundboardFavorites", []))
         self.voice_recents = list(self.profile.get("voiceRecents", []))
         self.active_voice_id = str(self.profile.get("activeVoiceId", "clean"))
+        self.voice_bypassed = False
+        self.controls_revision = 0
 
         selected = self.profile.get("selected", {})
         selected_names = self.profile.get("selected_names", {})
@@ -1451,9 +1453,12 @@ class AppState:
             )
 
     def save_profile(self) -> None:
+        saved_voice = self.profile if getattr(self, "voice_bypassed", False) else {
+            "gain": self.gain, "pitch": self.pitch, "effects": asdict(self.effects)
+        }
         self.profile = {
-            "gain": self.gain,
-            "pitch": self.pitch,
+            "gain": saved_voice.get("gain", self.gain),
+            "pitch": saved_voice.get("pitch", self.pitch),
             "masterMicGain": self.master_mic_gain,
             "masterVoiceVolume": self.master_voice_volume,
             "masterPitch": self.master_pitch,
@@ -1462,7 +1467,7 @@ class AppState:
             "monitorVolume": self.monitor_volume,
             "soundboardMonitor": self.soundboard_monitor_enabled,
             "soundboardMonitorVolume": self.soundboard_monitor_volume,
-            "effects": asdict(self.effects),
+            "effects": saved_voice.get("effects", asdict(self.effects)),
             "selected": {
                 "input": self.selected_input,
                 "output": self.selected_output,
@@ -1585,7 +1590,8 @@ class AppState:
             bool(self.effects.time_glitch_enabled),
             str(self.effects.time_glitch_trigger_mode or ""),
             str(self.effects.time_glitch_shortcut_mode or ""),
-            str(self.settings.get("shortcutCommandGlitch") or self.effects.time_glitch_shortcut or ""),
+            str(self.settings.get("shortcutCommandGlitch", "")),
+            bool(getattr(self, "voice_bypassed", False)),
         )
 
     def refresh_time_glitch_hotkey(self) -> None:
@@ -1612,12 +1618,12 @@ class AppState:
             return
 
         hotkey = (
-            str(self.settings.get("shortcutCommandGlitch") or effects.time_glitch_shortcut or "")
+            str(self.settings.get("shortcutCommandGlitch", ""))
             .strip()
             .lower()
-            .replace("control", "ctrl")
             .replace("commandorcontrol", "ctrl")
             .replace("cmdorctrl", "ctrl")
+            .replace("control", "ctrl")
             .replace(" ", "")
         )
         if not hotkey:
@@ -1630,24 +1636,25 @@ class AppState:
             # Ignore callbacks racing with a refresh or a voice change.
             if self.time_glitch_hotkey_signature() != registered_signature:
                 return
-            if hold_mode:
-                if self.time_glitch_hotkey_down:
-                    return
-                self.time_glitch_hotkey_down = True
+            if not self.engine.running or self.monitor_only_active or getattr(self, "voice_bypassed", False):
+                return
+            if self.time_glitch_hotkey_down:
+                return
+            self.time_glitch_hotkey_down = True
             self.engine.trigger_time_glitch(hold=hold_mode)
 
         try:
             press_handle = keyboard.add_hotkey(hotkey, trigger, suppress=False)
             self.time_glitch_hotkey_handles.append(("hotkey", press_handle))
-            if hold_mode:
-                release_key = hotkey.split("+")[-1]
-
-                def release(_event) -> None:
+            def release(event) -> None:
+                name = str(event.name or "").lower().removeprefix("left ").removeprefix("right ")
+                if event.event_type == "up" and name in [key.strip() for key in hotkey.split("+")]:
                     self.time_glitch_hotkey_down = False
-                    self.engine.release_time_glitch()
+                    if hold_mode:
+                        self.engine.release_time_glitch()
 
-                release_handle = keyboard.on_release_key(release_key, release, suppress=False)
-                self.time_glitch_hotkey_handles.append(("hook", release_handle))
+            release_handle = keyboard.hook(release, suppress=False)
+            self.time_glitch_hotkey_handles.append(("hook", release_handle))
         except Exception as e:
             print(f"Error registering command glitch hotkey {hotkey}: {e}")
             for kind, handle in self.time_glitch_hotkey_handles:
@@ -2322,7 +2329,9 @@ class AppState:
             "youtubeStatus": self.youtube_status,
             "clipStats": self.clipping_manager.stats(),
             "virtualMode": self.virtual_mode_active,
+            "controlsRevision": self.controls_revision,
             "controls": {
+                "voiceBypassed": self.voice_bypassed,
                 "gain": self.gain,
                 "pitch": self.pitch,
                 "masterMicGain": self.master_mic_gain,
@@ -2344,6 +2353,7 @@ class AppState:
             },
             "settings": dict(self.settings),
             "activeVoiceId": self.active_voice_id,
+            "voiceRecents": list(self.voice_recents),
             "libraryRevision": self.library_revision(),
             "diagnostics": {
                 "pid": os.getpid(),
@@ -2383,6 +2393,7 @@ class AppState:
             "clipStats": self.clipping_manager.stats(),
             "virtualMode": self.virtual_mode_active,
             "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
+            "controlsRevision": self.controls_revision,
             "selected": {
                 "input": self.selected_input,
                 "output": self.selected_output,
@@ -2400,6 +2411,7 @@ class AppState:
                 "soundboardMonitor": self.soundboard_monitor_enabled,
                 "soundboardMonitorVolume": self.soundboard_monitor_volume,
                 "effects": asdict(self.effects),
+                "voiceBypassed": self.voice_bypassed,
             },
             "devices": {
                 "inputs": [asdict(device) for device in input_devices(self.devices)],
@@ -2668,6 +2680,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/controls":
             controls = data.get("controls", data)
             previous_time_glitch_hotkey = STATE.time_glitch_hotkey_signature()
+            voice_id = str(data.get("activeVoiceId") or STATE.active_voice_id)
+            if voice_id != STATE.active_voice_id or data.get("resetVoice", False):
+                STATE.engine.reset_voice_effects()
+            if voice_id != STATE.active_voice_id:
+                STATE.active_voice_id = voice_id
+                STATE.voice_recents = [voice_id] + [v for v in STATE.voice_recents if v != voice_id][:19]
+            STATE.voice_bypassed = bool(data.get("voiceBypassed", getattr(STATE, "voice_bypassed", False)))
             STATE.gain = max(0.0, float(controls.get("gain", STATE.gain)))
             STATE.pitch = float(controls.get("pitch", STATE.pitch))
             STATE.master_mic_gain = max(0.0, float(controls.get("masterMicGain", STATE.master_mic_gain)))
@@ -2680,7 +2699,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE.soundboard_monitor_volume = max(0.0, min(3.0, float(controls.get("soundboardMonitorVolume", STATE.soundboard_monitor_volume))))
             effects = controls.get("effects")
             if effects:
-                STATE.effects = EffectsSettings(**{**asdict(STATE.effects), **effects})
+                STATE.effects = EffectsSettings.from_mapping(effects, STATE.effects)
             if STATE.time_glitch_hotkey_signature() != previous_time_glitch_hotkey:
                 STATE.refresh_time_glitch_hotkey()
             if STATE.monitor_only_active:
@@ -2728,7 +2747,17 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if (STATE.monitor_enabled or STATE.soundboard_monitor_enabled) and not STATE.engine.running:
                     STATE.start_monitor_only()
+            STATE.controls_revision += 1
             STATE.save_profile()
+            return None
+        if path == "/api/glitch/trigger":
+            if (not STATE.effects.time_glitch_enabled or STATE.effects.time_glitch_trigger_mode != "shortcut"
+                    or not STATE.engine.running or STATE.monitor_only_active or STATE.voice_bypassed):
+                raise ValueError("Ative o Glitch Sob Comando e o modificador de voz primeiro.")
+            STATE.engine.trigger_time_glitch(hold=bool(data.get("hold", False)))
+            return None
+        if path == "/api/glitch/stop":
+            STATE.engine.release_time_glitch()
             return None
         if path == "/api/start":
             STATE.start()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import math
 import threading
 
@@ -75,8 +75,12 @@ class EffectsSettings:
     equalizer_tone: float = 0.55
     echo_enabled: bool = False
     echo_mix: float = 0.25
+    echo_time_ms: float = 160.0
+    echo_feedback: float = 0.34
     delay_enabled: bool = False
     delay_mix: float = 0.3
+    delay_time_ms: float = 320.0
+    delay_feedback: float = 0.48
     tremolo_enabled: bool = False
     tremolo_rate_hz: float = 8.0
     bitcrush_enabled: bool = False
@@ -108,6 +112,7 @@ class EffectsSettings:
     compressor_amount: float = 0.45
     wobble_enabled: bool = False
     wobble_mix: float = 0.35
+    wobble_rate_hz: float = 4.4
     reverse_enabled: bool = False
     reverse_mix: float = 0.65
     reverse_window_ms: float = 480.0
@@ -136,6 +141,7 @@ class EffectsSettings:
     time_glitch_voice_duck: float = 1.0
     time_glitch_speed: float = 1.0
     time_glitch_pitch_semitones: float = 0.0
+    time_glitch_direction: str = "random"
     double_voice_enabled: bool = False
     double_voice_mix: float = 0.4
     double_voice_delay_ms: float = 45.0
@@ -150,12 +156,31 @@ class EffectsSettings:
     drum_loop_bpm: float = 90.0
     drum_loop_volume: float = 0.3
 
+    @classmethod
+    def from_mapping(cls, values: dict, base: EffectsSettings | None = None) -> EffectsSettings:
+        defaults = asdict(cls())
+        result = asdict(base) if base is not None else defaults.copy()
+        for key, value in (values.items() if isinstance(values, dict) else []):
+            if key not in defaults:
+                continue
+            expected = defaults[key]
+            if isinstance(expected, bool):
+                if isinstance(value, bool):
+                    result[key] = value
+            elif isinstance(expected, (int, float)):
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                    result[key] = int(value) if isinstance(expected, int) else float(value)
+            elif isinstance(value, str):
+                result[key] = value
+        return cls(**result)
+
 
 class VoiceEffectsProcessor:
     def __init__(self, sample_rate: int) -> None:
         self.sample_rate = int(sample_rate)
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
+        self.wobble_phase = 0.0
         self.glitch_phase = 0.0
         self.time_glitch_history = np.zeros(max(64, int(self.sample_rate * 4.5)), dtype=np.float32)
         self.time_glitch_history_pos = 0
@@ -168,6 +193,7 @@ class VoiceEffectsProcessor:
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
         self._time_glitch_trigger = threading.Event()
         self._time_glitch_hold = threading.Event()
+        self._time_glitch_mode = None
         self._time_glitch_pitch_shifter = DualDelayPitchShifter(self.sample_rate)
         self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
@@ -217,6 +243,7 @@ class VoiceEffectsProcessor:
     def reset(self) -> None:
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
+        self.wobble_phase = 0.0
         self.glitch_phase = 0.0
         self.time_glitch_history.fill(0.0)
         self.time_glitch_history_pos = 0
@@ -230,6 +257,7 @@ class VoiceEffectsProcessor:
         self._time_glitch_trigger.clear()
         self._time_glitch_hold.clear()
         self._time_glitch_pitch_shifter.reset()
+        self._time_glitch_mode = None
         self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_window_samples = 0
@@ -276,10 +304,14 @@ class VoiceEffectsProcessor:
             y = self._ring_modulate(y, _finite_clamped(settings.robot_rate_hz, 5.0, 500.0, 35.0))
 
         if settings.echo_enabled:
-            y = self._echo(y, _finite_clamped(settings.echo_mix, 0.0, 1.0, 0.25))
+            self._configure_delay("echo", settings.echo_time_ms)
+            y = self._echo(y, _finite_clamped(settings.echo_mix, 0.0, 1.0, 0.25),
+                           _finite_clamped(settings.echo_feedback, 0.0, 0.9, 0.34))
 
         if settings.delay_enabled:
-            y = self._delay(y, _finite_clamped(settings.delay_mix, 0.0, 1.0, 0.3))
+            self._configure_delay("delay", settings.delay_time_ms)
+            y = self._delay(y, _finite_clamped(settings.delay_mix, 0.0, 1.0, 0.3),
+                            _finite_clamped(settings.delay_feedback, 0.0, 0.9, 0.48))
 
         if settings.tremolo_enabled:
             y = self._tremolo(y, _finite_clamped(settings.tremolo_rate_hz, 1.0, 30.0, 8.0))
@@ -336,7 +368,8 @@ class VoiceEffectsProcessor:
             )
 
         if settings.wobble_enabled:
-            y = self._wobble(y, _finite_clamped(settings.wobble_mix, 0.0, 1.0, 0.35))
+            y = self._wobble(y, _finite_clamped(settings.wobble_mix, 0.0, 1.0, 0.35),
+                             _finite_clamped(settings.wobble_rate_hz, 0.2, 20.0, 4.4))
 
         if settings.reverse_enabled:
             y = self._reverse_fragments(
@@ -377,6 +410,7 @@ class VoiceEffectsProcessor:
                 _finite_clamped(settings.time_glitch_voice_duck, 0.0, 1.0, 1.0),
                 _finite_clamped(settings.time_glitch_speed, 0.25, 4.0, 1.0),
                 _finite_clamped(settings.time_glitch_pitch_semitones, -24.0, 24.0, 0.0),
+                str(settings.time_glitch_direction or "random"),
             )
 
         if settings.ambience_enabled:
@@ -415,6 +449,11 @@ class VoiceEffectsProcessor:
             self.time_glitch_event_remaining = fade_samples
 
     def _sync_temporal_effect_state(self, settings: EffectsSettings) -> None:
+        mode = settings.time_glitch_trigger_mode
+        if self._time_glitch_mode is not None and mode != self._time_glitch_mode:
+            self.release_time_glitch()
+            self.time_glitch_event_remaining = 0
+        self._time_glitch_mode = mode
         current = {
             "echo": bool(settings.echo_enabled),
             "delay": bool(settings.delay_enabled),
@@ -422,14 +461,39 @@ class VoiceEffectsProcessor:
             "ghost": bool(settings.ghost_enabled),
             "chorus": bool(settings.chorus_enabled),
             "flanger": bool(settings.flanger_enabled),
+            "reverse": bool(settings.reverse_enabled),
+            "time_glitch": bool(settings.time_glitch_enabled),
+            "double_voice": bool(settings.double_voice_enabled),
+            "harmony": bool(settings.harmony_enabled),
         }
         for key, enabled in current.items():
-            if self._temporal_enabled[key] and not enabled:
+            if self._temporal_enabled.get(key, False) and not enabled:
                 self._clear_temporal_state(key)
             self._temporal_enabled[key] = enabled
 
     def _clear_temporal_state(self, key: str) -> None:
-        if key == "echo":
+        if key == "time_glitch":
+            self.release_time_glitch()
+            self.time_glitch_event_remaining = 0
+            self.time_glitch_event_elapsed = 0
+            self.time_glitch_grain = np.zeros(0, dtype=np.float32)
+            self.time_glitch_history.fill(0.0)
+            self.time_glitch_history_filled = 0
+            self.time_glitch_history_pos = 0
+            self.time_glitch_samples_until_event = max(1, int(self.sample_rate * 0.08))
+        elif key == "reverse":
+            self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
+            self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
+            self.reverse_window_samples = 0
+            self._reverse_pitch_shifter.reset()
+        elif key == "double_voice":
+            self.double_voice_buffer.fill(0.0)
+            self.double_voice_pos = 0
+            self._double_voice_shifter.reset()
+        elif key == "harmony":
+            for shifter in self._harm_shifters:
+                shifter.reset()
+        elif key == "echo":
             self.echo_buffer.fill(0.0)
             self.echo_pos = 0
         elif key == "delay":
@@ -482,25 +546,32 @@ class VoiceEffectsProcessor:
         bright = samples + (high * np.float32(1.35))
         return ((warm * (1.0 - tone)) + (bright * tone)).astype(np.float32, copy=False)
 
-    def _echo(self, samples: np.ndarray, mix: float) -> np.ndarray:
+    def _configure_delay(self, key: str, time_ms: float) -> None:
+        delay = max(1, int(self.sample_rate * _finite_clamped(time_ms, 20.0, 1500.0, 160.0) / 1000.0))
+        if delay != getattr(self, f"{key}_delay_samples"):
+            setattr(self, f"{key}_delay_samples", delay)
+            setattr(self, f"{key}_buffer", np.zeros(delay + 1, dtype=np.float32))
+            setattr(self, f"{key}_pos", 0)
+
+    def _echo(self, samples: np.ndarray, mix: float, feedback: float = 0.34) -> np.ndarray:
         out, self.echo_pos = self._feedback_delay(
             samples,
             mix,
             self.echo_buffer,
             self.echo_pos,
             self.echo_delay_samples,
-            feedback=0.34,
+            feedback=feedback,
         )
         return out
 
-    def _delay(self, samples: np.ndarray, mix: float) -> np.ndarray:
+    def _delay(self, samples: np.ndarray, mix: float, feedback: float = 0.48) -> np.ndarray:
         out, self.delay_pos = self._feedback_delay(
             samples,
             mix,
             self.delay_buffer,
             self.delay_pos,
             self.delay_delay_samples,
-            feedback=0.48,
+            feedback=feedback,
         )
         return out
 
@@ -677,21 +748,25 @@ class VoiceEffectsProcessor:
                 samples * np.float32(1.0 - mix * 0.32) + wet * np.float32(mix * 0.82)
             ).astype(np.float32, copy=False)
         wet = np.empty_like(samples)
-        for index, sample in enumerate(shifted):
-            read_pos = (self.double_voice_pos - delay_samples) % self.double_voice_buffer.size
-            wet[index] = self.double_voice_buffer[read_pos]
-            self.double_voice_buffer[self.double_voice_pos] = sample
-            self.double_voice_pos = (self.double_voice_pos + 1) % self.double_voice_buffer.size
+        offset = 0
+        while offset < shifted.size:
+            size = min(delay_samples, shifted.size - offset)
+            positions = (self.double_voice_pos + np.arange(size)) % self.double_voice_buffer.size
+            wet[offset:offset + size] = self.double_voice_buffer[(positions - delay_samples) % self.double_voice_buffer.size]
+            self.double_voice_buffer[positions] = shifted[offset:offset + size]
+            self.double_voice_pos = (self.double_voice_pos + size) % self.double_voice_buffer.size
+            offset += size
         return (
             samples * np.float32(1.0 - mix * 0.32) + wet * np.float32(mix * 0.82)
         ).astype(np.float32, copy=False)
 
-    def _wobble(self, samples: np.ndarray, mix: float) -> np.ndarray:
+    def _wobble(self, samples: np.ndarray, mix: float, rate_hz: float = 4.4) -> np.ndarray:
         if samples.size < 8 or mix <= 0.0:
             return samples.copy()
         indexes = np.arange(samples.size, dtype=np.float32)
-        phase_step = (2.0 * math.pi * 4.4) / self.sample_rate
-        wobble = 0.68 + (0.32 * ((np.sin(self.tremolo_phase + indexes * phase_step) + 1.0) * 0.5))
+        phase_step = (2.0 * math.pi * rate_hz) / self.sample_rate
+        wobble = 0.35 + (0.65 * ((np.sin(self.wobble_phase + indexes * phase_step) + 1.0) * 0.5))
+        self.wobble_phase = (self.wobble_phase + samples.size * phase_step) % (2.0 * math.pi)
         wet = (samples * wobble.astype(np.float32)).astype(np.float32, copy=False)
         return ((samples * (1.0 - mix)) + (wet * mix)).astype(np.float32, copy=False)
 
@@ -801,6 +876,7 @@ class VoiceEffectsProcessor:
         voice_duck: float,
         speed: float,
         pitch_semitones: float,
+        direction: str = "random",
     ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
         if samples.size == 0 or mix <= 0.0:
@@ -811,12 +887,9 @@ class VoiceEffectsProcessor:
         history_size = history.size
         fade_samples = max(1, int(self.sample_rate * 0.0015))
 
-        for index, clean_sample in enumerate(samples):
-            history[self.time_glitch_history_pos] = clean_sample
-            self.time_glitch_history_pos = (self.time_glitch_history_pos + 1) % history_size
-            self.time_glitch_history_filled = min(history_size, self.time_glitch_history_filled + 1)
-
-            shortcut_mode = trigger_mode.strip().lower() == "shortcut"
+        shortcut_mode = trigger_mode.strip().lower() == "shortcut"
+        index = 0
+        while index < samples.size:
             trigger_requested = shortcut_mode and self._time_glitch_trigger.is_set()
             if trigger_requested:
                 self._time_glitch_trigger.clear()
@@ -830,9 +903,10 @@ class VoiceEffectsProcessor:
                     pingpong_chance,
                     speed,
                     pitch_semitones,
+                    exact=True,
+                    direction=direction,
                 )
             elif self.time_glitch_event_remaining <= 0 and not shortcut_mode:
-                self.time_glitch_samples_until_event -= 1
                 if self.time_glitch_samples_until_event <= 0:
                     self._start_time_glitch_event(
                         depth,
@@ -844,21 +918,34 @@ class VoiceEffectsProcessor:
                         pingpong_chance,
                         speed,
                         pitch_semitones,
+                        direction=direction,
                     )
-
-            if self.time_glitch_event_remaining <= 0 or self.time_glitch_grain.size == 0:
-                continue
-
-            wet_sample = self.time_glitch_grain[self.time_glitch_grain_pos]
-            self.time_glitch_grain_pos = (self.time_glitch_grain_pos + 1) % self.time_glitch_grain.size
-
-            edge = min(self.time_glitch_event_elapsed, self.time_glitch_event_remaining - 1)
-            event_mix = mix * min(1.0, max(0.0, edge / fade_samples))
-            dry_gain = 1.0 - (voice_duck * event_mix)
-            output[index] = (clean_sample * dry_gain) + (wet_sample * event_mix * repeat_volume)
-            self.time_glitch_event_elapsed += 1
-            if not self._time_glitch_hold.is_set():
-                self.time_glitch_event_remaining -= 1
+            active = self.time_glitch_event_remaining > 0 and self.time_glitch_grain.size > 0
+            held = self._time_glitch_hold.is_set()
+            size = min(samples.size - index, history_size - self.time_glitch_history_pos)
+            if active and not held:
+                size = min(size, self.time_glitch_event_remaining)
+            elif not active and not shortcut_mode:
+                size = min(size, max(1, self.time_glitch_samples_until_event))
+            clean = samples[index:index + size]
+            if active:
+                offsets = np.arange(size)
+                wet = self.time_glitch_grain[(self.time_glitch_grain_pos + offsets) % self.time_glitch_grain.size]
+                edges = self.time_glitch_event_elapsed + offsets
+                if not held:
+                    edges = np.minimum(edges, self.time_glitch_event_remaining - 1 - offsets)
+                event_mix = mix * np.clip(edges / fade_samples, 0.0, 1.0)
+                output[index:index + size] = clean * (1.0 - voice_duck * event_mix) + wet * event_mix * repeat_volume
+                self.time_glitch_grain_pos = (self.time_glitch_grain_pos + size) % self.time_glitch_grain.size
+                self.time_glitch_event_elapsed += size
+                if not held:
+                    self.time_glitch_event_remaining -= size
+            elif not shortcut_mode:
+                self.time_glitch_samples_until_event -= size
+            history[self.time_glitch_history_pos:self.time_glitch_history_pos + size] = clean
+            self.time_glitch_history_pos = (self.time_glitch_history_pos + size) % history_size
+            self.time_glitch_history_filled = min(history_size, self.time_glitch_history_filled + size)
+            index += size
 
         return output.astype(np.float32, copy=False)
 
@@ -873,6 +960,8 @@ class VoiceEffectsProcessor:
         pingpong_chance: float,
         speed: float = 1.0,
         pitch_semitones: float = 0.0,
+        exact: bool = False,
+        direction: str = "random",
     ) -> None:
         jitter = float(self.noise_rng.uniform(0.65, 1.4))
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * interval_s * jitter))
@@ -885,6 +974,8 @@ class VoiceEffectsProcessor:
         grain_min = max(8, int(target_grain * (0.72 - depth * 0.12)))
         grain_max = max(grain_min, int(target_grain * (1.08 + depth * 0.42)))
         grain_size = int(self.noise_rng.integers(grain_min, grain_max + 1))
+        if exact:
+            grain_size = min(int(target_grain), max(8, self.time_glitch_history_filled - 1))
         available_lookback = self.time_glitch_history_filled - grain_size - 1
         if available_lookback <= 1:
             return
@@ -895,6 +986,8 @@ class VoiceEffectsProcessor:
             max(lookback_min, int(self.sample_rate * lookback_s)),
         )
         lookback = int(self.noise_rng.integers(lookback_min, lookback_max + 1))
+        if exact:
+            lookback = min(available_lookback, max(0, int(self.sample_rate * lookback_s)))
         end = (self.time_glitch_history_pos - lookback) % self.time_glitch_history.size
         start = (end - grain_size) % self.time_glitch_history.size
         if start < end:
@@ -905,31 +998,41 @@ class VoiceEffectsProcessor:
             return
 
         mode_roll = float(self.noise_rng.random())
-        if mode_roll < pingpong_chance:
+        if direction == "pingpong" or (direction == "random" and mode_roll < pingpong_chance):
             grain = np.concatenate((grain, grain[::-1])).astype(np.float32, copy=False)
-        elif mode_roll < pingpong_chance + reverse_chance:
+        elif direction == "reverse" or (direction == "random" and mode_roll < pingpong_chance + reverse_chance):
             grain = grain[::-1].copy()
-        elif mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
+        elif not exact and direction == "random" and mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
             slice_size = max(8, grain.size // 3)
             grain = np.tile(grain[:slice_size], 3)
 
         if abs(speed - 1.0) > 0.001:
-            positions = (np.arange(grain.size, dtype=np.float64) * speed) % grain.size
+            positions = np.arange(max(8, int(round(grain.size / speed))), dtype=np.float64) * speed
             grain = np.interp(
                 positions,
                 np.arange(grain.size, dtype=np.float64),
                 grain,
             ).astype(np.float32)
 
-        if abs(pitch_semitones) > 0.01:
+        # Warm up on a periodic copy so short grains do not start with an empty pitch delay.
+        pitch_correction = pitch_semitones - 12.0 * math.log2(speed)
+        if abs(pitch_correction) > 0.01:
             self._time_glitch_pitch_shifter.reset()
-            self._time_glitch_pitch_shifter.set_pitch_semitones(pitch_semitones)
-            grain = self._time_glitch_pitch_shifter.process(grain)
+            self._time_glitch_pitch_shifter.set_pitch_semitones(pitch_correction)
+            warmup = max(grain.size, int(self.sample_rate * 0.12))
+            periodic = grain[np.arange(warmup + grain.size) % grain.size]
+            grain = self._time_glitch_pitch_shifter.process(periodic)[-grain.size:]
+
+        fade = min(max(1, int(self.sample_rate * 0.0015)), grain.size // 4)
+        grain[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+        grain[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
 
         repeat_variation = max(0, int(round(depth * 2.0)))
         actual_repeats = int(
             self.noise_rng.integers(max(1, repeats - repeat_variation), min(10000, repeats + repeat_variation) + 1)
         )
+        if exact:
+            actual_repeats = max(1, min(10000, repeats))
         self.time_glitch_grain = grain.astype(np.float32, copy=False)
         self.time_glitch_grain_pos = 0
         self.time_glitch_event_total = grain.size * actual_repeats
@@ -1132,26 +1235,35 @@ class DualDelayPitchShifter:
         ratio = self.pitch_ratio
         phase_step = abs(ratio - 1.0) / self.delay_range
 
-        for i, sample in enumerate(block):
-            self.buffer[self.write_pos] = sample
-
-            p1 = self.phase
-            p2 = (self.phase + 0.5) % 1.0
-
+        # A chunk never spans the minimum delay, so vector reads cannot see future samples.
+        offset = 0
+        while offset < block.size:
+            size = min(self.min_delay_samples, block.size - offset)
+            positions = (self.write_pos + np.arange(size)) % self.buffer_len
+            self.buffer[positions] = block[offset:offset + size]
+            p1 = (self.phase + np.arange(size) * phase_step) % 1.0
+            p2 = (p1 + 0.5) % 1.0
             if ratio > 1.0:
-                delay1 = self.max_delay_samples - (p1 * self.delay_range)
-                delay2 = self.max_delay_samples - (p2 * self.delay_range)
+                delays = (self.max_delay_samples - p1 * self.delay_range,
+                          self.max_delay_samples - p2 * self.delay_range)
             else:
-                delay1 = self.min_delay_samples + (p1 * self.delay_range)
-                delay2 = self.min_delay_samples + (p2 * self.delay_range)
-
-            window1 = math.sin(math.pi * p1) ** 2
-            window2 = math.sin(math.pi * p2) ** 2
-            mixed = (self._read_delay(delay1) * window1) + (self._read_delay(delay2) * window2)
-            out[i] = mixed / max(window1 + window2, 0.000001)
-
-            self.write_pos = (self.write_pos + 1) % self.buffer_len
-            self.phase = (self.phase + phase_step) % 1.0
+                delays = (self.min_delay_samples + p1 * self.delay_range,
+                          self.min_delay_samples + p2 * self.delay_range)
+            mixed = np.zeros(size, dtype=np.float64)
+            weight_sum = np.zeros(size, dtype=np.float64)
+            for phase, delay in zip((p1, p2), delays):
+                read = positions - delay
+                floor = np.floor(read)
+                left = floor.astype(np.int64) % self.buffer_len
+                fraction = read - floor
+                values = self.buffer[left] * (1.0 - fraction) + self.buffer[(left + 1) % self.buffer_len] * fraction
+                weight = np.sin(np.pi * phase) ** 2
+                mixed += values * weight
+                weight_sum += weight
+            out[offset:offset + size] = mixed / np.maximum(weight_sum, 1e-6)
+            self.write_pos = (self.write_pos + size) % self.buffer_len
+            self.phase = (self.phase + size * phase_step) % 1.0
+            offset += size
 
         return np.nan_to_num(out, nan=0.0, posinf=1_000_000.0, neginf=-1_000_000.0).astype(
             np.float32,

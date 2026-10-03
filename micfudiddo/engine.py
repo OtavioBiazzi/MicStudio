@@ -199,6 +199,7 @@ class AudioEngine:
         self._primary_output_buffer: AudioRingBuffer | None = None
         self._pitch = DualDelayPitchShifter(48000)
         self._effects_processor = VoiceEffectsProcessor(48000)
+        self._reset_voice_pending = threading.Event()
         self._control_lock = threading.Lock()
         self._gain = 1.0
         self._master_mic_gain = 1.0
@@ -290,6 +291,10 @@ class AudioEngine:
 
     def trigger_time_glitch(self, hold: bool = False) -> None:
         self._effects_processor.trigger_time_glitch(hold=hold)
+
+    def reset_voice_effects(self) -> None:
+        self._effects_processor.release_time_glitch()
+        self._reset_voice_pending.set()
 
     def release_time_glitch(self) -> None:
         self._effects_processor.release_time_glitch()
@@ -868,6 +873,10 @@ class AudioEngine:
 
     def _process_audio_block(self, mono: np.ndarray, frames: int) -> tuple[np.ndarray, np.ndarray]:
         try:
+            if self._reset_voice_pending.is_set():
+                self._reset_voice_pending.clear()
+                self._effects_processor.reset()
+                self._pitch.reset()
             with self._control_lock:
                 gain = (self._gain * self._master_mic_gain) if not self._master_mute else 0.0
                 pitch_semitones = self._pitch_semitones + self._master_pitch_semitones

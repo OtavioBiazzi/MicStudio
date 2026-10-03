@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   MagnifyingGlass, Plus, Trash, Star, Copy, X, DotsThreeVertical,
   CaretUp, CaretDown, ArrowClockwise, Microphone, PencilSimpleLine,
-  Export, DownloadSimple, SlidersHorizontal
+  Export, DownloadSimple, SlidersHorizontal, Minus, Robot, WaveSine, Phone, SpeakerHigh, Circuitry, MusicNotes, ArrowCounterClockwise
 } from "@phosphor-icons/react";
 import {
   effectDefaults,
@@ -15,15 +15,17 @@ import {
   HotkeyCaptureButton
 } from "../utils";
 import { voicePresets, visibleVoicePresets } from "../voicePresets";
+import { controlsForVoice } from "../voiceControls";
+import { GlitchCommandControls } from "./GlitchCommandControls";
 
 const voiceImageModules = import.meta.glob("../../assets/voices/*.png", { eager: true, import: "default" });
-const defaultVoiceControls = [
-  { target: "control", key: "pitch", label: "Pitch", min: -12, max: 12, step: 1, unit: "st", group: "Identidade" },
-  { target: "effect", key: "robot_rate_hz", enableKey: "robot_enabled", label: "Robotização", min: 5, max: 120, step: 1, unit: "Hz", group: "Textura" },
-  { target: "effect", key: "reverb_mix", enableKey: "reverb_enabled", label: "Reverb", min: 0, max: 100, step: 1, unit: "%", scale: 100, group: "Espaço" },
-  { target: "effect", key: "echo_mix", enableKey: "echo_enabled", label: "Eco", min: 0, max: 100, step: 1, unit: "%", scale: 100, group: "Espaço" },
-  { target: "effect", key: "distortion_drive", enableKey: "distortion_enabled", label: "Distorção", min: 1, max: 30, step: 0.5, unit: "x", group: "Textura" }
-];
+const newVoiceIcons = {
+  banana_caotica: WaveSine, bebe_revoltado: SpeakerHigh, desenho_emborrachado: WaveSine,
+  voz_gelatina: WaveSine, palhaco_digital: Circuitry, dupla_desafinada: MusicNotes,
+  npc_travado: Robot, internet_batata: Phone, robo_brinquedo: Robot,
+  interfone_caos: Phone, locutor_promocao: Microphone, fita_derretendo: WaveSine,
+  eco_escadinha: MusicNotes, rewind_meme: ArrowCounterClockwise
+};
 
 function getVoiceImage(id) {
   for (const [path, url] of Object.entries(voiceImageModules)) {
@@ -69,12 +71,16 @@ export function VozesPage({
   const allVoices = useMemo(() => [...visibleVoicePresets, ...customVoices], [customVoices]);
 
   const categories = useMemo(() => {
-    return ["Todas", "Favoritas", "Recentes", "Humanos", "Robôs", "Monstros", "Anime", "Jogos", "Sci-Fi", "Memes", "Customizadas", ...customVoiceCategories];
+    return ["Todas", "Novas", "Favoritas", "Recentes", "Humanos", "Robôs", "Monstros", "Anime", "Jogos", "Sci-Fi", "Memes", "Customizadas", ...customVoiceCategories];
   }, [customVoiceCategories]);
 
   const filtered = useMemo(() => {
     let list = allVoices;
-    if (category === "Favoritas") {
+    if (category === "Novas") {
+      list = list.filter((v) => v.isNew);
+    } else if (category === "Recentes") {
+      list = list.filter((v) => state.voiceRecents?.includes(v.id));
+    } else if (category === "Favoritas") {
       list = list.filter((v) => favorites.includes(v.id) || v.id === "personalizado");
     } else if (category === "Customizadas") {
       list = list.filter((v) => customVoices.some((c) => c.id === v.id) || v.id === "personalizado");
@@ -97,11 +103,11 @@ export function VozesPage({
     
     if (query) {
       const q = query.toLowerCase();
-      list = list.filter((v) => v.id === "personalizado" || v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q));
+      list = list.filter((v) => `${v.label} ${v.description} ${(v.tags || []).join(" ")}`.toLowerCase().includes(q));
     }
 
     const hasPersonalizado = list.some((v) => v.id === "personalizado");
-    if (!hasPersonalizado) {
+    if (!hasPersonalizado && !query && category === "Customizadas") {
       const pers = allVoices.find((v) => v.id === "personalizado");
       if (pers) {
         list = [pers, ...list];
@@ -109,6 +115,7 @@ export function VozesPage({
     }
     
     const sorted = [...list].sort((a, b) => {
+      if (category === "Recentes") return state.voiceRecents.indexOf(a.id) - state.voiceRecents.indexOf(b.id);
       if (a.id === "personalizado") return -1;
       if (b.id === "personalizado") return 1;
       const aFav = favorites.includes(a.id);
@@ -127,7 +134,7 @@ export function VozesPage({
       }
     }
     return unique;
-  }, [allVoices, category, query, favorites, customVoices, customVoiceCategories]);
+  }, [allVoices, category, query, favorites, customVoices, customVoiceCategories, state.voiceRecents]);
 
   const panelVoice = selectedVoice ? allVoices.find((v) => v.id === selectedVoice) : null;
 
@@ -139,8 +146,8 @@ export function VozesPage({
   return (
     <>
       <div className="labHeader">
-        <h2>🎙️ Biblioteca de Vozes</h2>
-        <p>Selecione, personalize e modele timbres de estúdio premium em tempo real</p>
+        <h2>Biblioteca de Vozes</h2>
+        <p>{allVoices.length - 1} vozes · {allVoices.filter((voice) => voice.isNew).length} novas</p>
       </div>
 
       <div className="pageToolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -232,10 +239,11 @@ export function VozesPage({
         ))}
       </div>
 
-      <div className="sectionHeader">TODAS AS VOZES</div>
+      <div className="sectionHeader">{category.toUpperCase()} · {filtered.length}</div>
 
       <div className={`voiceGridArea ${panelVoice ? "" : "no-panel"}`}>
         <div className="voiceGrid">
+          {filtered.length === 0 && <p className="voiceEmptyState">Nenhuma voz encontrada.</p>}
           {filtered.map((voice) => (
             <VoiceCard
               key={voice.id}
@@ -243,7 +251,7 @@ export function VozesPage({
               isActive={activePreset?.id === voice.id}
               isFavorite={favorites.includes(voice.id)}
               onSelect={() => selectVoice(voice)}
-              onEditOnly={() => setSelectedVoice(voice.id)}
+              onEditOnly={() => selectVoice(voice)}
               onToggleFavorite={() => toggleFavorite(voice.id)}
               onContextMenu={(e) => {
                 setContextMenu({
@@ -306,7 +314,7 @@ export function VozesPage({
             <Microphone size={14} /> Ativar Voz
           </button>
           <button onClick={() => {
-            setSelectedVoice(contextMenu.voice.id);
+            selectVoice(contextMenu.voice);
             setContextMenu(null);
           }}>
             <SlidersHorizontal size={14} /> Editar Parâmetros
@@ -447,6 +455,7 @@ export function VozesPage({
 // --- VoiceCard ---
 export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, onToggleFavorite, onContextMenu }) {
   const image = getVoiceImage(voice.id);
+  const VoiceIcon = newVoiceIcons[voice.id];
   return (
     <motion.div
       className={`voiceCard ${isActive ? "active" : ""}`}
@@ -469,7 +478,7 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
         ) : (
           <>
             <div className="cardGradient" style={{ background: voice.gradient }} />
-            <span className="cardEmoji">{voice.emoji}</span>
+            <span className="cardEmoji">{VoiceIcon ? <VoiceIcon size={58} weight="duotone" /> : voice.emoji}</span>
           </>
         )}
         <div className="cardWaveform">
@@ -478,7 +487,7 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
           ))}
         </div>
       </div>
-      <button className={`favBtn ${isFavorite ? "favorited" : ""}`} onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}>
+      <button title={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} className={`favBtn ${isFavorite ? "favorited" : ""}`} onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}>
         <Star size={14} weight={isFavorite ? "fill" : "regular"} />
       </button>
       <div className="cardInfo">
@@ -493,12 +502,13 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
 export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, onRestorePreset, call, isFavorite, onToggleFavorite, onClose, setToast }) {
   const [showMore, setShowMore] = useState(false);
   const image = getVoiceImage(voice.id);
+  const VoiceIcon = newVoiceIcons[voice.id];
   const controls = state.controls;
 
   const gainValue = Number(controls.gain ?? 1.0);
   const monitorVolumeValue = Number(controls.monitorVolume ?? 1.0);
   const outputVolumeValue = Number(controls.effects?.output_volume ?? 1.0);
-  const personalizedControls = voice.controls?.length ? voice.controls : defaultVoiceControls;
+  const personalizedControls = controlsForVoice(voice, voicePresets);
   const controlGroups = personalizedControls.reduce((groups, item) => {
     const group = item.group || "Configuração";
     if (!groups[group]) groups[group] = [];
@@ -528,14 +538,13 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
 
   return (
     <div className="voiceSidePanel">
-      <button className="panelCopy" title="Duplicar"><Copy size={16} /></button>
-      <button className="panelClose" onClick={onClose}><X size={16} /></button>
+      <button className="panelClose" title="Fechar painel" aria-label="Fechar painel" onClick={onClose}><X size={16} /></button>
 
       <div className="panelImage">
         {image ? <img src={image} alt={voice.label} /> : (
           <>
             <div className="cardGradient" style={{ background: voice.gradient, position: "absolute", inset: 0 }} />
-            <span className="panelEmoji">{voice.emoji}</span>
+            <span className="panelEmoji">{VoiceIcon ? <VoiceIcon size={54} weight="duotone" /> : voice.emoji}</span>
           </>
         )}
       </div>
@@ -543,7 +552,7 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
       <div className="panelBody">
         <div className="panelName">
           {voice.label}
-          <span className="proBadge">PRO</span>
+          {voice.isNew && <span className="proBadge">NOVA</span>}
         </div>
         <p className="panelDesc">{voice.description}</p>
         {voice.tags?.length > 0 && (
@@ -577,7 +586,6 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
             <div className="panelSection">
               <div className="panelSectionTitle">
                 CONTROLES DE {voice.label}
-                <button className="moreBtn"><DotsThreeVertical size={16} /></button>
               </div>
 
               {Object.entries(controlGroups).map(([group, items]) => (
@@ -599,16 +607,12 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
                       );
                     }
                     if (item.type === "hotkey") {
-                      const shortcutValue = controls.effects?.[item.key]
-                        || state.settings?.shortcutCommandGlitch
-                        || voice.effects?.[item.key]
-                        || "";
+                      const shortcutValue = state.settings?.shortcutCommandGlitch || "";
                       return (
                         <PanelField key={`${item.target}-${item.key}`} label={item.label}>
                           <HotkeyCaptureButton
                             value={shortcutValue}
                             onChange={(value) => {
-                              updateEffects({ [item.key]: value, [item.enableKey]: true });
                               call?.("/api/settings", { shortcutCommandGlitch: value });
                             }}
                           />
@@ -639,6 +643,9 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
               ))}
             </div>
 
+            {controls.effects?.time_glitch_trigger_mode === "shortcut" && (
+              <GlitchCommandControls state={state} call={call} setToast={setToast} />
+            )}
             <button className="moreConfigsBtn" onClick={() => setShowMore(!showMore)}>
               {showMore ? "Menos configurações" : "Mais configurações"}
               {showMore ? <CaretUp size={14} /> : <CaretDown size={14} />}
@@ -826,10 +833,21 @@ export function PanelSlider({
         max={logarithmic ? 1000 : max}
         step={logarithmic ? 1 : step}
         value={sliderValue}
+        aria-label={label}
         onChange={handleChange}
+        onKeyDown={(event) => {
+          if (!logarithmic || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+          event.preventDefault();
+          const increment = ["ArrowRight", "ArrowUp"].includes(event.key) ? step : -step;
+          onChange(Math.max(min, Math.min(max, safeValue + increment)));
+        }}
         disabled={enabled === false}
       />
       <span className="sliderValue">{formatted}{unit}</span>
+      {logarithmic && <div className="sliderStepper">
+        <button title={`Diminuir ${label}`} aria-label={`Diminuir ${label}`} disabled={enabled === false || safeValue <= min} onClick={() => onChange(Math.max(min, safeValue - step))}><Minus size={12} /></button>
+        <button title={`Aumentar ${label}`} aria-label={`Aumentar ${label}`} disabled={enabled === false || safeValue >= max} onClick={() => onChange(Math.min(max, safeValue + step))}><Plus size={12} /></button>
+      </div>}
     </div>
   );
 }

@@ -1451,6 +1451,17 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.4.1": `### Versão 1.4.1
+* Mantidos o design atual, os temas e a barra rápida fixa. Sem o redesign experimental.
+* Corrigido o carregamento infinito quando o backend está ausente ou falha na inicialização. Erros específicos, nova tentativa, acesso aos logs e orientação de reinstalação sem apagar configurações.
+* Requisições de estado e saúde com tempo limite. Inicialização lenta não fica presa em uma mensagem genérica.
+* Backend validado antes do empacotamento e após a instalação. Logs de execução mesmo sem console Python; falhas na preparação do áudio são registradas com código de erro.
+* Glitch Sob Comando não perde mais o disparo ao trocar de voz ou quando ainda está formando o histórico de áudio.
+* Velocidade, pitch, direção e quantidade passam a atualizar a repetição em andamento. Segurar continua repetindo até soltar, inclusive após mudar ajustes.
+* Parar não permite que ajustes posteriores ressuscitem a repetição. Soltar teclas sem ter iniciado o atalho não interrompe o botão de segurar.
+* Glitched Temporal não é mais interrompido por ajustes de volume e monitoramento. Mudanças de intervalo passam a valer sem esperar o intervalo antigo.
+* Indicação de bypass no painel de voz e motivo dos controles de repetição estarem desativados.
+* Notas disponíveis dentro do aplicativo, inclusive offline.`,
   "v1.4.0": `### Versão 1.4.0
 * 14 novas vozes: Banana Caótica, Bebê Revoltado, Desenho Emborrachado, Voz de Gelatina, Palhaço Digital, Dupla Desafinada, NPC Travado, Internet de Batata, Robô de Brinquedo, Interfone do Caos, Locutor de Promoção, Fita Derretendo, Eco Escadinha e Rewind de Meme.
 * Glitch Sob Comando com captura e contagem exatas de 1 a 10.000 repetições, direção normal, reversa ou ida e volta, velocidade, pitch, volume independente e redução da voz original.

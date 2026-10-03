@@ -37,6 +37,14 @@
 
 ; ─── VB-CABLE detection ────────────────────────────────────────
 !macro customInstall
+  IfFileExists "$INSTDIR\resources\backend\MicFudiddoBackend.exe" backend_exe_present backend_incomplete
+  backend_exe_present:
+  IfFileExists "$INSTDIR\resources\backend\_internal\python313.dll" backend_files_present backend_incomplete
+  backend_incomplete:
+    MessageBox MB_OK|MB_ICONSTOP "A instalacao nao conseguiu gravar o servidor de audio. Execute o instalador novamente e consulte o historico de protecao do Windows. Suas configuracoes nao foram apagadas." /SD IDOK
+    SetErrorLevel 2
+    Quit
+  backend_files_present:
   ; Check if VB-CABLE is already installed by looking in 64-bit and 32-bit Registry
   SetRegView 64
   ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\VB:VBCABLE {87459874-1236-4469}" "DisplayName"

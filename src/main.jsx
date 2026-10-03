@@ -18,7 +18,7 @@ import { restoreVoiceEdits, voiceEditSnapshot } from "./voiceState";
 import { voicePresets } from "./voicePresets";
 
 // API Client
-import { API } from "./apiClient";
+import { API, getAPI } from "./apiClient";
 import packageMetadata from "../package.json";
 
 const TTS_CHARACTER_LIMIT = 10000;
@@ -28,6 +28,7 @@ import { Sidebar } from "./components/Sidebar";
 import { WindowControls } from "./components/WindowControls";
 import { AudioPlayer } from "./components/AudioPlayer";
 import { FloatingDock } from "./components/FloatingDock";
+import { StartupScreen } from "./components/StartupScreen";
 
 // Page Components
 import { VozesPage } from "./components/VozesPage";
@@ -99,6 +100,9 @@ function App() {
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [chooseMicOnCloseOpen, setChooseMicOnCloseOpen] = useState(false);
   const [bootError, setBootError] = useState(null);
+  const [bootStatus, setBootStatus] = useState(null);
+  const [bootElapsed, setBootElapsed] = useState(0);
+  const bootStartedRef = useRef(Date.now());
   const controlsOptimisticRef = useRef(null);
   const lastYoutubeStatusRef = useRef("");
   const controlsTimerRef = useRef(null);
@@ -106,6 +110,7 @@ function App() {
   const controlsQueueRef = useRef(Promise.resolve());
   const controlsRevisionRef = useRef(0);
   const controlsPendingResetRef = useRef(false);
+  const controlsErrorRef = useRef(null);
   const latestControlsRef = useRef(null);
   const stateRef = useRef(state);
   const categoriesHydratedRef = useRef(false);
@@ -453,6 +458,9 @@ function App() {
     if (path === "/api/glitch/trigger") {
       controlsFlushRef.current?.();
       await controlsQueueRef.current;
+      if (controlsErrorRef.current?.revision === controlsRevisionRef.current) {
+        throw new Error("Não foi possível aplicar os ajustes da repetição. Altere o controle novamente antes de disparar.");
+      }
     }
     const res = await fetch(`${API}${path}`, {
       method: "POST",
@@ -484,15 +492,11 @@ function App() {
   };
 
   const refresh = async () => {
-    const res = await fetch(`${API}/api/state`);
-    if (!res.ok) throw new Error("Backend indisponível");
-    applyIncomingState(await res.json());
+    applyIncomingState(await getAPI("/api/state"));
   };
 
   const refreshRuntime = async () => {
-    const res = await fetch(`${API}/api/runtime`);
-    if (!res.ok) throw new Error("Backend indisponível");
-    const data = await res.json();
+    const data = await getAPI("/api/runtime");
     const currentPid = stateRef.current?.diagnostics?.pid;
     if (currentPid != null && data.diagnostics?.pid !== currentPid) {
       await refresh();
@@ -518,6 +522,7 @@ function App() {
     const controls = { ...currentControls, ...(currentControls.voiceBypassed && editingVoice ? savedCustomControls || {} : {}), ...patch };
     if (editingVoice && !("voiceBypassed" in patch)) controls.voiceBypassed = false;
     const revision = ++controlsRevisionRef.current;
+    controlsErrorRef.current = null;
     controlsOptimisticRef.current = { controls, until: Infinity };
     latestControlsRef.current = controls;
     setState((currentState) => ({ ...currentState, controls, activeVoiceId: persistVoiceId || currentState?.activeVoiceId }));
@@ -571,11 +576,15 @@ function App() {
         const data = await response.json();
         if (!response.ok || data.error) throw new Error(data.error || "Erro no backend");
         if (revision === controlsRevisionRef.current) {
+          controlsErrorRef.current = null;
           controlsOptimisticRef.current = null;
           applyIncomingState(data);
         }
       }).catch((e) => {
-        if (revision === controlsRevisionRef.current) controlsOptimisticRef.current = null;
+        if (revision === controlsRevisionRef.current) {
+          controlsOptimisticRef.current = null;
+          controlsErrorRef.current = { revision, error: e.message };
+        }
         setToast(e.message);
       });
     };
@@ -728,6 +737,16 @@ function App() {
   useEffect(() => {
     let active = true;
     let refreshTimer = null;
+    const acceptStatus = (status) => {
+      if (active) setBootStatus(status);
+    };
+    const unsubscribe = window.micfudiddo?.onBackendStatus?.(acceptStatus);
+    const statusTimer = setInterval(() => {
+      if (!active || stateRef.current) return;
+      setBootElapsed(Math.floor((Date.now() - bootStartedRef.current) / 1000));
+      window.micfudiddo?.getBackendStatus?.().then(acceptStatus).catch(() => {});
+    }, 2000);
+    window.micfudiddo?.getBackendStatus?.().then(acceptStatus).catch(() => {});
     
     const runRefresh = async () => {
       try {
@@ -751,9 +770,13 @@ function App() {
     const timeoutId = setTimeout(async () => {
       if (!active || stateRef.current) return;
       try {
-        const health = await fetch(`${API}/api/health`);
-        const details = await health.json().catch(() => ({}));
-        if (health.ok && details?.ok) return;
+        const details = await getAPI("/api/health");
+        if (details?.ok) {
+          if (active) setBootError(details.ready === false
+            ? "O servidor respondeu, mas nao concluiu a preparacao dos dispositivos. Consulte os logs ou tente novamente."
+            : "O servidor respondeu, mas a biblioteca nao carregou. Consulte os logs ou tente novamente.");
+          return;
+        }
       } catch {
         // Show the boot error only when the backend itself is unreachable.
       }
@@ -764,6 +787,8 @@ function App() {
 
     return () => {
       active = false;
+      clearInterval(statusTimer);
+      unsubscribe?.();
       clearTimeout(timeoutId);
       if (refreshTimer) clearTimeout(refreshTimer);
       if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -914,18 +939,19 @@ function App() {
     }
   }, [state?.youtubeStatus, setToast]);
 
-  if (bootError && !state) {
-    return (
-      <div className="boot" style={{ display: "flex", flexDirection: "column", gap: 16, padding: 32, textAlign: "center", justifyContent: "center", alignItems: "center", height: "100vh" }}>
-        <h2 style={{ color: "var(--danger)", margin: 0 }}>Ops! Erro de Conexão</h2>
-        <p style={{ maxWidth: 450, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>{bootError}</p>
-        <button onClick={() => window.location.reload()} className="btn btn-primary" style={{ padding: "8px 16px", fontSize: 13, background: "linear-gradient(135deg, var(--danger), var(--danger-soft))" }}>Tentar Novamente</button>
-      </div>
-    );
-  }
-
   if (!state) {
-    return <div className="boot">Carregando MicFudido Studio...</div>;
+    return <StartupScreen status={bootStatus} error={bootError} elapsed={bootElapsed} onRetry={async () => {
+      setBootError(null);
+      setBootStatus(null);
+      setBootElapsed(0);
+      bootStartedRef.current = Date.now();
+      try {
+        if (window.micfudiddo?.retryBackend) setBootStatus(await window.micfudiddo.retryBackend());
+        await refresh();
+      } catch (error) {
+        setBootError(error.name === "TimeoutError" ? "O servidor nao respondeu a tempo. Consulte os logs." : "Nao foi possivel conectar ao servidor de audio.");
+      }
+    }} />;
   }
 
   const processingActive = state.running && !state.monitorOnly;

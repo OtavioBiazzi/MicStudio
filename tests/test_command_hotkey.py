@@ -65,6 +65,22 @@ class CommandHotkeyTests(unittest.TestCase):
         self.register()
         self.assertEqual(self.keyboard.add_hotkey.call_args.args[0], "ctrl+alt+g")
 
+    def test_unrelated_key_release_does_not_stop_button_hold(self):
+        self.state.effects = replace(self.state.effects, time_glitch_shortcut_mode="hold")
+        _, release = self.register()
+        self.state.engine.release_time_glitch.reset_mock()
+        release(SimpleNamespace(event_type="up", name="g"))
+        self.state.engine.release_time_glitch.assert_not_called()
+
+    def test_stale_release_callback_cannot_stop_new_voice(self):
+        self.state.effects = replace(self.state.effects, time_glitch_shortcut_mode="hold")
+        press, release = self.register()
+        press()
+        self.state.settings["shortcutCommandGlitch"] = "F2"
+        self.state.engine.release_time_glitch.reset_mock()
+        release(SimpleNamespace(event_type="up", name="g"))
+        self.state.engine.release_time_glitch.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

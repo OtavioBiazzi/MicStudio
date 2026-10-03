@@ -14,7 +14,7 @@ export async function postAPI(path, body = {}) {
 }
 
 export async function getAPI(path) {
-  const res = await fetch(`${API}${path}`);
+  const res = await fetch(`${API}${path}`, { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   if (!res.ok || data.error) {
     throw new Error(data?.error || "Erro no backend");

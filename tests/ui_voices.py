@@ -2,14 +2,15 @@
 import copy
 import json
 import os
-import urllib.request
+import urllib.parse
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
+from ui_startup import fixture_state
 
 
 def main():
-    state = json.load(urllib.request.urlopen("http://127.0.0.1:38717/api/state", timeout=5))
+    state = fixture_state()
     state.update(running=True, monitorOnly=False, activeVoiceId="clean", voiceRecents=[], controlsRevision=0)
     state["settings"]["voiceEditPersistence"] = "save"
     state["settings"]["shortcutCommandGlitch"] = "Ctrl+Alt+G"
@@ -92,7 +93,7 @@ def main():
             expect(panel).to_be_visible()
             assert panel.evaluate("element => element.scrollWidth <= element.clientWidth + 1"), width
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), width
-            page.screenshot(path=str(artifacts / f"voices-1.4.0-{width}.png"))
+            page.screenshot(path=str(artifacts / f"voices-1.4.1-{width}.png"))
 
         page.set_viewport_size({"width": 1600, "height": 1000})
         with page.expect_response(lambda response: "/api/controls" in response.url):

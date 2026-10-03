@@ -1647,6 +1647,8 @@ class AppState:
             press_handle = keyboard.add_hotkey(hotkey, trigger, suppress=False)
             self.time_glitch_hotkey_handles.append(("hotkey", press_handle))
             def release(event) -> None:
+                if self.time_glitch_hotkey_signature() != registered_signature or not self.time_glitch_hotkey_down:
+                    return
                 name = str(event.name or "").lower().removeprefix("left ").removeprefix("right ")
                 if event.event_type == "up" and name in [key.strip() for key in hotkey.split("+")]:
                     self.time_glitch_hotkey_down = False
@@ -3933,6 +3935,7 @@ def main() -> None:
     server_thread = threading.Thread(target=server.serve_forever, daemon=True, name="micfudiddo-http")
     server_thread.start()
     print(f"MicFudiddo backend listening on http://{args.host}:{args.port}", flush=True)
+    exit_code = 0
     try:
         # Keep health available while Windows audio/device enumeration finishes.
         threading.Thread(target=watch_parent_process, args=(watched_parent_pid,), daemon=True).start()
@@ -3941,16 +3944,24 @@ def main() -> None:
         STATE.api_port = args.port
         while server_thread.is_alive():
             server_thread.join(timeout=0.5)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        exit_code = 1
     finally:
         try:
             server.shutdown()
             server.server_close()
             if STATE is not None:
                 STATE.shutdown_resources()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            exit_code = 1
         finally:
             sys.stdout.flush()
             sys.stderr.flush()
-            os._exit(0)
+            os._exit(exit_code)
 
 
 if __name__ == "__main__":

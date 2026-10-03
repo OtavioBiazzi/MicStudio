@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray, clipboard } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
+const { backendFailure, waitUntilReady } = require("./backend-status.cjs");
 
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
@@ -16,6 +17,16 @@ let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
 let shortcutConflicts = new Map();
 let rendererRecoveryAttempts = 0;
+let backendStartPromise;
+let backendRetryPromise;
+let backendStatus = { phase: "starting", message: "Preparando o servidor de audio", startedAt: Date.now() };
+
+function setBackendStatus(patch) {
+  backendStatus = { ...backendStatus, ...patch };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("backend:status", backendStatus);
+  }
+}
 
 function getIconPath() {
   if (isDev) {
@@ -97,12 +108,10 @@ function sleep(ms) {
 }
 
 async function waitForBackendHealth(port, timeoutMs = 30000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await pingHealth(port)) return true;
-    await sleep(350);
-  }
-  return false;
+  return waitUntilReady(() => pingHealth(port), {
+    timeoutMs,
+    cancelled: () => quitting || backendStatus.phase === "error",
+  });
 }
 
 async function waitForPortRelease(port, timeoutMs = 5000) {
@@ -126,7 +135,14 @@ function readLogExcerpt(logFile) {
 }
 
 async function startBackend() {
+  if (backendStartPromise) return backendStartPromise;
+  backendStartPromise = launchBackend().finally(() => { backendStartPromise = null; });
+  return backendStartPromise;
+}
+
+async function launchBackend() {
   if (backend) return;
+  setBackendStatus({ phase: "starting", message: "Preparando o servidor de audio", detail: "", code: null, repairRequired: false, startedAt: Date.now() });
   
   const port = 38717;
   const occupied = await checkPortOccupied(port);
@@ -141,20 +157,12 @@ async function startBackend() {
         clearTimeout(timeoutId);
       } catch (_) {}
       if (!(await waitForPortRelease(port))) {
-        dialog.showErrorBox(
-          "Backend Preso",
-          "Uma instância antiga do servidor de áudio não respondeu ao encerramento. Finalize MicFudiddoBackend.exe no Gerenciador de Tarefas e abra o app novamente."
-        );
-        app.quit();
-        throw new Error("Backend antigo permaneceu preso na porta 38717.");
+        setBackendStatus({ phase: "error", code: "PORT_BUSY", message: "Uma instancia antiga do servidor de audio nao respondeu ao encerramento. Feche essa instancia e tente novamente." });
+        return false;
       }
     } else {
-      dialog.showErrorBox(
-        "Conflito de Porta",
-        `A porta do servidor de áudio (${port}) já está em uso por outro programa.\n\nPor favor, feche o outro programa e tente abrir o MicFudiddo Studio novamente.`
-      );
-      app.quit();
-      process.exit(0);
+      setBackendStatus({ phase: "error", code: "PORT_BUSY", message: `A porta ${port} esta em uso por outro programa. Feche esse programa e tente novamente.` });
+      return false;
     }
   }
 
@@ -175,6 +183,12 @@ async function startBackend() {
     ? pythonPath()
     : path.join(process.resourcesPath, "backend", "MicFudiddoBackend.exe");
   logStream.write(`[electron] iniciando backend: ${backendExecutable}\n`);
+  if (!fs.existsSync(backendExecutable)) {
+    const error = Object.assign(new Error("Executavel ausente"), { code: "ENOENT" });
+    logStream.end(`[electron] ${error.message}: ${backendExecutable}\n`);
+    setBackendStatus(backendFailure(error, backendExecutable));
+    return false;
+  }
 
   if (isDev) {
     backend = spawn(backendExecutable, ["-m", "micfudiddo.backend", ...backendArgs], {
@@ -183,41 +197,52 @@ async function startBackend() {
     });
   } else {
     backend = spawn(backendExecutable, backendArgs, {
-      windowsHide: true
+      windowsHide: true,
+      cwd: app.getPath("userData"),
+      env: { ...process.env, MICFUDIDDO_LOG_DIR: logDir },
     });
   }
   
   if (backend) {
-    backend.stdout.pipe(logStream);
-    backend.stderr.pipe(logStream);
+    const child = backend;
+    backend.stdout.pipe(logStream, { end: false });
+    backend.stderr.pipe(logStream, { end: false });
     backend.on("spawn", () => {
       logStream.write(`[electron] processo criado: pid=${backend?.pid || "desconhecido"}\n`);
     });
     backend.on("error", (err) => {
       logStream.write(`[electron] falha ao criar processo: ${err?.stack || err}\n`);
       console.error("Erro ao iniciar o backend:", err);
+      if (backend === child) {
+        backend = null;
+        setBackendStatus(backendFailure(err, backendExecutable));
+      }
     });
     backend.on("exit", (code) => {
       logStream.write(`[electron] backend encerrado: codigo=${code}\n`);
-      if (code !== 0 && !quitting) {
-        const logExcerpt = readLogExcerpt(logFile);
-        
-        dialog.showErrorBox(
-          "Falha no Servidor de Áudio",
-          `O servidor de áudio (backend) fechou inesperadamente com o código ${code}.\n\nLogs de Erro:\n${logExcerpt || "Sem logs disponíveis."}\n\nSe o erro persistir, exporte o diagnóstico nas Configurações.`
-        );
+      if (backend === child) {
+        backend = null;
+        if (!quitting) {
+          const runtimeLog = readLogExcerpt(path.join(logDir, "backend-runtime.log"));
+          const detail = `Codigo ${code}\n${runtimeLog || readLogExcerpt(logFile)}`;
+          setBackendStatus(backendFailure(new Error(detail), backendExecutable));
+        }
       }
     });
+    child.once("close", () => logStream.end());
   }
 
   const healthy = await waitForBackendHealth(port, isDev ? 15000 : 30000);
-  if (!healthy) {
+  if (healthy) {
+    setBackendStatus({ phase: "ready", message: "Servidor de audio pronto" });
+  } else if (backendStatus.phase !== "error" && !quitting) {
     const processAlive = Boolean(backend && backend.exitCode === null && !backend.killed);
     const serverResponding = await pingHealth(port, false);
     logStream.write(
       `[electron] preparacao continua em segundo plano: processoAtivo=${processAlive} servidorRespondendo=${serverResponding}\n`
     );
     console.warn("Backend ainda preparando; a interface continuará aguardando em segundo plano.");
+    setBackendStatus({ phase: "slow", message: "O servidor esta demorando mais que o esperado. Voce pode tentar novamente ou consultar os logs." });
   }
   return healthy;
 }
@@ -232,13 +257,13 @@ async function stopBackend() {
     await fetch(`${API}/api/shutdown`, { method: "POST", signal: controller.signal }).catch(() => {});
     clearTimeout(timeoutId);
   } catch (_) {}
-  if (child && child.exitCode === null) {
+  if (child?.pid && child.exitCode === null) {
     await Promise.race([
       new Promise((resolve) => child.once("exit", resolve)),
       sleep(1800)
     ]);
   }
-  if (child && child.exitCode === null) {
+  if (child?.pid && child.exitCode === null) {
     await new Promise((resolve) => {
       const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
       killer.once("exit", resolve);
@@ -953,6 +978,28 @@ app.whenReady().then(async () => {
     app.quit();
   }
 });
+
+ipcMain.handle("backend:get-status", async () => {
+  if (backendStatus.phase === "slow" && await pingHealth(38717)) {
+    setBackendStatus({ phase: "ready", message: "Servidor de audio pronto" });
+  }
+  return backendStatus;
+});
+ipcMain.handle("backend:retry", async () => {
+  if (!backendRetryPromise) {
+    backendRetryPromise = (async () => {
+      if (backendStartPromise) await backendStartPromise;
+      else {
+        if (backend) await stopBackend();
+        await startBackend();
+      }
+      if (backendStatus.phase !== "error" && !quitting) startSoundHotkeys();
+      return backendStatus;
+    })().finally(() => { backendRetryPromise = null; });
+  }
+  return backendRetryPromise;
+});
+ipcMain.handle("backend:open-logs", () => shell.openPath(path.join(app.getPath("userData"), "logs")));
 
 app.on("second-instance", () => {
   if (!mainWindow) return;

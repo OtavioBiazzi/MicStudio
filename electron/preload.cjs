@@ -16,6 +16,14 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   quitApp: () => ipcRenderer.invoke("window:quit-app"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
+  getBackendStatus: () => ipcRenderer.invoke("backend:get-status"),
+  retryBackend: () => ipcRenderer.invoke("backend:retry"),
+  openBackendLogs: () => ipcRenderer.invoke("backend:open-logs"),
+  onBackendStatus: (callback) => {
+    const listener = (_event, status) => callback?.(status);
+    ipcRenderer.on("backend:status", listener);
+    return () => ipcRenderer.removeListener("backend:status", listener);
+  },
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke("app:set-launch-at-startup", Boolean(enabled)),
   getLaunchAtStartup: () => ipcRenderer.invoke("app:get-launch-at-startup"),
   updateApp: (downloadUrl) => ipcRenderer.invoke("app:update-app", downloadUrl),

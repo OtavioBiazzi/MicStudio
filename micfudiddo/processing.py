@@ -195,6 +195,11 @@ class VoiceEffectsProcessor:
         self._time_glitch_hold = threading.Event()
         self._time_glitch_mode = None
         self._time_glitch_pitch_shifter = DualDelayPitchShifter(self.sample_rate)
+        self._time_glitch_source = np.zeros(0, dtype=np.float32)
+        self._time_glitch_render_settings = None
+        self._time_glitch_event_direction = "forward"
+        self._time_glitch_stop_pending = False
+        self._time_glitch_interval = None
         self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_window_samples = 0
@@ -258,6 +263,10 @@ class VoiceEffectsProcessor:
         self._time_glitch_hold.clear()
         self._time_glitch_pitch_shifter.reset()
         self._time_glitch_mode = None
+        self._time_glitch_source = np.zeros(0, dtype=np.float32)
+        self._time_glitch_render_settings = None
+        self._time_glitch_stop_pending = False
+        self._time_glitch_interval = None
         self.reverse_input_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_output_buffer = np.zeros(0, dtype=np.float32)
         self.reverse_window_samples = 0
@@ -435,6 +444,7 @@ class VoiceEffectsProcessor:
         )
 
     def trigger_time_glitch(self, hold: bool = False) -> None:
+        self._time_glitch_stop_pending = False
         if hold:
             self._time_glitch_hold.set()
         else:
@@ -444,6 +454,9 @@ class VoiceEffectsProcessor:
     def release_time_glitch(self) -> None:
         self._time_glitch_trigger.clear()
         self._time_glitch_hold.clear()
+        self._time_glitch_stop_pending = True
+        self._time_glitch_source = np.zeros(0, dtype=np.float32)
+        self._time_glitch_render_settings = None
         fade_samples = max(1, int(self.sample_rate * 0.01))
         if self.time_glitch_event_remaining > fade_samples:
             self.time_glitch_event_remaining = fade_samples
@@ -477,6 +490,8 @@ class VoiceEffectsProcessor:
             self.time_glitch_event_remaining = 0
             self.time_glitch_event_elapsed = 0
             self.time_glitch_grain = np.zeros(0, dtype=np.float32)
+            self._time_glitch_source = np.zeros(0, dtype=np.float32)
+            self._time_glitch_render_settings = None
             self.time_glitch_history.fill(0.0)
             self.time_glitch_history_filled = 0
             self.time_glitch_history_pos = 0
@@ -879,7 +894,7 @@ class VoiceEffectsProcessor:
         direction: str = "random",
     ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
-        if samples.size == 0 or mix <= 0.0:
+        if samples.size == 0:
             return samples.copy()
 
         output = samples.copy()
@@ -888,12 +903,30 @@ class VoiceEffectsProcessor:
         fade_samples = max(1, int(self.sample_rate * 0.0015))
 
         shortcut_mode = trigger_mode.strip().lower() == "shortcut"
+        if self._time_glitch_interval != interval_s:
+            self.time_glitch_samples_until_event = min(self.time_glitch_samples_until_event, max(1, int(self.sample_rate * interval_s)))
+            self._time_glitch_interval = interval_s
+        render_settings = (speed, pitch_semitones, direction, repeats)
+        if (self.time_glitch_event_remaining > 0 and self._time_glitch_source.size and
+                self._time_glitch_render_settings != render_settings and not self._time_glitch_stop_pending):
+            previous = self._time_glitch_render_settings
+            cycles = self.time_glitch_event_elapsed / max(1, self.time_glitch_grain.size)
+            actual_repeats = repeats if previous[3] != repeats else self.time_glitch_event_total // max(1, self.time_glitch_grain.size)
+            self.time_glitch_grain = self._render_time_glitch_grain(self._time_glitch_source, speed, pitch_semitones, direction)
+            self.time_glitch_event_elapsed = round(cycles * self.time_glitch_grain.size)
+            self.time_glitch_event_total = self.time_glitch_grain.size * actual_repeats
+            self.time_glitch_event_remaining = max(0, self.time_glitch_event_total - self.time_glitch_event_elapsed)
+            if self._time_glitch_hold.is_set():
+                self.time_glitch_event_remaining = max(self.time_glitch_grain.size, self.time_glitch_event_remaining)
+            self.time_glitch_grain_pos = self.time_glitch_event_elapsed % self.time_glitch_grain.size
+            self._time_glitch_render_settings = render_settings
+        if self._time_glitch_stop_pending:
+            self._time_glitch_stop_pending = False
         index = 0
         while index < samples.size:
             trigger_requested = shortcut_mode and self._time_glitch_trigger.is_set()
             if trigger_requested:
-                self._time_glitch_trigger.clear()
-                self._start_time_glitch_event(
+                started = self._start_time_glitch_event(
                     depth,
                     interval_s,
                     fragment_ms,
@@ -906,6 +939,8 @@ class VoiceEffectsProcessor:
                     exact=True,
                     direction=direction,
                 )
+                if started:
+                    self._time_glitch_trigger.clear()
             elif self.time_glitch_event_remaining <= 0 and not shortcut_mode:
                 if self.time_glitch_samples_until_event <= 0:
                     self._start_time_glitch_event(
@@ -962,23 +997,23 @@ class VoiceEffectsProcessor:
         pitch_semitones: float = 0.0,
         exact: bool = False,
         direction: str = "random",
-    ) -> None:
+    ) -> bool:
         jitter = float(self.noise_rng.uniform(0.65, 1.4))
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * interval_s * jitter))
 
         minimum_history = max(16, int(self.sample_rate * 0.045))
         if self.time_glitch_history_filled < minimum_history:
-            return
+            return False
 
         target_grain = self.sample_rate * fragment_ms / 1000.0
         grain_min = max(8, int(target_grain * (0.72 - depth * 0.12)))
         grain_max = max(grain_min, int(target_grain * (1.08 + depth * 0.42)))
         grain_size = int(self.noise_rng.integers(grain_min, grain_max + 1))
         if exact:
-            grain_size = min(int(target_grain), max(8, self.time_glitch_history_filled - 1))
-        available_lookback = self.time_glitch_history_filled - grain_size - 1
-        if available_lookback <= 1:
-            return
+            grain_size = min(int(target_grain), self.time_glitch_history_filled)
+        else:
+            grain_size = min(grain_size, self.time_glitch_history_filled)
+        available_lookback = self.time_glitch_history_filled - grain_size
 
         lookback_min = min(available_lookback, max(1, int(self.sample_rate * 0.025)))
         lookback_max = min(
@@ -995,14 +1030,42 @@ class VoiceEffectsProcessor:
         else:
             grain = np.concatenate((self.time_glitch_history[start:], self.time_glitch_history[:end])).copy()
         if grain.size == 0:
-            return
+            return False
 
         mode_roll = float(self.noise_rng.random())
-        if direction == "pingpong" or (direction == "random" and mode_roll < pingpong_chance):
+        self._time_glitch_event_direction = "forward"
+        if direction == "random":
+            if mode_roll < pingpong_chance:
+                self._time_glitch_event_direction = "pingpong"
+            elif mode_roll < pingpong_chance + reverse_chance:
+                self._time_glitch_event_direction = "reverse"
+            elif not exact and mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
+                self._time_glitch_event_direction = "sliced"
+        self._time_glitch_source = grain
+        grain = self._render_time_glitch_grain(grain, speed, pitch_semitones, direction)
+        self._time_glitch_render_settings = (speed, pitch_semitones, direction, repeats)
+
+        repeat_variation = max(0, int(round(depth * 2.0)))
+        actual_repeats = int(
+            self.noise_rng.integers(max(1, repeats - repeat_variation), min(10000, repeats + repeat_variation) + 1)
+        )
+        if exact:
+            actual_repeats = max(1, min(10000, repeats))
+        self.time_glitch_grain = grain
+        self.time_glitch_grain_pos = 0
+        self.time_glitch_event_total = grain.size * actual_repeats
+        self.time_glitch_event_remaining = self.time_glitch_event_total
+        self.time_glitch_event_elapsed = 0
+        return True
+
+    def _render_time_glitch_grain(self, source: np.ndarray, speed: float, pitch_semitones: float, direction: str) -> np.ndarray:
+        grain = source.copy()
+        direction = self._time_glitch_event_direction if direction == "random" else direction
+        if direction == "pingpong":
             grain = np.concatenate((grain, grain[::-1])).astype(np.float32, copy=False)
-        elif direction == "reverse" or (direction == "random" and mode_roll < pingpong_chance + reverse_chance):
+        elif direction == "reverse":
             grain = grain[::-1].copy()
-        elif not exact and direction == "random" and mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
+        elif direction == "sliced":
             slice_size = max(8, grain.size // 3)
             grain = np.tile(grain[:slice_size], 3)
 
@@ -1027,17 +1090,7 @@ class VoiceEffectsProcessor:
         grain[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
         grain[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
 
-        repeat_variation = max(0, int(round(depth * 2.0)))
-        actual_repeats = int(
-            self.noise_rng.integers(max(1, repeats - repeat_variation), min(10000, repeats + repeat_variation) + 1)
-        )
-        if exact:
-            actual_repeats = max(1, min(10000, repeats))
-        self.time_glitch_grain = grain.astype(np.float32, copy=False)
-        self.time_glitch_grain_pos = 0
-        self.time_glitch_event_total = grain.size * actual_repeats
-        self.time_glitch_event_remaining = self.time_glitch_event_total
-        self.time_glitch_event_elapsed = 0
+        return grain.astype(np.float32, copy=False)
 
     def _band_limited(self, samples: np.ndarray) -> np.ndarray:
         if samples.size < 3:

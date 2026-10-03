@@ -555,6 +555,7 @@ export function VoiceSidePanel({ voice, state, updateControls, updateEffects, on
           {voice.isNew && <span className="proBadge">NOVA</span>}
         </div>
         <p className="panelDesc">{voice.description}</p>
+        {state.controls?.voiceBypassed && <p className="panelDesc">Voz normal ativa (bypass). Os efeitos estão temporariamente desativados.</p>}
         {voice.tags?.length > 0 && (
           <div className="voiceProfileTags">
             {voice.tags.map((tag) => <span key={tag}>{tag}</span>)}

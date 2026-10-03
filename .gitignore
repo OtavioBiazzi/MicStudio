@@ -1,7 +1,8 @@
 .venv/
 node_modules/
-build/
+build/*
 !build/installer.nsh
+!build/validate-backend.cjs
 __pycache__/
 *.py[cod]
 
@@ -17,4 +18,3 @@ pacotes/
 .codex-run/
 *.log
 scratch/
-

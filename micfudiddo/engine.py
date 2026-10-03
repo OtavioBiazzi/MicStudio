@@ -201,6 +201,7 @@ class AudioEngine:
         self._effects_processor = VoiceEffectsProcessor(48000)
         self._reset_voice_pending = threading.Event()
         self._control_lock = threading.Lock()
+        self._glitch_command_pending = None
         self._gain = 1.0
         self._master_mic_gain = 1.0
         self._master_voice_volume = 1.0
@@ -271,9 +272,11 @@ class AudioEngine:
             self._gain = max(0.0, float(gain))
             self._pitch_semitones = float(pitch_semitones)
             if effects is not None:
+                previous = self._effects
                 self._effects = effects
-                if not effects.time_glitch_enabled or effects.time_glitch_trigger_mode != "shortcut":
-                    self._effects_processor.release_time_glitch()
+                if (not effects.time_glitch_enabled or
+                        previous.time_glitch_trigger_mode != effects.time_glitch_trigger_mode):
+                    self._glitch_command_pending = ("stop", False)
             if monitor_volume is not None:
                 self._monitor_volume = max(0.0, min(3.0, float(monitor_volume)))
             if soundboard_monitor_enabled is not None:
@@ -290,14 +293,17 @@ class AudioEngine:
                 self._master_mute = bool(master_mute)
 
     def trigger_time_glitch(self, hold: bool = False) -> None:
-        self._effects_processor.trigger_time_glitch(hold=hold)
+        with self._control_lock:
+            self._glitch_command_pending = ("trigger", bool(hold))
 
     def reset_voice_effects(self) -> None:
-        self._effects_processor.release_time_glitch()
-        self._reset_voice_pending.set()
+        with self._control_lock:
+            self._glitch_command_pending = ("stop", False)
+            self._reset_voice_pending.set()
 
     def release_time_glitch(self) -> None:
-        self._effects_processor.release_time_glitch()
+        with self._control_lock:
+            self._glitch_command_pending = ("stop", False)
 
     def play_sound(
         self,
@@ -873,17 +879,26 @@ class AudioEngine:
 
     def _process_audio_block(self, mono: np.ndarray, frames: int) -> tuple[np.ndarray, np.ndarray]:
         try:
-            if self._reset_voice_pending.is_set():
-                self._reset_voice_pending.clear()
-                self._effects_processor.reset()
-                self._pitch.reset()
             with self._control_lock:
+                reset_voice = self._reset_voice_pending.is_set()
+                self._reset_voice_pending.clear()
+                glitch_command = self._glitch_command_pending
+                self._glitch_command_pending = None
                 gain = (self._gain * self._master_mic_gain) if not self._master_mute else 0.0
                 pitch_semitones = self._pitch_semitones + self._master_pitch_semitones
                 effects = self._effects
                 monitor_enabled = self._monitor_enabled
                 monitor_volume = self._monitor_volume
                 master_voice_volume = self._master_voice_volume
+            if reset_voice:
+                self._effects_processor.reset()
+                self._pitch.reset()
+            if glitch_command:
+                action, held = glitch_command
+                if action == "trigger" and effects.time_glitch_enabled and effects.time_glitch_trigger_mode == "shortcut":
+                    self._effects_processor.trigger_time_glitch(hold=held)
+                elif action == "stop":
+                    self._effects_processor.release_time_glitch()
             soundboard_monitor_enabled = self._soundboard_monitor_enabled
             soundboard_monitor_volume = self._soundboard_monitor_volume
 

@@ -63,6 +63,7 @@ export function Sidebar({
           return (
             <motion.button
               className={page === item.id ? "active" : ""}
+              aria-current={page === item.id ? "page" : undefined}
               key={item.id}
               onClick={() => setPage(item.id)}
               whileHover={{ scale: 1.01 }}

@@ -1451,6 +1451,16 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.4.3": `### Versão 1.4.3
+* Aviso de atualização somente uma vez por abertura do aplicativo. Voltar para a janela não repete o aviso; consultas periódicas de releases removidas.
+* Menu de versões continua consultando atualizações ao abrir ou ao clicar em atualizar a lista.
+* Vídeo de apresentação abre uma vez por versão, incluindo atualização pelo aplicativo e primeira instalação.
+* Menus de contexto medem seu tamanho real, adaptam a posição à tela e permitem rolagem em janelas menores.
+* Soundboard com abas e filtro de origem separados, sem duas fileiras de categorias repetidas.
+* Removidos títulos e subtítulos repetidos das páginas. Polimento de Vozes, Explorar Sons, Favoritos, Voice Lab e Configurações.
+* Menos consultas de estado em segundo plano e animações decorativas pausadas. Player não mantém timer ocioso nem anima progresso com a janela fora de foco.
+* Corrigida consulta de estado em ciclo ao abrir o TTS. O gerador usa as configurações já carregadas, sem buscar a biblioteca em sequência.
+* Áudio, gravações, atalhos e funções da barra rápida preservados.`,
   "v1.4.2": `### Versão 1.4.2
 * Primeira instalação abre o vídeo de apresentação no navegador. Atualizações e reinstalações não repetem a abertura.
 * Glitched Temporal separa a voz normal da repetição: corrupção digital, bitcrush e ambiente passam a afetar somente os trechos repetidos.
@@ -2011,31 +2021,44 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingUrl, setUpdatingUrl] = useState(null);
+  const requestRef = useRef(null);
 
   const loadReleases = () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = setTimeout(() => controller.abort("timeout"), 8000);
     setLoading(true);
     setError(null);
     fetch(`https://api.github.com/repos/OtavioBiazzi/MicStudio/releases?ts=${Date.now()}`, {
       cache: "no-store",
-      headers: { Accept: "application/vnd.github+json" }
+      headers: { Accept: "application/vnd.github+json" },
+      signal: controller.signal
     })
       .then((res) => {
         if (!res.ok) throw new Error("Erro ao carregar do GitHub");
         return res.json();
       })
       .then((data) => {
+        if (requestRef.current !== controller) return;
         setReleases(data && data.length ? data : OFFLINE_RELEASES);
         setLoading(false);
       })
       .catch((err) => {
+        if (requestRef.current !== controller) return;
         console.warn("Falha ao buscar releases do GitHub, usando dados estáticos:", err);
         setReleases(OFFLINE_RELEASES);
         setLoading(false);
-      });
+      }).finally(() => clearTimeout(timeout));
   };
 
   useEffect(() => {
     loadReleases();
+    return () => {
+      const controller = requestRef.current;
+      requestRef.current = null;
+      controller?.abort();
+    };
   }, []);
 
   const handleUpdate = async (release) => {
@@ -2193,7 +2216,7 @@ export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm 
 }
 
 // --- TTSModal ---
-export function TTSModal({ onClose, call, setToast }) {
+export function TTSModal({ onClose, call, setToast, settings }) {
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(() => {
     return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
@@ -2205,21 +2228,7 @@ export function TTSModal({ onClose, call, setToast }) {
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [pinHover, setPinHover] = useState(false);
-  const [unlimited, setUnlimited] = useState(false);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await call("/api/state");
-        if (res && res.settings) {
-          setUnlimited(res.settings.unlimitedTts === true);
-        }
-      } catch (err) {
-        console.error("Error fetching state:", err);
-      }
-    };
-    fetchSettings();
-  }, [call]);
+  const unlimited = settings?.unlimitedTts === true;
 
   // Auto-fill soundName when text changes
   const handleTextChange = (e) => {

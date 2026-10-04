@@ -227,10 +227,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
 
   return (
     <div>
-      <div className="labHeader">
-        <h2>🌐 Explorar Biblioteca Online</h2>
-        <p>Descubra e baixe novos efeitos sonoros e memes instantaneamente para sua biblioteca</p>
-      </div>
+      <h2 className="srOnly">Explorar Sons</h2>
 
       <div className="pageToolbar" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div className="toolbarLeft" style={{ display: "flex", gap: 12, width: "100%", alignItems: "center" }}>
@@ -568,6 +565,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             onClose={() => setShowTTSModal(false)}
             call={call}
             setToast={setToast}
+            settings={state.settings}
           />
         )}
         {pendingSoundDestination && (

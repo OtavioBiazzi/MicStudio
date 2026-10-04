@@ -218,10 +218,7 @@ export function ConfigPage({
 
   return (
     <div>
-      <div className="labHeader">
-        <h2>⚙️ Configurações</h2>
-        <p>Gerencie dispositivos, atalhos, aparência e manutenção do MicFudiddo Studio</p>
-      </div>
+      <h2 className="srOnly">Configurações</h2>
 
       <div className="config-layout">
         {/* Navigation Sidebar */}

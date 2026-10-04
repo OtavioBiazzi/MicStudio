@@ -40,6 +40,8 @@ def main():
             calls.append((path, copy.deepcopy(body)))
             if path == "/api/sounds/update":
                 next(sound for sound in state["sounds"] if sound["id"] == body["id"]).update(body)
+            if path == "/api/sounds/set-tabs":
+                next(sound for sound in state["sounds"] if sound["id"] == body["id"])["tabs"] = body["tabs"]
             if path == "/api/controls":
                 state["controls"] = body["controls"]
                 state["controlsRevision"] += 1
@@ -63,6 +65,13 @@ def main():
         with page.expect_response(lambda response: "/api/sounds/update" in response.url):
             page.locator(".soundboardSidePanel input[type=range]").fill("0.35")
         assert state["sounds"][0]["volume"] == .35
+        page.locator(".soundboardSidePanel").get_by_role("button", name="Organizar em abas", exact=True).click()
+        expect(page.locator(".destinationModal")).to_be_visible()
+        page.locator(".destinationTabGrid").get_by_role("button", name="Geral", exact=True).click()
+        with page.expect_response(lambda response: "/api/sounds/set-tabs" in response.url):
+            page.get_by_role("button", name="Confirmar destino", exact=True).click()
+        assert state["sounds"][0]["tabs"] == ["Todos"]
+        assert state["sounds"][0]["category"] == "Geral", "Changing tabs must not move files between folders"
         page.get_by_placeholder("Buscar som...").fill("sem resultado")
         expect(page.locator(".soundboardEmpty")).to_contain_text("Nenhum som encontrado")
         page.get_by_placeholder("Buscar som...").fill("")
@@ -73,7 +82,7 @@ def main():
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Page overflow at {width}"
             assert page.locator(".soundboardPage").evaluate("element => element.scrollWidth <= element.clientWidth + 1"), f"Soundboard overflow at {width}"
             assert page.locator(".floating-dock-inner").count() == 1
-            page.screenshot(path=str(artifacts / f"soundboard-1.4.2-{width}.png"))
+            page.screenshot(path=str(artifacts / f"soundboard-1.4.3-{width}.png"))
         assert not errors, errors
         browser.close()
     print("Soundboard selection, favorites, menu playback, volume, empty search, dock and four viewport checks passed; no JS errors")

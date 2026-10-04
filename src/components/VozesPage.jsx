@@ -17,6 +17,7 @@ import {
 import { voicePresets, visibleVoicePresets } from "../voicePresets";
 import { controlsForVoice } from "../voiceControls";
 import { GlitchCommandControls } from "./GlitchCommandControls";
+import { ContextMenu } from "./ContextMenu";
 
 const voiceImageModules = import.meta.glob("../../assets/voices/*.png", { eager: true, import: "default" });
 const newVoiceIcons = {
@@ -57,16 +58,6 @@ export function VozesPage({
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas");
   const [contextMenu, setContextMenu] = useState(null);
-
-  useEffect(() => {
-    const closeMenu = () => setContextMenu(null);
-    window.addEventListener("click", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
-    return () => {
-      window.removeEventListener("click", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
-    };
-  }, []);
 
   const allVoices = useMemo(() => [...visibleVoicePresets, ...customVoices], [customVoices]);
 
@@ -145,10 +136,8 @@ export function VozesPage({
 
   return (
     <>
-      <div className="labHeader">
-        <h2>Biblioteca de Vozes</h2>
-        <p>{allVoices.length - 1} vozes · {allVoices.filter((voice) => voice.isNew).length} novas</p>
-      </div>
+      <h2 className="srOnly">Biblioteca de Vozes</h2>
+      <div className="pageSummary">{allVoices.length - 1} vozes · {allVoices.filter((voice) => voice.isNew).length} novas</div>
 
       <div className="pageToolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <div className="toolbarLeft" style={{ flex: 1 }}>
@@ -291,22 +280,7 @@ export function VozesPage({
       </div>
 
       {contextMenu && (
-        <div
-          className="contextMenu"
-          style={{
-            position: "fixed",
-            top: contextMenu.y,
-            left: contextMenu.x,
-            zIndex: 9999,
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-sm)",
-            padding: 4,
-            boxShadow: "var(--shadow-lg)",
-            minWidth: 180
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
           <button onClick={() => {
             selectVoice(contextMenu.voice);
             setContextMenu(null);
@@ -446,7 +420,7 @@ export function VozesPage({
               <Trash size={14} /> Excluir
             </button>
           )}
-        </div>
+        </ContextMenu>
       )}
     </>
   );

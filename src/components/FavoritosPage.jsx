@@ -27,10 +27,7 @@ export function FavoritosPage({
 
   return (
     <div>
-      <div className="labHeader">
-        <h2>⭐ Favoritos</h2>
-        <p>Suas vozes e sons favoritos em um só lugar</p>
-      </div>
+      <h2 className="srOnly">Favoritos</h2>
 
       {/* Favorite voices */}
       <div className="favSection">

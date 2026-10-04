@@ -20,17 +20,16 @@ export function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSou
   const draggingRef = useRef({});
   const playersRef = useRef(players);
   const lastUpdateRef = useRef(Date.now());
+  const hasPlaying = players.some((player) => player.state === "playing");
 
   useEffect(() => {
     if (state.players) {
       setLocalPositions((prev) => {
-        const next = { ...prev };
+        const next = {};
         state.players.forEach((p) => {
-          if (!draggingRef.current[p.playbackId]) {
-            next[p.playbackId] = p.current || 0;
-          }
+          next[p.playbackId] = draggingRef.current[p.playbackId] ? prev[p.playbackId] ?? p.current ?? 0 : p.current || 0;
         });
-        return next;
+        return Object.keys(next).length === Object.keys(prev).length && Object.keys(next).every((key) => next[key] === prev[key]) ? prev : next;
       });
       playersRef.current = state.players;
       lastUpdateRef.current = Date.now();
@@ -38,7 +37,8 @@ export function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSou
   }, [state.players]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    let interval;
+    const tick = () => {
       const elapsed = (Date.now() - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = Date.now();
 
@@ -59,10 +59,23 @@ export function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSou
 
         return changed ? next : prev;
       });
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, []);
+    };
+    const syncTimer = () => {
+      clearInterval(interval);
+      lastUpdateRef.current = Date.now();
+      if (hasPlaying && !document.hidden && document.hasFocus()) interval = setInterval(tick, 250);
+    };
+    syncTimer();
+    window.addEventListener("focus", syncTimer);
+    window.addEventListener("blur", syncTimer);
+    document.addEventListener("visibilitychange", syncTimer);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", syncTimer);
+      window.removeEventListener("blur", syncTimer);
+      document.removeEventListener("visibilitychange", syncTimer);
+    };
+  }, [hasPlaying]);
 
   const toggleSticky = () => {
     const next = !isSticky;

@@ -1,8 +1,4 @@
 .soundboardPage { min-width: 0; }
-.soundboardPage .soundboardHeader { display: flex; align-items: center; gap: 16px; }
-.soundboardHeaderIcon { display: grid; place-items: center; width: 52px; height: 52px; flex: 0 0 52px; border-radius: var(--radius-sm); color: var(--purple-hover); background: var(--purple-soft); border: 1px solid var(--border-hover); }
-.soundboardHeading { flex: 1; min-width: 0; }
-.soundboardHeading h2 { letter-spacing: 0; }
 .soundboardPage .pageToolbar { flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
 .soundboardPage .toolbarLeft { min-width: min(240px, 100%); }
 .soundboardPage .toolbarRight, .soundboardPage .importButtonGroup { flex-wrap: wrap; }
@@ -42,8 +38,6 @@
   .soundboardPage .soundboardSidePanel { order: -1; position: relative; top: 0; max-height: 60vh; }
 }
 @media (max-width: 700px) {
-  .soundboardPage .soundboardHeader { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
-  .soundboardHeaderIcon { width: 44px; height: 44px; flex-basis: 44px; }
   .soundboardPage .toolbarRight { width: 100%; }
   .soundboardPage .soundCard { gap: 8px; }
   .soundboardPage .soundboardSidePanel .panelName { padding-right: 72px; }

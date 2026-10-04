@@ -4,10 +4,11 @@ import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
   MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
-  Scissors, SpeakerHigh, Heart, DotsThreeVertical, WarningCircle, SquaresFour
+  Scissors, Heart, DotsThreeVertical, WarningCircle, SquaresFour
 } from "@phosphor-icons/react";
 import { formatTime, formatLastUsed, filePathToUrl, copyTextToClipboard } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
+import { ContextMenu } from "./ContextMenu";
 import "./soundboard.css";
 
 export function SoundboardPage({
@@ -49,6 +50,15 @@ export function SoundboardPage({
     cats.delete("Todos");
     return ["Todos", "Favoritos", ...Array.from(cats).sort()];
   }, [sounds, customCategories]);
+
+  const organizeSoundTabs = (sound) => {
+    setPendingImport({
+      title: `Organizar abas de "${sound.name}"`,
+      origin: sound.source || "local",
+      initialTabs: sound.tabs || ["Todos", sound.category].filter(Boolean),
+      onConfirm: (tabs) => call("/api/sounds/set-tabs", { id: sound.id, tabs }).then(() => setToast("Abas atualizadas!")),
+    });
+  };
 
   const openCreateTab = () => {
     setPromptState({
@@ -235,13 +245,6 @@ export function SoundboardPage({
     return () => window.removeEventListener("keydown", handler);
   }, [undoDelete]);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handler = () => setContextMenu(null);
-    window.addEventListener("click", handler);
-    return () => window.removeEventListener("click", handler);
-  }, [contextMenu]);
-
   return (
     <div
       className="soundboardPage"
@@ -257,12 +260,7 @@ export function SoundboardPage({
       onDrop={importDropped}
       style={{ position: "relative" }}
     >
-      <div className="labHeader soundboardHeader">
-        <span className="soundboardHeaderIcon"><SpeakerHigh size={28} weight="duotone" /></span>
-        <div className="soundboardHeading">
-          <h2>Soundboard Studio</h2>
-          <p>Organize, edite e dispare seus efeitos sonoros, áudios e memes favoritos instantaneamente</p>
-        </div>
+      <h2 className="srOnly">Soundboard Studio</h2>
         {isLimitReached && (
           <div style={{
             background: "rgba(239, 68, 68, 0.12)",
@@ -280,8 +278,6 @@ export function SoundboardPage({
             <WarningCircle size={16} /><span>Limite de Armazenamento Atingido ({storageMB.toFixed(1)} MB / {storageLimitMB} MB)</span>
           </div>
         )}
-      </div>
-
       <div className="pageToolbar">
         <div className="toolbarLeft">
           <div className="searchBar" style={{ marginBottom: 0, flex: 1 }}>
@@ -357,7 +353,8 @@ export function SoundboardPage({
         )}
       </div>
 
-      <div className="categoryPills">
+      <div className="soundboardFilters">
+      <div className="categoryPills" aria-label="Abas do Soundboard">
         {categories.map((cat) => (
           <button key={cat} className={category === cat ? "active" : ""} onClick={() => setCategory(cat)}>
             {cat === "Todos" ? <SquaresFour size={14} /> : cat === "Favoritos" ? <Heart size={14} /> : <MusicNotes size={14} />}
@@ -374,12 +371,13 @@ export function SoundboardPage({
         )}
       </div>
 
-      <div className="categoryPills soundSourceFilters" style={{ marginTop: 8 }}>
-        {["Todos", "YouTube", "TikTok", "Importados do PC", "Online", "Favoritos", "Recentes"].map((filter) => (
-          <button key={filter} className={sourceFilter === filter ? "active" : ""} onClick={() => setSourceFilter(filter)}>
-            {filter}
-          </button>
-        ))}
+      <select className="soundSourceSelect" aria-label="Filtrar sons" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+        <option value="Todos">Todas as origens</option>
+        <optgroup label="Origem">
+          {["YouTube", "TikTok", "Importados do PC", "Online"].map((filter) => <option key={filter} value={filter}>{filter}</option>)}
+        </optgroup>
+        <optgroup label="Periodo"><option value="Recentes">Adicionados recentemente</option></optgroup>
+      </select>
       </div>
 
       <div className={`soundboardLayout ${selected && selectedSound !== null ? "" : "no-panel"}`}>
@@ -443,10 +441,7 @@ export function SoundboardPage({
             toggleSoundboardFavorite={toggleSoundboardFavorite}
             isFavorite={soundboardFavorites.includes(selected.id)}
             setEditingSoundId={setEditingSoundId}
-            categories={categories}
-            customCategories={customCategories}
-            setCustomCategories={setCustomCategories}
-            setPromptState={setPromptState}
+            onChooseTabs={() => organizeSoundTabs(selected)}
           />
         )}
       </div>
@@ -475,19 +470,8 @@ export function SoundboardPage({
         </div>
       )}
 
-      {contextMenu && (() => {
-        const estimatedW = 220;
-        const estimatedH = 360;
-        let x = contextMenu.x;
-        let y = contextMenu.y;
-        if (x + estimatedW > window.innerWidth) {
-          x = Math.max(10, window.innerWidth - estimatedW - 15);
-        }
-        if (y + estimatedH > window.innerHeight) {
-          y = Math.max(10, window.innerHeight - estimatedH - 15);
-        }
-        return (
-          <div className="contextMenu" style={{ left: x, top: y }} onClick={(e) => e.stopPropagation()}>
+      {contextMenu && (
+          <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
             <button onClick={() => { call("/api/sounds/play", { id: contextMenu.sound.id }).catch((e) => setToast(e.message)); setContextMenu(null); }}>
               <Play size={14} /> Tocar
             </button>
@@ -561,19 +545,14 @@ export function SoundboardPage({
               setContextMenu(null);
               setMoveCategorySoundId(currentSound.id);
             }}>
-              <FolderOpen size={14} /> Mover para Pasta
+              <FolderOpen size={14} /> Mover arquivo para pasta
             </button>
             <button onClick={() => {
               const currentSound = contextMenu.sound;
               setContextMenu(null);
-              setPendingImport({
-                title: `Escolher abas de "${currentSound.name}"`,
-                origin: currentSound.source || "local",
-                initialTabs: currentSound.tabs || ["Todos", currentSound.category].filter(Boolean),
-                onConfirm: (tabs) => call("/api/sounds/set-tabs", { id: currentSound.id, tabs }).then(() => setToast("Abas atualizadas!"))
-              });
+              organizeSoundTabs(currentSound);
             }}>
-              <FolderOpen size={14} /> Copiar para Abas
+              <FolderOpen size={14} /> Organizar em abas
             </button>
             <button onClick={() => {
               window.micfudiddo?.showItemInFolder?.(contextMenu.sound.path);
@@ -643,9 +622,8 @@ export function SoundboardPage({
             <button className="danger" onClick={() => { deleteSounds([contextMenu.sound.id]); setContextMenu(null); }}>
               <Trash size={14} /> Excluir
             </button>
-          </div>
-        );
-      })()}
+          </ContextMenu>
+      )}
       {pendingImport && (
         <DestinationPickerModal
           title={pendingImport.title}
@@ -740,14 +718,10 @@ export function SoundboardQuickPanel({
   toggleSoundboardFavorite,
   isFavorite,
   setEditingSoundId,
-  categories,
-  customCategories,
-  setCustomCategories,
-  setPromptState
+  onChooseTabs
 }) {
   const nameInputRef = React.useRef(null);
   const [name, setName] = useState(sound.name);
-  const [category, setCategory] = useState(sound.category || "Geral");
   const [shortcut, setShortcut] = useState(sound.shortcut || "");
   const [volume, setVolume] = useState(sound.volume);
   const [loop, setLoop] = useState(!!sound.loop);
@@ -756,7 +730,6 @@ export function SoundboardQuickPanel({
     if (nameInputRef.current !== document.activeElement) {
       setName(sound.name);
     }
-    setCategory(sound.category || "Geral");
     setShortcut(sound.shortcut || "");
     setVolume(sound.volume);
     setLoop(!!sound.loop);
@@ -867,7 +840,7 @@ export function SoundboardQuickPanel({
         </div>
         
         <p className="panelDesc" style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-          Categoria: <strong style={{ color: "var(--text-secondary)" }}>{sound.category || "Geral"}</strong>
+          Abas: <strong style={{ color: "var(--text-secondary)" }}>{(sound.tabs?.length ? sound.tabs : [sound.category || "Geral"]).filter((tab) => tab !== "Todos").join(", ") || "Todos"}</strong>
         </p>
 
         <div className="quickSoundMeta">
@@ -895,56 +868,8 @@ export function SoundboardQuickPanel({
           </div>
 
           <div className="labField">
-            <label>Mover para Pasta (Categoria)</label>
-            <select
-              value={category}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "++new") {
-                  setPromptState({
-                    title: "Nova Pasta / Categoria",
-                    value: "",
-                    onConfirm: (name) => {
-                      if (name && name.trim()) {
-                        const trimmed = name.trim();
-                        if (["Todos", "Favoritos"].includes(trimmed)) {
-                          setToast("Nome reservado!");
-                          return;
-                        }
-                        if (!customCategories.includes(trimmed)) {
-                          setCustomCategories([...customCategories, trimmed]);
-                        }
-                        setCategory(trimmed);
-                        call("/api/sounds/update", { id: sound.id, category: trimmed })
-                          .then(() => setToast(`Som movido para "${trimmed}"`))
-                          .catch((err) => setToast(err.message));
-                      }
-                    }
-                  });
-                } else {
-                  setCategory(val);
-                  call("/api/sounds/update", { id: sound.id, category: val })
-                    .then(() => setToast(`Som movido para "${val}"`))
-                    .catch((err) => setToast(err.message));
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                background: "var(--bg-input)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text)",
-                fontSize: 12,
-                outline: "none"
-              }}
-            >
-              {(categories || []).filter(c => c !== "Todos" && c !== "Favoritos").map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-              {!categories?.includes("Geral") && <option value="Geral">Geral</option>}
-              <option value="++new" style={{ color: "var(--purple)", fontWeight: "bold" }}>+ Criar Nova Pasta...</option>
-            </select>
+            <label>Abas do som</label>
+            <button className="btn btn-ghost" onClick={onChooseTabs}><FolderOpen size={14} /> Organizar em abas</button>
           </div>
 
           <div className="labField">

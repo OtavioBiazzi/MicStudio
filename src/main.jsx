@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
+import "./components/workspace.css";
 
 // Utils & Helpers
 import {
@@ -20,6 +21,7 @@ import { voicePresets } from "./voicePresets";
 // API Client
 import { API, getAPI } from "./apiClient";
 import packageMetadata from "../package.json";
+import { runtimeRefreshDelay } from "./runtimePolicy";
 
 const TTS_CHARACTER_LIMIT = 10000;
 
@@ -216,18 +218,27 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
     const checkUpdates = async () => {
       try {
         const currentVersion = await window.micfudiddo?.getVersion?.();
-        if (!currentVersion) return;
+        if (!active || !currentVersion) return;
+        if (window.micfudiddo?.claimUpdateCheck && !await window.micfudiddo.claimUpdateCheck()) return;
 
-        const res = await fetch(
-          `https://api.github.com/repos/OtavioBiazzi/MicStudio/releases/latest?ts=${Date.now()}`,
-          { cache: "no-store", headers: { Accept: "application/vnd.github+json" } }
-        );
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        let res;
+        try {
+          res = await fetch(
+            `https://api.github.com/repos/OtavioBiazzi/MicStudio/releases/latest?ts=${Date.now()}`,
+            { cache: "no-store", headers: { Accept: "application/vnd.github+json" }, signal: controller.signal }
+          );
+        } finally {
+          clearTimeout(timeout);
+        }
         if (!res.ok) return;
         const latestRelease = await res.json();
-        if (!latestRelease?.tag_name) return;
+        if (!active || !latestRelease?.tag_name) return;
         const latestVersion = latestRelease.tag_name;
         
         const isNewer = (curr, lat) => {
@@ -263,13 +274,10 @@ function App() {
       }
     };
     const timer = setTimeout(checkUpdates, 4000);
-    const interval = setInterval(checkUpdates, 5 * 60 * 1000);
-    const handleFocus = () => checkUpdates();
-    window.addEventListener("focus", handleFocus);
     return () => {
+      active = false;
+      controller.abort();
       clearTimeout(timer);
-      clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -737,6 +745,7 @@ function App() {
   useEffect(() => {
     let active = true;
     let refreshTimer = null;
+    let refreshing = false;
     const acceptStatus = (status) => {
       if (active) setBootStatus(status);
     };
@@ -749,6 +758,9 @@ function App() {
     window.micfudiddo?.getBackendStatus?.().then(acceptStatus).catch(() => {});
     
     const runRefresh = async () => {
+      if (!active || refreshing) return;
+      refreshing = true;
+      clearTimeout(refreshTimer);
       try {
         if (stateRef.current) {
           await refreshRuntime();
@@ -759,12 +771,29 @@ function App() {
       } catch (err) {
         // Ignore connection errors during polling
       } finally {
+        refreshing = false;
         if (active) {
-          refreshTimer = setTimeout(runRefresh, document.hidden ? 5000 : 1200);
+          if (stateRef.current) clearInterval(statusTimer);
+          refreshTimer = setTimeout(runRefresh, runtimeRefreshDelay({
+            ready: Boolean(stateRef.current), hidden: document.hidden, focused: document.hasFocus(),
+          }));
         }
       }
     };
 
+    const visibilityChanged = () => {
+      const background = document.hidden || !document.hasFocus();
+      document.body.classList.toggle("app-background", background);
+      if (!background) runRefresh();
+      else if (!refreshing && stateRef.current) {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(runRefresh, 10000);
+      }
+    };
+    window.addEventListener("focus", visibilityChanged);
+    window.addEventListener("blur", visibilityChanged);
+    document.addEventListener("visibilitychange", visibilityChanged);
+    document.body.classList.toggle("app-background", document.hidden || !document.hasFocus());
     runRefresh();
     
     const timeoutId = setTimeout(async () => {
@@ -787,6 +816,10 @@ function App() {
 
     return () => {
       active = false;
+      window.removeEventListener("focus", visibilityChanged);
+      window.removeEventListener("blur", visibilityChanged);
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      document.body.classList.remove("app-background");
       clearInterval(statusTimer);
       unsubscribe?.();
       clearTimeout(timeoutId);
@@ -1050,7 +1083,7 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
-              className="page"
+              className={`page page-${page}`}
             >
               {page === "vozes" && (
                 <ErrorBoundary>

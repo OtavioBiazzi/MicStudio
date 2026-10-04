@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray, 
 const path = require("path");
 const { spawn } = require("child_process");
 const { backendFailure, waitUntilReady } = require("./backend-status.cjs");
+const { createIntroOpener, createSessionGate } = require("./onboarding.cjs");
 
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
@@ -13,10 +14,13 @@ let backend;
 let quitting = false;
 let sessionEndRestoreStarted = false;
 let shortcutTimer;
+let shortcutRefreshPending = false;
 let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
 let shortcutConflicts = new Map();
 let rendererRecoveryAttempts = 0;
+const claimUpdateCheck = createSessionGate();
+let openIntroVideo;
 let backendStartPromise;
 let backendRetryPromise;
 let backendStatus = { phase: "starting", message: "Preparando o servidor de audio", startedAt: Date.now() };
@@ -315,8 +319,10 @@ async function syncLaunchAtStartupFromBackend() {
 
 
 async function refreshSoundHotkeys() {
+  if (shortcutRefreshPending || quitting) return;
+  shortcutRefreshPending = true;
   try {
-    const res = await fetch(`${API}/api/hotkeys`);
+    const res = await fetch(`${API}/api/hotkeys`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return;
     const data = await res.json();
     
@@ -426,7 +432,9 @@ async function refreshSoundHotkeys() {
         shortcutConflicts.set(accelerator, "Erro de Registro");
       }
     }
-  } catch (_) {}
+  } catch (_) {} finally {
+    shortcutRefreshPending = false;
+  }
 }
 
 function startSoundHotkeys() {
@@ -548,6 +556,13 @@ function createWindow() {
   });
   mainWindow.webContents.on("did-finish-load", () => {
     setTimeout(() => { rendererRecoveryAttempts = 0; }, 30000);
+    if (!isDev) {
+      openIntroVideo ||= createIntroOpener(
+        path.join(app.getPath("userData"), `intro-video-${app.getVersion()}.json`),
+        (url) => shell.openExternal(url)
+      );
+      openIntroVideo().catch((error) => console.error("Falha ao abrir apresentacao:", error));
+    }
   });
 
 
@@ -978,6 +993,7 @@ app.whenReady().then(async () => {
     app.quit();
   }
 });
+ipcMain.handle("app:claim-update-check", () => claimUpdateCheck());
 
 ipcMain.handle("backend:get-status", async () => {
   if (backendStatus.phase === "slow" && await pingHealth(38717)) {

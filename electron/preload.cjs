@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   quitApp: () => ipcRenderer.invoke("window:quit-app"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
+  claimUpdateCheck: () => ipcRenderer.invoke("app:claim-update-check"),
   getBackendStatus: () => ipcRenderer.invoke("backend:get-status"),
   retryBackend: () => ipcRenderer.invoke("backend:retry"),
   openBackendLogs: () => ipcRenderer.invoke("backend:open-logs"),

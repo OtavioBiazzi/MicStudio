@@ -1,11 +1,11 @@
 {
   "name": "micfudiddo-studio",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "description": "MicFudiddo Studio Electron UI",
   "main": "electron/main.cjs",
   "scripts": {
-    "test": "node --test tests/voice-state.test.mjs tests/backend-status.test.cjs && .venv\\Scripts\\python.exe -m unittest discover -s tests -q",
+    "test": "node --test tests/voice-state.test.mjs tests/backend-status.test.cjs tests/onboarding.test.cjs tests/ui-policy.test.mjs && .venv\\Scripts\\python.exe -m unittest discover -s tests -q",
     "dev": "concurrently -k \"npm:backend\" \"npm:vite\" \"npm:electron\"",
     "backend": ".venv\\\\Scripts\\\\python.exe -m micfudiddo.backend --port 38717",
     "vite": "vite --host 127.0.0.1 --port 5177",

@@ -4,32 +4,8 @@
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 
-!ifndef BUILD_UNINSTALLER
-  Var openFirstInstallVideo
-!endif
-
 ; ─── Process termination on init ───────────────────────────────
 !macro customInit
-  ; Detect older installations before cleanup; upgrades must not open onboarding.
-  StrCpy $openFirstInstallVideo "1"
-  ReadRegDWORD $0 HKCU "Software\MicFudiddoStudio\Onboarding" "InstallCompleted"
-  ${If} $0 == "1"
-    StrCpy $openFirstInstallVideo "0"
-  ${EndIf}
-  ReadRegStr $0 HKCU "${INSTALL_REGISTRY_KEY}" "InstallLocation"
-  ${If} $0 != ""
-    StrCpy $openFirstInstallVideo "0"
-  ${EndIf}
-  ReadRegStr $0 HKLM "${INSTALL_REGISTRY_KEY}" "InstallLocation"
-  ${If} $0 != ""
-    StrCpy $openFirstInstallVideo "0"
-  ${EndIf}
-  ${If} ${isUpdated}
-    StrCpy $openFirstInstallVideo "0"
-  ${EndIf}
-  IfFileExists "$INSTDIR\MicFudiddo Studio.exe" 0 +2
-    StrCpy $openFirstInstallVideo "0"
-
   DetailPrint "Fechando instâncias ativas do MicFudiddo..."
   nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe"'
   Pop $0
@@ -142,7 +118,5 @@
     DetailPrint "VB-CABLE ja esta instalado no sistema."
   ${EndIf}
   WriteRegDWORD HKCU "Software\MicFudiddoStudio\Onboarding" "InstallCompleted" 1
-  ${If} $openFirstInstallVideo == "1"
-    ExecShell "open" "https://www.youtube.com/watch?v=YIkJsHZbfis"
-  ${EndIf}
+  ; The app opens the video once per version, including in-app upgrades.
 !macroend

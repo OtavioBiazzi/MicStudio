@@ -234,10 +234,7 @@ export function VoiceLabPage({
 
   return (
     <div className="voiceLab">
-      <div className="labHeader">
-        <h2>🧪 Modular Voice Lab v3.0</h2>
-        <p>Desenhe e modele timbres e efeitos premium com snaps analógicos em tempo real</p>
-      </div>
+      <h2 className="srOnly">Voice Lab</h2>
 
       <div className="voice-lab-grid-modular">
         <div className="voice-lab-card-modular" style={{ alignSelf: "flex-start" }}>
@@ -269,7 +266,7 @@ export function VoiceLabPage({
 
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 6 }}>
             <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: 8 }}>Snap do Motor de Áudio:</div>
-            <div style={{ display: "flex", gap: 10, fontSize: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 12 }}>
               <span style={{ color: "var(--text-secondary)" }}>Ganho: <strong>{Number(state.controls?.gain ?? 1).toFixed(1)}x</strong></span>
               <span style={{ color: "var(--border-active)" }}>Tom: <strong>{Number(state.controls?.pitch ?? 0).toFixed(0)} st</strong></span>
               <span style={{ color: "var(--cyan)" }}>Módulos Ativos: <strong>{countEnabledEffects(state.controls?.effects)}</strong></span>

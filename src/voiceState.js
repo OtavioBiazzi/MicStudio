@@ -9,9 +9,15 @@ export function restoreVoiceEdits(base, saved, defaults) {
     if (typeof value === "number" && !Number.isFinite(value)) continue;
     effects[key] = value;
   }
+  const legacyTemporal = base.effects.time_glitch_clean_voice === true &&
+    !Object.hasOwn(saved.effects || {}, "time_glitch_clean_voice");
+  if (legacyTemporal) {
+    effects.time_glitch_clean_voice = true;
+    if (effects.time_glitch_voice_duck === 1) effects.time_glitch_voice_duck = 0.35;
+  }
   return {
     ...base,
-    gain: Number.isFinite(saved.gain) ? saved.gain : base.gain,
+    gain: legacyTemporal && saved.gain === 2.8 ? 1 : Number.isFinite(saved.gain) ? saved.gain : base.gain,
     pitch: Number.isFinite(saved.pitch) ? saved.pitch : base.pitch,
     effects
   };

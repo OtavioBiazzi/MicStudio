@@ -1408,6 +1408,15 @@ class AppState:
         self.soundboard_favorites = list(self.profile.get("soundboardFavorites", []))
         self.voice_recents = list(self.profile.get("voiceRecents", []))
         self.active_voice_id = str(self.profile.get("activeVoiceId", "clean"))
+        if self.active_voice_id == "glitched_temporal" and (
+                not isinstance(effects, dict) or "time_glitch_clean_voice" not in effects):
+            migrated_effects = asdict(self.effects)
+            migrated_effects["time_glitch_clean_voice"] = True
+            if self.gain == 2.8:
+                self.gain = 1.0
+            if self.effects.time_glitch_voice_duck == 1:
+                migrated_effects["time_glitch_voice_duck"] = 0.35
+            self.effects = EffectsSettings.from_mapping(migrated_effects)
         self.voice_bypassed = False
         self.controls_revision = 0
 

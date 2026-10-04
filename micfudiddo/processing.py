@@ -125,6 +125,7 @@ class EffectsSettings:
     glitch_mix: float = 0.55
     glitch_rate_hz: float = 18.0
     time_glitch_enabled: bool = False
+    time_glitch_clean_voice: bool = False
     time_glitch_mix: float = 0.72
     time_glitch_rate_hz: float = 6.0
     time_glitch_depth: float = 0.7
@@ -298,6 +299,7 @@ class VoiceEffectsProcessor:
         if y.size == 0:
             return y
         self._sync_temporal_effect_state(settings)
+        clean_temporal = settings.time_glitch_clean_voice
 
         if settings.noise_gate_enabled:
             y = self._noise_gate(y, _finite_clamped(settings.noise_gate_threshold, 0.0, 0.4, 0.08))
@@ -325,7 +327,7 @@ class VoiceEffectsProcessor:
         if settings.tremolo_enabled:
             y = self._tremolo(y, _finite_clamped(settings.tremolo_rate_hz, 1.0, 30.0, 8.0))
 
-        if settings.bitcrush_enabled:
+        if settings.bitcrush_enabled and not clean_temporal:
             y = self._bitcrush(y, settings.bitcrush_bits)
 
         if settings.radio_enabled:
@@ -393,7 +395,7 @@ class VoiceEffectsProcessor:
         if settings.alien_glitch_enabled:
             y = self._alien_glitch(y, _finite_clamped(settings.alien_glitch_mix, 0.0, 1.0, 0.62))
 
-        if settings.glitch_enabled:
+        if settings.glitch_enabled and not clean_temporal:
             y = self._glitch(
                 y,
                 _finite_clamped(settings.glitch_mix, 0.0, 1.0, 0.55),
@@ -420,9 +422,10 @@ class VoiceEffectsProcessor:
                 _finite_clamped(settings.time_glitch_speed, 0.25, 4.0, 1.0),
                 _finite_clamped(settings.time_glitch_pitch_semitones, -24.0, 24.0, 0.0),
                 str(settings.time_glitch_direction or "random"),
+                texture_settings=settings if clean_temporal else None,
             )
 
-        if settings.ambience_enabled:
+        if settings.ambience_enabled and not clean_temporal:
             y += self._ambience(
                 y.size,
                 settings.ambience_mode,
@@ -892,6 +895,7 @@ class VoiceEffectsProcessor:
         speed: float,
         pitch_semitones: float,
         direction: str = "random",
+        texture_settings: EffectsSettings | None = None,
     ) -> np.ndarray:
         """Replay short pieces of recent audio to create temporal stutters and rewinds."""
         if samples.size == 0:
@@ -900,19 +904,24 @@ class VoiceEffectsProcessor:
         output = samples.copy()
         history = self.time_glitch_history
         history_size = history.size
-        fade_samples = max(1, int(self.sample_rate * 0.0015))
+        fade_samples = max(1, int(self.sample_rate * (0.006 if texture_settings else 0.0015)))
 
         shortcut_mode = trigger_mode.strip().lower() == "shortcut"
         if self._time_glitch_interval != interval_s:
             self.time_glitch_samples_until_event = min(self.time_glitch_samples_until_event, max(1, int(self.sample_rate * interval_s)))
             self._time_glitch_interval = interval_s
-        render_settings = (speed, pitch_semitones, direction, repeats)
+        texture_signature = None if texture_settings is None else (
+            texture_settings.bitcrush_enabled, texture_settings.bitcrush_bits,
+            texture_settings.glitch_enabled, texture_settings.glitch_mix, texture_settings.glitch_rate_hz,
+            texture_settings.ambience_enabled, texture_settings.ambience_mode, texture_settings.ambience_volume,
+        )
+        render_settings = (speed, pitch_semitones, direction, repeats, texture_signature)
         if (self.time_glitch_event_remaining > 0 and self._time_glitch_source.size and
                 self._time_glitch_render_settings != render_settings and not self._time_glitch_stop_pending):
             previous = self._time_glitch_render_settings
             cycles = self.time_glitch_event_elapsed / max(1, self.time_glitch_grain.size)
             actual_repeats = repeats if previous[3] != repeats else self.time_glitch_event_total // max(1, self.time_glitch_grain.size)
-            self.time_glitch_grain = self._render_time_glitch_grain(self._time_glitch_source, speed, pitch_semitones, direction)
+            self.time_glitch_grain = self._render_time_glitch_grain(self._time_glitch_source, speed, pitch_semitones, direction, texture_settings)
             self.time_glitch_event_elapsed = round(cycles * self.time_glitch_grain.size)
             self.time_glitch_event_total = self.time_glitch_grain.size * actual_repeats
             self.time_glitch_event_remaining = max(0, self.time_glitch_event_total - self.time_glitch_event_elapsed)
@@ -938,6 +947,7 @@ class VoiceEffectsProcessor:
                     pitch_semitones,
                     exact=True,
                     direction=direction,
+                    texture_settings=texture_settings,
                 )
                 if started:
                     self._time_glitch_trigger.clear()
@@ -954,6 +964,7 @@ class VoiceEffectsProcessor:
                         speed,
                         pitch_semitones,
                         direction=direction,
+                        texture_settings=texture_settings,
                     )
             active = self.time_glitch_event_remaining > 0 and self.time_glitch_grain.size > 0
             held = self._time_glitch_hold.is_set()
@@ -970,7 +981,11 @@ class VoiceEffectsProcessor:
                 if not held:
                     edges = np.minimum(edges, self.time_glitch_event_remaining - 1 - offsets)
                 event_mix = mix * np.clip(edges / fade_samples, 0.0, 1.0)
-                output[index:index + size] = clean * (1.0 - voice_duck * event_mix) + wet * event_mix * repeat_volume
+                dry_gain = 1.0 - voice_duck * event_mix
+                wet_gain = event_mix * repeat_volume
+                # Leave headroom when the clean voice and a correlated replay overlap.
+                headroom = np.maximum(1.0, dry_gain + wet_gain) if texture_settings else 1.0
+                output[index:index + size] = (clean * dry_gain + wet * wet_gain) / headroom
                 self.time_glitch_grain_pos = (self.time_glitch_grain_pos + size) % self.time_glitch_grain.size
                 self.time_glitch_event_elapsed += size
                 if not held:
@@ -997,6 +1012,7 @@ class VoiceEffectsProcessor:
         pitch_semitones: float = 0.0,
         exact: bool = False,
         direction: str = "random",
+        texture_settings: EffectsSettings | None = None,
     ) -> bool:
         jitter = float(self.noise_rng.uniform(0.65, 1.4))
         self.time_glitch_samples_until_event = max(1, int(self.sample_rate * interval_s * jitter))
@@ -1042,8 +1058,13 @@ class VoiceEffectsProcessor:
             elif not exact and mode_roll < pingpong_chance + reverse_chance + depth * 0.32:
                 self._time_glitch_event_direction = "sliced"
         self._time_glitch_source = grain
-        grain = self._render_time_glitch_grain(grain, speed, pitch_semitones, direction)
-        self._time_glitch_render_settings = (speed, pitch_semitones, direction, repeats)
+        grain = self._render_time_glitch_grain(grain, speed, pitch_semitones, direction, texture_settings)
+        texture_signature = None if texture_settings is None else (
+            texture_settings.bitcrush_enabled, texture_settings.bitcrush_bits,
+            texture_settings.glitch_enabled, texture_settings.glitch_mix, texture_settings.glitch_rate_hz,
+            texture_settings.ambience_enabled, texture_settings.ambience_mode, texture_settings.ambience_volume,
+        )
+        self._time_glitch_render_settings = (speed, pitch_semitones, direction, repeats, texture_signature)
 
         repeat_variation = max(0, int(round(depth * 2.0)))
         actual_repeats = int(
@@ -1058,7 +1079,8 @@ class VoiceEffectsProcessor:
         self.time_glitch_event_elapsed = 0
         return True
 
-    def _render_time_glitch_grain(self, source: np.ndarray, speed: float, pitch_semitones: float, direction: str) -> np.ndarray:
+    def _render_time_glitch_grain(self, source: np.ndarray, speed: float, pitch_semitones: float, direction: str,
+                                texture_settings: EffectsSettings | None = None) -> np.ndarray:
         grain = source.copy()
         direction = self._time_glitch_event_direction if direction == "random" else direction
         if direction == "pingpong":
@@ -1085,6 +1107,17 @@ class VoiceEffectsProcessor:
             warmup = max(grain.size, int(self.sample_rate * 0.12))
             periodic = grain[np.arange(warmup + grain.size) % grain.size]
             grain = self._time_glitch_pitch_shifter.process(periodic)[-grain.size:]
+
+        if texture_settings is not None:
+            if texture_settings.bitcrush_enabled:
+                grain = self._bitcrush(grain, texture_settings.bitcrush_bits)
+            if texture_settings.glitch_enabled:
+                grain = self._glitch(grain, _finite_clamped(texture_settings.glitch_mix, 0, 1, 0.18),
+                                     _finite_clamped(texture_settings.glitch_rate_hz, 4, 60, 14))
+            if texture_settings.ambience_enabled:
+                grain += self._ambience(grain.size, texture_settings.ambience_mode,
+                                        _finite_clamped(texture_settings.ambience_volume, 0, 1, 0.08))
+            grain = soft_clip(grain)
 
         fade = min(max(1, int(self.sample_rate * 0.0015)), grain.size // 4)
         grain[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)

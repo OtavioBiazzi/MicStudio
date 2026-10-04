@@ -41,7 +41,7 @@ export const effectDefaults = {
   reverse_pitch_semitones: 0, reverse_gain: 1,
   alien_glitch_enabled: false, alien_glitch_mix: 0.62,
   glitch_enabled: false, glitch_mix: 0.55, glitch_rate_hz: 18,
-  time_glitch_enabled: false, time_glitch_mix: 0.72, time_glitch_rate_hz: 6, time_glitch_depth: 0.7,
+  time_glitch_enabled: false, time_glitch_clean_voice: false, time_glitch_mix: 0.72, time_glitch_rate_hz: 6, time_glitch_depth: 0.7,
   time_glitch_interval_s: 0, time_glitch_fragment_ms: 55, time_glitch_lookback_s: 0.45,
   time_glitch_repeats: 4, time_glitch_reverse_chance: 0.38, time_glitch_pingpong_chance: 0.28,
   time_glitch_trigger_mode: "automatic", time_glitch_shortcut_mode: "press", time_glitch_shortcut: "",

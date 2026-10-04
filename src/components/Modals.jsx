@@ -1451,6 +1451,14 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.4.2": `### Versão 1.4.2
+* Primeira instalação abre o vídeo de apresentação no navegador. Atualizações e reinstalações não repetem a abertura.
+* Glitched Temporal separa a voz normal da repetição: corrupção digital, bitcrush e ambiente passam a afetar somente os trechos repetidos.
+* Ganho padrão corrigido de 2,8x para 1x. Mix com margem para evitar saturação ao somar a fala e a repetição, além de transições mais suaves.
+* Volume da repetição e redução da voz normal ajustáveis no painel do Glitched Temporal. Ajustes antigos de tempo e repetição preservados.
+* Soundboard com cartões compactos, capas ao lado do nome, favoritos com coração, menu de opções visível e ícones consistentes.
+* Bordas, contraste, sombras e painel de som refinados, com foco de teclado e mensagem para abas vazias.
+* Temas, configurações, reprodução por duplo clique e barra rápida fixa preservados.`,
   "v1.4.1": `### Versão 1.4.1
 * Mantidos o design atual, os temas e a barra rápida fixa. Sem o redesign experimental.
 * Corrigido o carregamento infinito quando o backend está ausente ou falha na inicialização. Erros específicos, nova tentativa, acesso aos logs e orientação de reinstalação sem apagar configurações.

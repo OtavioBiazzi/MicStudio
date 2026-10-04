@@ -4,10 +4,11 @@ import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
   MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
-  Scissors
+  Scissors, SpeakerHigh, Heart, DotsThreeVertical, WarningCircle, SquaresFour
 } from "@phosphor-icons/react";
 import { formatTime, formatLastUsed, filePathToUrl, copyTextToClipboard } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
+import "./soundboard.css";
 
 export function SoundboardPage({
   state,
@@ -243,6 +244,7 @@ export function SoundboardPage({
 
   return (
     <div
+      className="soundboardPage"
       onDragOver={(e) => {
         const types = Array.from(e.dataTransfer?.types || []);
         if (!types.includes("Files")) return;
@@ -255,9 +257,10 @@ export function SoundboardPage({
       onDrop={importDropped}
       style={{ position: "relative" }}
     >
-      <div className="labHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
-        <div>
-          <h2>🔊 Soundboard Studio</h2>
+      <div className="labHeader soundboardHeader">
+        <span className="soundboardHeaderIcon"><SpeakerHigh size={28} weight="duotone" /></span>
+        <div className="soundboardHeading">
+          <h2>Soundboard Studio</h2>
           <p>Organize, edite e dispare seus efeitos sonoros, áudios e memes favoritos instantaneamente</p>
         </div>
         {isLimitReached && (
@@ -274,7 +277,7 @@ export function SoundboardPage({
             gap: "6px",
             marginTop: 10
           }}>
-            <span>⚠️ Limite de Armazenamento Atingido ({storageMB.toFixed(1)} MB / {storageLimitMB} MB)</span>
+            <WarningCircle size={16} /><span>Limite de Armazenamento Atingido ({storageMB.toFixed(1)} MB / {storageLimitMB} MB)</span>
           </div>
         )}
       </div>
@@ -308,8 +311,8 @@ export function SoundboardPage({
             <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
           </div>
           <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
-          <button className="btn btn-ghost" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={14} /></button>
-          <button className="btn btn-ghost" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={14} /></button>
+          <button className="btn btn-ghost" title="Tocar som aleatório" aria-label="Tocar som aleatório" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={16} /></button>
+          <button className="btn btn-ghost" title="Parar todos os sons" aria-label="Parar todos os sons" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={16} /></button>
         </div>
       </div>
 
@@ -357,6 +360,7 @@ export function SoundboardPage({
       <div className="categoryPills">
         {categories.map((cat) => (
           <button key={cat} className={category === cat ? "active" : ""} onClick={() => setCategory(cat)}>
+            {cat === "Todos" ? <SquaresFour size={14} /> : cat === "Favoritos" ? <Heart size={14} /> : <MusicNotes size={14} />}
             {cat}
           </button>
         ))}
@@ -381,6 +385,7 @@ export function SoundboardPage({
       <div className={`soundboardLayout ${selected && selectedSound !== null ? "" : "no-panel"}`}>
         <div className="soundboardMain">
           <div className="soundGrid">
+            {!filtered.length && <div className="soundboardEmpty"><MusicNotes size={32} weight="duotone" /><p>{query ? "Nenhum som encontrado" : "Nenhum som nesta aba"}</p></div>}
             {filtered.map((sound) => {
               const player = playerBySound[sound.id];
               const isPlaying = player?.state === "playing";
@@ -389,57 +394,40 @@ export function SoundboardPage({
                 <div
                   key={sound.id}
                   className={`soundCard ${selected?.id === sound.id && selectedSound !== null ? "active" : ""} ${isPlaying ? "playing" : ""}`}
+                  tabIndex={0}
+                  aria-label={sound.name}
                   onClick={() => { setSelectedSound(sound.id); }}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && ["Enter", " "].includes(e.key)) { e.preventDefault(); setSelectedSound(sound.id); }
+                  }}
                   onDoubleClick={() => {
                     call("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message));
                   }}
                   onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, sound }); }}
                 >
-                  <button
-                    className={`soundcard-fav-btn ${isFav ? "favorited" : ""}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); toggleSoundboardFavorite(sound.id); }}
-                    style={{
-                      position: "absolute",
-                      bottom: 10,
-                      right: 10,
-                      background: "none",
-                      border: "none",
-                      color: isFav ? "var(--danger)" : "var(--text-muted)",
-                      cursor: "pointer",
-                      zIndex: 3
-                    }}
-                  >
-                    <Star size={16} weight={isFav ? "fill" : "regular"} />
-                  </button>
-                  
                   <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
                     {sound.coverUrl ? <img src={sound.coverUrl} alt="" /> : <MusicNotes size={18} color={sound.color || "var(--purple)"} />}
                   </div>
-                  <div className="soundName">{sound.name.replace(/\.[^/.]+$/, "")}</div>
-                  <div className="soundCategory">
-                    {sound.category || "Sem categoria"} • {formatTime(sound.duration)} • {sound.plays || 0} plays
+                  <div className="soundCardInfo">
+                    <div className="soundName" title={sound.name}>{sound.name.replace(/\.[^/.]+$/, "")}</div>
+                    <div className="soundCategory">{formatTime(sound.duration)} • {sound.plays || 0} plays</div>
+                    {sound.shortcut && <span className="soundCardShortcut"><Keyboard size={10} /> {sound.shortcut}</span>}
                   </div>
-                  {isPlaying && <span className="soundBadge" style={{ right: 8, top: 8 }}>▶</span>}
-                  {sound.shortcut && (
-                    <span
-                      className="soundShortcut"
-                      style={{
-                        position: "absolute",
-                        top: 10,
-                        right: 10,
-                        padding: "2px 5px",
-                        fontSize: 9,
-                        background: "rgba(0,0,0,0.5)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-xs)",
-                        color: "var(--text-secondary)",
-                        pointerEvents: "none"
-                      }}
-                    >
-                      {sound.shortcut}
-                    </span>
-                  )}
+                  <div className="soundCardActions" onDoubleClick={(e) => e.stopPropagation()}>
+                    <button className={`soundcard-fav-btn ${isFav ? "favorited" : ""}`}
+                      title={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                      aria-label={`${isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${sound.name}`}
+                      onClick={(e) => { e.stopPropagation(); toggleSoundboardFavorite(sound.id); }}>
+                      <Heart size={16} weight={isFav ? "fill" : "regular"} />
+                    </button>
+                    <button title="Mais opções" aria-label={`Mais opções: ${sound.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setContextMenu({ x: rect.left, y: rect.bottom, sound });
+                      }}><DotsThreeVertical size={16} weight="bold" /></button>
+                    {isPlaying && <Play size={12} weight="fill" className="soundPlayingIcon" aria-label="Tocando" />}
+                  </div>
                 </div>
               );
             })}
@@ -874,7 +862,7 @@ export function SoundboardQuickPanel({
             onClick={() => toggleSoundboardFavorite(sound.id)}
             style={{ position: "static", background: "none", border: "none", color: isFavorite ? "var(--danger)" : "var(--text-muted)", cursor: "pointer" }}
           >
-            <Star size={18} weight={isFavorite ? "fill" : "regular"} />
+            <Heart size={18} weight={isFavorite ? "fill" : "regular"} />
           </button>
         </div>
         

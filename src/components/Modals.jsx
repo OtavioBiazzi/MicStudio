@@ -1452,6 +1452,9 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.1": `### Versão 1.5.1
+* O botão de alto-falante do dock agora liga e desliga o retorno da própria voz. Antes, com o monitor da voz desligado e o do soundboard ligado, o clique desligava tudo e nunca ligava o retorno da voz.
+* Ao ligar o retorno com o volume em 0%, o volume volta para 100% em vez de ligar mudo.`,
   "v1.5.0": `### Versão 1.5.0
 * Novo visual premium: paleta grafite com um único acento roxo, barra lateral por seções (Estúdio, Biblioteca, Sistema), dock com efeito de vidro e cards, botões e modais redesenhados.
 * Seletor de temas removido: o app tem um único design. A cor de destaque continua personalizável.

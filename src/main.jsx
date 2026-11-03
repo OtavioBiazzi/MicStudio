@@ -453,6 +453,8 @@ function App() {
     });
   };
 
+  const quickRefreshRef = useRef(null);
+
   const call = async (path, body = {}) => {
     if (path === "/api/glitch/trigger") {
       controlsFlushRef.current?.();
@@ -469,7 +471,17 @@ function App() {
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || "Erro no backend");
     applyIncomingState(data);
+    scheduleQuickRefresh();
     return data;
+  };
+
+  // Depois de uma acao, confirma o estado real logo em seguida em vez de esperar o proximo ciclo.
+  const scheduleQuickRefresh = () => {
+    if (quickRefreshRef.current) return;
+    quickRefreshRef.current = setTimeout(() => {
+      quickRefreshRef.current = null;
+      refreshRuntime().catch(() => {});
+    }, 150);
   };
 
   const callSilent = async (path, body = {}) => {
@@ -514,6 +526,8 @@ function App() {
     [state, selectedSound]
   );
 
+  const localSaveTimerRef = useRef(null);
+
   const updateControls = (patch, { persistVoiceId = forcedPresetId || stateRef.current?.activeVoiceId, persist = true, resetVoice = false } = {}) => {
     if (resetVoice) controlsPendingResetRef.current = true;
     const currentControls = latestControlsRef.current || stateRef.current?.controls || state?.controls || {};
@@ -533,8 +547,10 @@ function App() {
       setBypassActive(false);
     }
 
-    // Salvar configurações de Voz Personalizada se ativo
+    // Salvar configurações de Voz Personalizada se ativo (agrupado: nao grava a cada passo do slider)
     const editsVoice = persist && !controls.voiceBypassed && ["gain", "pitch", "effects"].some((key) => key in patch);
+    clearTimeout(localSaveTimerRef.current);
+    localSaveTimerRef.current = setTimeout(() => {
     if (editsVoice && persistVoiceId === "personalizado") {
       localStorage.setItem("personalizado_settings", JSON.stringify({
         gain: controls.gain,
@@ -554,6 +570,7 @@ function App() {
         // Storage failures must not interrupt real-time audio controls.
       }
     }
+    }, 250);
 
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     
@@ -767,6 +784,7 @@ function App() {
           if (stateRef.current) clearInterval(statusTimer);
           refreshTimer = setTimeout(runRefresh, runtimeRefreshDelay({
             ready: Boolean(stateRef.current), hidden: document.hidden, focused: document.hasFocus(),
+            playing: Boolean(stateRef.current?.players?.length),
           }));
         }
       }

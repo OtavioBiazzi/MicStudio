@@ -946,6 +946,8 @@ def run_youtube_download_worker(job_path: str) -> int:
 class AppState:
     def __init__(self) -> None:
         self.lock = threading.RLock()
+        self._profile_save_lock = threading.Lock()
+        self._profile_save_timer: threading.Timer | None = None
         self.engine = AudioEngine()
         self.library = SoundLibrary()
         self.app_settings_path = self.library.base_dir / "app_settings.json"
@@ -961,6 +963,9 @@ class AppState:
         self.sound_cache_limit_bytes = 64 * 1024 * 1024
         self.playback_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="micfudiddo-playback")
         self.duration_cache: dict[str, tuple[int, float]] = {}
+        self._duration_cache_dirty = False
+        self._storage_busy = False
+        self.load_duration_cache()
         self.cover_url_cache: dict[str, tuple[int, str]] = {}
         self.devices: list[AudioDevice] = []
         self.record_devices = []
@@ -1121,6 +1126,30 @@ class AppState:
             print("Erro ao listar endpoints de captura do Windows:", exc)
             self.windows_capture_endpoints = []
 
+    @property
+    def duration_cache_path(self) -> Path:
+        return self.library.base_dir / "duration_cache.json"
+
+    def load_duration_cache(self) -> None:
+        raw = load_json_with_backup(self.duration_cache_path, {}, dict)
+        for path, entry in raw.items():
+            try:
+                self.duration_cache[str(path)] = (int(entry[0]), float(entry[1]))
+            except (TypeError, ValueError, IndexError):
+                continue
+
+    def save_duration_cache(self) -> None:
+        if not self._duration_cache_dirty:
+            return
+        self._duration_cache_dirty = False
+        try:
+            atomic_write_json(
+                self.duration_cache_path,
+                {path: [mtime, duration] for path, (mtime, duration) in self.duration_cache.items()},
+            )
+        except OSError as exc:
+            print("Falha ao gravar o cache de duracoes:", exc, flush=True)
+
     def cached_audio_duration(self, path: str) -> float:
         try:
             stat = Path(path).stat()
@@ -1131,6 +1160,7 @@ class AppState:
             return cached[1]
         duration = audio_duration_seconds(path)
         self.duration_cache[path] = (stat.st_mtime_ns, duration)
+        self._duration_cache_dirty = True
         return duration
 
     def cached_cover_url(self, path: str) -> str:
@@ -1618,6 +1648,25 @@ class AppState:
                 master_pitch=self.master_pitch,
                 master_mute=self.master_mute,
             )
+
+    def request_save_profile(self, delay: float = 0.5) -> None:
+        """Agrupa gravacoes do perfil: arrastar um slider nao grava em disco a cada passo."""
+        with self._profile_save_lock:
+            if self._profile_save_timer is not None:
+                return
+            timer = threading.Timer(delay, self.flush_profile)
+            timer.daemon = True
+            self._profile_save_timer = timer
+            timer.start()
+
+    def flush_profile(self) -> None:
+        with self._profile_save_lock:
+            timer, self._profile_save_timer = self._profile_save_timer, None
+        if timer is None:
+            return
+        timer.cancel()
+        with self.lock:
+            self.save_profile()
 
     def save_profile(self) -> None:
         saved_voice = self.profile if getattr(self, "voice_bypassed", False) else {
@@ -2466,25 +2515,27 @@ class AppState:
         )
 
     def calculate_total_storage(self) -> int:
+        """Devolve o ultimo total conhecido; a varredura de arquivos roda em segundo plano."""
         now = time.monotonic()
         cached_at, cached_total = getattr(self, "_storage_cache", (0.0, 0))
-        if now - cached_at < 10.0:
-            return cached_total
+        if now - cached_at >= 10.0 and not self._storage_busy:
+            self._storage_busy = True
+            threading.Thread(target=self._refresh_total_storage, daemon=True, name="micfudiddo-storage").start()
+        return cached_total
+
+    def _refresh_total_storage(self) -> None:
         total = 0
         try:
-            if self.library.sounds_dir.exists():
-                for f in self.library.sounds_dir.rglob("*"):
-                    if f.is_file():
-                        total += f.stat().st_size
-            recordings_dir = self.library.base_dir / "recordings"
-            if recordings_dir.exists():
-                for f in recordings_dir.rglob("*"):
-                    if f.is_file():
-                        total += f.stat().st_size
+            for folder in (self.library.sounds_dir, self.library.base_dir / "recordings"):
+                if folder.exists():
+                    for f in folder.rglob("*"):
+                        if f.is_file():
+                            total += f.stat().st_size
+            self._storage_cache = (time.monotonic(), total)
         except Exception:
             pass
-        self._storage_cache = (now, total)
-        return total
+        finally:
+            self._storage_busy = False
 
     def runtime_snapshot(self) -> dict:
         return {
@@ -2535,6 +2586,12 @@ class AppState:
         }
 
     def snapshot(self) -> dict:
+        data = self._build_snapshot()
+        if self._duration_cache_dirty:
+            threading.Thread(target=self.save_duration_cache, daemon=True, name="micfudiddo-duration-cache").start()
+        return data
+
+    def _build_snapshot(self) -> dict:
         input_device = self.device_by_index(self.selected_input)
         output_device = self.device_by_index(self.selected_output)
         route = ""
@@ -2681,6 +2738,21 @@ def _sanitize_color(value) -> str:
 
 STATE = None
 
+PLAYBACK_WAIT_SECONDS = 0.6
+
+
+def wait_for_playback(future) -> None:
+    """Espera o som registrar no motor para a resposta ja trazer o estado novo."""
+    try:
+        future.result(timeout=PLAYBACK_WAIT_SECONDS)
+    except Exception:
+        pass
+
+
+def playback_response() -> dict:
+    with STATE.lock:
+        return {**STATE.runtime_snapshot(), "queued": True}
+
 
 def emergency_restore_microphone() -> None:
     state = globals().get("STATE")
@@ -2692,7 +2764,17 @@ def emergency_restore_microphone() -> None:
         print("Falha na restauracao emergencial do microfone:", exc, flush=True)
 
 
+def flush_profile_on_exit() -> None:
+    state = globals().get("STATE")
+    if state is not None:
+        try:
+            state.flush_profile()
+        except Exception as exc:
+            print("Falha ao gravar o perfil ao sair:", exc, flush=True)
+
+
 def install_microphone_safety_handlers() -> None:
+    atexit.register(flush_profile_on_exit)
     atexit.register(emergency_restore_microphone)
 
     def signal_handler(signum, _frame):
@@ -2918,7 +3000,7 @@ class Handler(BaseHTTPRequestHandler):
                 if (STATE.monitor_enabled or STATE.soundboard_monitor_enabled) and not STATE.engine.running:
                     STATE.start_monitor_only()
             STATE.controls_revision += 1
-            STATE.save_profile()
+            STATE.request_save_profile()
             return None
         if path == "/api/glitch/trigger":
             if (not STATE.effects.time_glitch_enabled or STATE.effects.time_glitch_trigger_mode != "shortcut"
@@ -3399,8 +3481,8 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro ao tocar som: {exc}"
 
-            STATE.playback_executor.submit(run_play)
-            return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
+            wait_for_playback(STATE.playback_executor.submit(run_play))
+            return playback_response()
         if path == "/api/sounds/random":
             category = str(data.get("category") or "").strip()
             items = [
@@ -3420,8 +3502,8 @@ class Handler(BaseHTTPRequestHandler):
                         with STATE.lock:
                             STATE.status = f"Erro ao sortear som: {exc}"
 
-            STATE.playback_executor.submit(run_random)
-            return {"queued": True, "status": STATE.status, "running": STATE.engine.running}
+            wait_for_playback(STATE.playback_executor.submit(run_random))
+            return playback_response()
         if path == "/api/sounds/stop":
             playback_id = str(data.get("playbackId") or "")
             if playback_id:

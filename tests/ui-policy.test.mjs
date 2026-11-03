@@ -13,8 +13,13 @@ test("oversized menus stay inside small viewports with scrollable constrained si
 });
 
 test("startup stays responsive; hidden and unfocused runtime polling is reduced", () => {
-  assert.equal(runtimeRefreshDelay({ ready: false, hidden: true, focused: false }), 1200);
+  assert.equal(runtimeRefreshDelay({ ready: false, hidden: true, focused: false }), 400);
   assert.equal(runtimeRefreshDelay({ ready: true, hidden: false, focused: true }), 1200);
   assert.equal(runtimeRefreshDelay({ ready: true, hidden: false, focused: false }), 10000);
   assert.equal(runtimeRefreshDelay({ ready: true, hidden: true, focused: true }), 10000);
+});
+
+test("com som tocando e janela em foco o estado atualiza mais rapido", () => {
+  assert.equal(runtimeRefreshDelay({ ready: true, hidden: false, focused: true, playing: true }), 400);
+  assert.equal(runtimeRefreshDelay({ ready: true, hidden: false, focused: false, playing: true }), 10000);
 });

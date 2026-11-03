@@ -15,7 +15,11 @@ export function useTtsVoices() {
   useEffect(() => {
     if (cachedVoices) return undefined;
     let cancelled = false;
-    fetch(`${API}/api/tts/voices`)
+    fetch(`${API}/api/tts/voices`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    })
       .then((res) => res.json())
       .then((data) => {
         if (cancelled || !Array.isArray(data?.voices) || !data.voices.length) return;

@@ -1452,6 +1452,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.0": `### Versão 1.5.0
+* Novo visual premium: paleta grafite com um único acento roxo, barra lateral por seções (Estúdio, Biblioteca, Sistema), dock com efeito de vidro e cards, botões e modais redesenhados.
+* Seletor de temas removido: o app tem um único design. A cor de destaque continua personalizável.
+* O app abre sempre em Sem efeito. Nova opção "Lembrar a última voz ao abrir", desligada por padrão.
+* Rota virtual automática e monitoramento da própria voz vêm desligados por padrão, e os padrões antigos são migrados uma única vez.
+* TTS com mais de 300 vozes, geração paralela de textos longos, cache de frases repetidas, controle de tom e voz offline do Windows como reserva.
+* Erros do TTS aparecem na tela em vez de falhar em silêncio.`,
   "v1.4.3": `### Versão 1.4.3
 * Aviso de atualização somente uma vez por abertura do aplicativo. Voltar para a janela não repete o aviso; consultas periódicas de releases removidas.
 * Menu de versões continua consultando atualizações ao abrir ou ao clicar em atualizar a lista.

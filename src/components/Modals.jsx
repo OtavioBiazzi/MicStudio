@@ -13,6 +13,7 @@ import {
   Slider,
   EffectSliderRow
 } from "../utils";
+import { useTtsVoices } from "../useTtsVoices";
 
 const playbackModes = [
   { value: "restart", label: "Reiniciar ao clicar" },
@@ -1451,6 +1452,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.0": `### Versão 1.5.0
+* Novo visual premium: paleta grafite com um único acento roxo, barra lateral por seções (Estúdio, Biblioteca, Sistema), dock com efeito de vidro e cards, botões e modais redesenhados.
+* Seletor de temas removido: o app tem um único design. A cor de destaque continua personalizável.
+* O app abre sempre em Sem efeito. Nova opção "Lembrar a última voz ao abrir", desligada por padrão.
+* Rota virtual automática e monitoramento da própria voz vêm desligados por padrão, e os padrões antigos são migrados uma única vez.
+* TTS com mais de 300 vozes, geração paralela de textos longos, cache de frases repetidas, controle de tom e voz offline do Windows como reserva.
+* Erros do TTS aparecem na tela em vez de falhar em silêncio.`,
   "v1.4.3": `### Versão 1.4.3
 * Aviso de atualização somente uma vez por abertura do aplicativo. Voltar para a janela não repete o aviso; consultas periódicas de releases removidas.
 * Menu de versões continua consultando atualizações ao abrir ou ao clicar em atualizar a lista.
@@ -2224,6 +2232,9 @@ export function TTSModal({ onClose, call, setToast, settings }) {
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   }); // Slider: -50 to +50
+  const [pitch, setPitch] = useState(() => {
+    return Number(localStorage.getItem("tts_default_pitch") || 0);
+  }); // Slider: -50 to +50 Hz
   const [soundName, setSoundName] = useState("");
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -2272,7 +2283,8 @@ export function TTSModal({ onClose, call, setToast, settings }) {
       await call("/api/tts/speak", {
         text: text.trim(),
         voice: selectedVoice,
-        rate: formattedRate
+        rate: formattedRate,
+        pitch
       });
       setToast("📢 Falando...");
     } catch (err) {
@@ -2299,6 +2311,7 @@ export function TTSModal({ onClose, call, setToast, settings }) {
         text: text.trim(),
         voice: selectedVoice,
         rate: formattedRate,
+        pitch,
         name: soundName.trim()
       });
       setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
@@ -2316,21 +2329,7 @@ export function TTSModal({ onClose, call, setToast, settings }) {
     }
   };
 
-  const voicesList = [
-    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
-    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
-    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
-    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
-  ];
+  const voicesList = useTtsVoices();
 
   const isWorking = loading || speaking;
 
@@ -2455,6 +2454,27 @@ export function TTSModal({ onClose, call, setToast, settings }) {
                 }}
               />
             </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
+              <span>Tom da voz</span>
+              <span style={{ color: "var(--purple)", fontWeight: 800 }}>{pitch >= 0 ? `+${pitch}Hz` : `${pitch}Hz`}</span>
+            </span>
+            <input
+              type="range"
+              min={-50}
+              max={50}
+              step={5}
+              value={pitch}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setPitch(val);
+                localStorage.setItem("tts_default_pitch", val);
+              }}
+              disabled={isWorking}
+              style={{ width: "100%", height: 36, accentColor: "var(--purple)", cursor: "pointer" }}
+            />
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

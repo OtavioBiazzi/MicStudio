@@ -10,7 +10,7 @@ Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem pr
 
 1. Vá para a seção de **[Releases (Lançamentos)](https://github.com/OtavioBiazzi/MicStudio/releases)** no topo direito desta página do GitHub.
 2. Localize a versão mais recente (marcada como **Latest**).
-3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 0.4.0.exe`) para baixá-lo.
+3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 1.5.0.exe`) para baixá-lo.
 4. Execute o arquivo baixado. O aplicativo será instalado automaticamente de forma portátil e os atalhos serão criados no seu Menu Iniciar para busca rápida!
 
 ---
@@ -22,7 +22,8 @@ Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem pr
 - Quando o ganho passa do teto de saida, o app achata os picos de proposito para criar distorcao/estouro real antes do Discord receber o audio.
 - Altera a altura da voz de -12 a +12 semitons.
 - Tem volume final do microfone, distorcao, robo, eco curto, tremolo e bitcrush como efeitos opcionais.
-- Todos os efeitos extras vem desligados por padrao.
+- Todos os efeitos extras vem desligados por padrao, assim como a rota automatica ao abrir e o monitoramento da propria voz.
+- Tem Text-to-Speech (voz digitada) com mais de 300 vozes, velocidade, tom, cache de frases repetidas e voz offline do Windows como reserva quando estiver sem internet.
 - Tem botao para restaurar controles ao padrao.
 - Tem soundboard local com upload de sons, lista persistente, volume, pitch, repeticoes e atalhos por som.
 - Tem gravador da voz processada que salva o audio final enviado ao Discord.
@@ -77,7 +78,7 @@ npm run build:studio
 O executavel fica em:
 
 ```text
-studio-release\MicFudiddo Studio 0.4.0.exe
+studio-release\MicFudiddo Studio 1.5.0.exe
 ```
 
 Para colocar no Menu Iniciar e aparecer na busca do Windows:

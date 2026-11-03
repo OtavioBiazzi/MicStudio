@@ -1,0 +1,385 @@
+/* ============================================================
+   MicFudiddo Studio - linguagem visual "obsidiana"
+   Carregado por ultimo. Redefine tokens (superficies neutras,
+   acento unico, sem neon) e a forma dos componentes principais.
+   ============================================================ */
+
+:root {
+  /* superficies: grafite neutro com leve toque violeta */
+  --bg-base: #0a0a0f;
+  --bg-sidebar: #07070b;
+  --bg-card: #101016;
+  --bg-card-hover: #15151d;
+  --bg-card-secondary: #1a1a23;
+  --bg-bottom-bar: #08080c;
+  --bg-input: #0c0c12;
+  --bg-overlay: rgba(4, 4, 8, .72);
+
+  /* texto */
+  --text: #ececf1;
+  --text-secondary: #a0a0b0;
+  --text-muted: #6d6d7f;
+  --text-faint: #4b4b5a;
+
+  /* o antigo ciano neon vira um indigo discreto */
+  --cyan: #a5b4fc;
+  --cyan-glow: rgba(165, 180, 252, .18);
+  --cyan-soft: rgba(165, 180, 252, .08);
+
+  --border: rgba(255, 255, 255, .07);
+  --hairline: inset 0 1px 0 rgba(255, 255, 255, .045);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, .5);
+  --shadow-glow-purple: 0 0 24px rgba(139, 92, 246, .22);
+  --shadow-glow-cyan: 0 0 24px rgba(165, 180, 252, .14);
+}
+
+html, body, #root {
+  letter-spacing: -.005em;
+  background:
+    radial-gradient(1200px 600px at 78% -10%, rgba(139, 92, 246, .07), transparent 60%),
+    var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .1);
+  border-radius: 8px;
+}
+
+/* ---------- Pagina e tipografia ---------- */
+.page {
+  padding: var(--space-5) var(--space-6) 140px;
+}
+
+.sectionHeader {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ---------- Barra lateral ---------- */
+.sidebar {
+  background: linear-gradient(180deg, #0a0a10 0%, var(--bg-sidebar) 100%);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-logo {
+  padding: 22px 20px 18px;
+}
+
+.sidebar-logo .logo-text .brand-name {
+  background: linear-gradient(135deg, #ffffff 30%, #c4b5fd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 15px;
+  letter-spacing: -.02em;
+}
+
+.sidebar-logo .logo-text .brand-sub {
+  letter-spacing: .32em;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.sidebar nav {
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-4);
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-label {
+  padding: 0 var(--space-3) 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sidebar nav button {
+  padding: 9px var(--space-3);
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sidebar nav button svg {
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.sidebar nav button:hover {
+  background: rgba(255, 255, 255, .04);
+  color: var(--text);
+}
+
+.sidebar nav button:hover svg {
+  color: var(--text-secondary);
+}
+
+.sidebar nav button.active {
+  background: linear-gradient(90deg, rgba(139, 92, 246, .16), rgba(139, 92, 246, .04));
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, .18);
+}
+
+.sidebar nav button.active svg {
+  color: var(--purple-hover);
+}
+
+.sidebar nav button.active:before {
+  left: -12px;
+  height: 18px;
+  width: 3px;
+  background: var(--purple);
+  box-shadow: 0 0 12px var(--purple-glow);
+}
+
+.sidebar-bottom {
+  border-top: none;
+  padding: var(--space-3);
+}
+
+.sidebar-profile {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.sidebar-profile .profile-info .pro-badge {
+  background: linear-gradient(135deg, rgba(139, 92, 246, .28), rgba(196, 181, 253, .14));
+  color: #ddd6fe;
+  border: 1px solid rgba(196, 181, 253, .22);
+  letter-spacing: .1em;
+}
+
+/* ---------- Busca, filtros e botoes ---------- */
+.searchBar input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--hairline);
+}
+
+.searchBar input:focus {
+  border-color: rgba(139, 92, 246, .55);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, .14);
+}
+
+.categoryPills button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.categoryPills button:hover {
+  background: rgba(255, 255, 255, .04);
+  color: var(--text);
+}
+
+.categoryPills button.active {
+  background: var(--text);
+  color: #0a0a0f;
+  border-color: var(--text);
+  box-shadow: none;
+}
+
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: -.005em;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #9575f7, #7c4dee);
+  border: 1px solid rgba(196, 181, 253, .35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 6px 18px rgba(124, 77, 238, .28);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--border);
+}
+
+/* ---------- Cards de voz ---------- */
+.voiceGrid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-4);
+}
+
+.voiceCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--hairline);
+  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+.voiceCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(139, 92, 246, .4);
+  box-shadow: var(--hairline), 0 14px 32px rgba(0, 0, 0, .45);
+}
+
+.voiceCard.active {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 1px var(--purple), 0 0 32px var(--purple-glow);
+}
+
+.voiceCard .cardImage {
+  aspect-ratio: 16 / 10;
+}
+
+/* o degrade da voz passa a ser um tom, nao um bloco saturado */
+.voiceCard .cardImage .cardGradient {
+  opacity: .72;
+}
+
+.voiceCard .cardImage:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(10, 10, 15, .55));
+  pointer-events: none;
+}
+
+.voiceCard .cardImage .cardEmoji {
+  font-size: 40px;
+}
+
+.voiceCard .cardInfo {
+  padding: var(--space-3) 14px 14px;
+}
+
+.voiceCard .cardInfo .cardName {
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.voiceCard.active .cardInfo .cardName:after {
+  content: "ATIVA";
+  margin-left: var(--space-2);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--purple);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  vertical-align: middle;
+}
+
+/* ---------- Dock flutuante: vidro com friso de luz ---------- */
+.floating-dock-inner {
+  background: rgba(12, 12, 18, .82);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .06),
+    0 18px 50px rgba(0, 0, 0, .6),
+    0 0 40px rgba(139, 92, 246, .12);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+
+.floating-dock-inner:hover {
+  border-color: rgba(139, 92, 246, .3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    0 22px 56px rgba(0, 0, 0, .65),
+    0 0 48px rgba(139, 92, 246, .2);
+}
+
+.dockDivider {
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .12), transparent);
+}
+
+.dock-active-avatar {
+  border: 2px solid rgba(255, 255, 255, .1);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .6);
+}
+
+.dock-active-label {
+  letter-spacing: .12em;
+  color: var(--text-secondary);
+}
+
+.bbBtn.toggle {
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--border);
+}
+
+.bbBtn.toggle.on {
+  background: linear-gradient(180deg, #9575f7, #7c4dee);
+  border-color: rgba(196, 181, 253, .4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 6px 18px rgba(124, 77, 238, .35);
+}
+
+.floating-dock-inner-minimized {
+  background: rgba(12, 12, 18, .82);
+  border: 1px solid rgba(255, 255, 255, .09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 10px 30px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(18px);
+}
+
+/* ---------- Modais e configuracoes ---------- */
+.modalOverlay {
+  background: var(--bg-overlay);
+  backdrop-filter: blur(6px);
+}
+
+.modalContent {
+  background: linear-gradient(180deg, #14141c, #0f0f15);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 20px;
+  box-shadow: var(--hairline), var(--shadow-lg);
+}
+
+.settingCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--hairline);
+}
+
+.toast {
+  background: rgba(20, 20, 28, .92);
+  border: 1px solid rgba(255, 255, 255, .1);
+  box-shadow: var(--hairline), var(--shadow-md);
+  backdrop-filter: blur(14px);
+}
+
+/* ---------- Janela estreita ---------- */
+@media (max-width: 760px) {
+  .page {
+    padding: var(--space-4) var(--space-4) 140px;
+  }
+}

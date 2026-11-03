@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
 import "./components/workspace.css";
+import "./design.css";
 
 // Utils & Helpers
 import {
@@ -20,6 +21,7 @@ import { voicePresets } from "./voicePresets";
 
 // API Client
 import { API, getAPI } from "./apiClient";
+import { useTtsVoices } from "./useTtsVoices";
 import packageMetadata from "../package.json";
 import { runtimeRefreshDelay } from "./runtimePolicy";
 
@@ -145,9 +147,6 @@ function App() {
   });
   const [customAccentColor, setCustomAccentColor] = useState(() => {
     return localStorage.getItem("micfudiddo.customAccentColor") || "#8B5CF6";
-  });
-  const [appTheme, setAppTheme] = useState(() => {
-    return localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
   });
   const [profileName, setProfileName] = useState(() => {
     return localStorage.getItem("micfudiddo.profileName") || "MicFudido";
@@ -289,13 +288,6 @@ function App() {
     }
   };
 
-  // Apply theme class
-  useEffect(() => {
-    const r = document.documentElement;
-    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon", "theme-synthwave");
-    r.classList.add(appTheme);
-  }, [appTheme]);
-
   // Apply accent color
   useEffect(() => {
     const applyAccentColor = (key) => {
@@ -391,7 +383,6 @@ function App() {
   // Persistence hooks
   useEffect(() => { localStorage.setItem("micfudiddo.page", page); }, [page]);
   useEffect(() => { localStorage.setItem("micfudiddo.accentColor", accentColor); }, [accentColor]);
-  useEffect(() => { localStorage.setItem("micfudiddo.theme", appTheme); }, [appTheme]);
   useEffect(() => { localStorage.setItem("micfudiddo.customAccentColor", customAccentColor); }, [customAccentColor]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileName", profileName); }, [profileName]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileSub", profileSub); }, [profileSub]);
@@ -1188,8 +1179,6 @@ function App() {
                     setAccentColor={setAccentColor}
                     customAccentColor={customAccentColor}
                     setCustomAccentColor={setCustomAccentColor}
-                    appTheme={appTheme}
-                    setAppTheme={setAppTheme}
                     updateEffects={updateEffects}
                     prefFontSize={prefFontSize}
                     setPrefFontSize={setPrefFontSize}
@@ -1386,6 +1375,7 @@ function TTSWidget() {
     return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
   });
   const [speaking, setSpeaking] = useState(false);
+  const [speakError, setSpeakError] = useState("");
   const [showSpeed, setShowSpeed] = useState(true);
   const [showVolume, setShowVolume] = useState(true);
   const [volume, setVolume] = useState(100);
@@ -1396,46 +1386,11 @@ function TTSWidget() {
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   });
-  const [appTheme, setAppTheme] = useState(() => {
-    return localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
-  });
 
   const inputRef = useRef(null);
   const volumeDraggingRef = useRef(false);
 
-  // Apply theme class to widget root
-  useEffect(() => {
-    const r = document.documentElement;
-    r.classList.remove("theme-cyberpunk", "theme-dracula", "theme-vampire", "theme-neon", "theme-synthwave");
-    r.classList.add(appTheme);
-  }, [appTheme]);
-
-  // Sync theme when localStorage updates
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === "micfudiddo.theme" && e.newValue) {
-        setAppTheme(e.newValue);
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  const voicesList = [
-    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
-    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
-    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
-    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
-  ];
+  const voicesList = useTtsVoices();
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1456,8 +1411,6 @@ function TTSWidget() {
       } catch (err) {
         console.error("Error fetching state:", err);
       }
-      const currentTheme = localStorage.getItem("micfudiddo.theme") || "theme-cyberpunk";
-      setAppTheme(currentTheme);
     };
     fetchSettings();
     const interval = setInterval(fetchSettings, 2000);
@@ -1501,7 +1454,7 @@ function TTSWidget() {
     setSpeaking(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
-      await fetch(`${API}/api/tts/speak`, {
+      const res = await fetch(`${API}/api/tts/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1510,8 +1463,15 @@ function TTSWidget() {
           rate: formattedRate
         })
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Erro ao gerar a voz.");
+      }
+      setSpeakError("");
     } catch (err) {
       console.error(err);
+      setText(ttsText);
+      setSpeakError(err.message || "Erro ao gerar a voz.");
     } finally {
       setSpeaking(false);
     }
@@ -1551,14 +1511,14 @@ function TTSWidget() {
       height: (showSpeed || showVolume) ? "88px" : "60px",
       width: "100vw",
       borderRadius: "16px",
-      background: `rgba(10, 18, 30, ${opacity})`,
+      background: `color-mix(in srgb, var(--bg-sidebar) ${Math.round(opacity * 100)}%, transparent)`,
       backdropFilter: "blur(20px)",
-      border: "1px solid rgba(255, 255, 255, 0.08)",
+      border: "1px solid var(--border)",
       boxSizing: "border-box",
       overflow: "hidden",
       gap: "6px",
-      color: "#f3f4f6",
-      fontFamily: "system-ui, sans-serif"
+      color: "var(--text)",
+      fontFamily: "var(--font)"
     }}>
       {/* Row 1: Controls */}
       <div style={{
@@ -1581,7 +1541,7 @@ function TTSWidget() {
             justifyContent: "center",
             gap: "3px",
             padding: "0 4px",
-            color: "rgba(255, 255, 255, 0.25)",
+            color: "var(--text-faint)",
             WebkitAppRegion: "drag",
             userSelect: "none"
           }}
@@ -1597,10 +1557,10 @@ function TTSWidget() {
           onChange={handleVoiceChange}
           style={{
             WebkitAppRegion: "no-drag",
-            background: "rgba(255, 255, 255, 0.05)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
+            background: "var(--bg-input)",
+            border: "1px solid var(--border)",
             borderRadius: "6px",
-            color: "#fff",
+            color: "var(--text)",
             padding: "6px 8px",
             fontSize: "12px",
             maxWidth: "110px",
@@ -1609,7 +1569,7 @@ function TTSWidget() {
           }}
         >
           {voicesList.map(v => (
-            <option key={v.id} value={v.id} style={{ background: "#0a121e", color: "#fff" }}>
+            <option key={v.id} value={v.id} style={{ background: "var(--bg-card)", color: "var(--text)" }}>
               {v.name}
             </option>
           ))}
@@ -1621,7 +1581,8 @@ function TTSWidget() {
             ref={inputRef}
             type="text" 
             autoFocus
-            placeholder={focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
+            title={speakError || undefined}
+            placeholder={speakError ? `⚠ ${speakError}` : focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -1634,10 +1595,10 @@ function TTSWidget() {
             {...(!unlimited ? { maxLength: TTS_CHARACTER_LIMIT } : {})}
             style={{
               width: "100%",
-              background: "rgba(255, 255, 255, 0.05)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
+              background: "var(--bg-input)",
+              border: "1px solid var(--border)",
               borderRadius: "6px",
-              color: "#fff",
+              color: "var(--text)",
               padding: "6px 50px 6px 12px",
               fontSize: "12px",
               outline: "none"
@@ -1647,7 +1608,7 @@ function TTSWidget() {
             position: "absolute",
             right: "10px",
             fontSize: "10px",
-            color: "rgba(255, 255, 255, 0.4)",
+            color: "var(--text-muted)",
             pointerEvents: "none"
           }}>
             {text.length}{unlimited ? "" : `/${TTS_CHARACTER_LIMIT}`}
@@ -1660,10 +1621,10 @@ function TTSWidget() {
           disabled={speaking}
           style={{
             WebkitAppRegion: "no-drag",
-            background: speaking ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #a855f7, #7c3aed)",
+            background: speaking ? "var(--bg-card-secondary)" : "linear-gradient(135deg, var(--purple), var(--purple-dim))",
             border: "none",
             borderRadius: "6px",
-            color: "#fff",
+            color: "var(--text)",
             padding: "6px 12px",
             fontSize: "12px",
             fontWeight: "bold",
@@ -1684,7 +1645,7 @@ function TTSWidget() {
             WebkitAppRegion: "no-drag",
             background: "none",
             border: "none",
-            color: "rgba(255, 255, 255, 0.4)",
+            color: "var(--text-muted)",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -1695,8 +1656,8 @@ function TTSWidget() {
             outline: "none"
           }}
           title="Fechar Widget"
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)"; e.currentTarget.style.color = "#ef4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--danger-soft)"; e.currentTarget.style.color = "var(--danger)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "var(--text-muted)"; }}
         >
           <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></svg>
         </button>
@@ -1717,7 +1678,7 @@ function TTSWidget() {
         }}>
           {showSpeed && (
             <div style={{ display: "flex", flex: 1, flexDirection: "row", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                 Velocidade:
               </span>
               <input
@@ -1730,21 +1691,21 @@ function TTSWidget() {
                 style={{
                   flex: 1,
                   height: "4px",
-                  accentColor: "#a855f7",
+                  accentColor: "var(--purple)",
                   cursor: "pointer",
-                  background: "rgba(255,255,255,0.1)",
+                  background: "var(--bg-card-secondary)",
                   border: "none",
                   outline: "none"
                 }}
               />
-              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.7)", minWidth: "35px", textAlign: "right" }}>
+              <span style={{ fontSize: "11px", color: "var(--text)", minWidth: "35px", textAlign: "right" }}>
                 {rate >= 0 ? `+${rate}%` : `${rate}%`}
               </span>
             </div>
           )}
           {showVolume && (
             <div style={{ display: "flex", flex: 1, flexDirection: "row", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                 Volume:
               </span>
               <input
@@ -1761,14 +1722,14 @@ function TTSWidget() {
                 style={{
                   flex: 1,
                   height: "4px",
-                  accentColor: "#a855f7",
+                  accentColor: "var(--purple)",
                   cursor: "pointer",
-                  background: "rgba(255,255,255,0.1)",
+                  background: "var(--bg-card-secondary)",
                   border: "none",
                   outline: "none"
                 }}
               />
-              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.7)", minWidth: "35px", textAlign: "right" }}>
+              <span style={{ fontSize: "11px", color: "var(--text)", minWidth: "35px", textAlign: "right" }}>
                 {volume}%
               </span>
             </div>

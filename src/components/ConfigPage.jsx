@@ -86,8 +86,6 @@ export function ConfigPage({
   setAccentColor,
   customAccentColor,
   setCustomAccentColor,
-  appTheme,
-  setAppTheme,
   updateEffects,
   prefFontSize,
   setPrefFontSize,
@@ -143,7 +141,8 @@ export function ConfigPage({
     try {
       if (tabName === "audio") {
         await call("/api/settings", {
-          autoStartVirtual: true,
+          autoStartVirtual: false,
+          rememberLastVoice: false,
           restoreOnDisable: true,
           defaultMicOnClose: "restore",
           audioSampleRate: "48000",
@@ -162,6 +161,7 @@ export function ConfigPage({
         });
         localStorage.setItem("tts_default_voice", "pt-BR-AntonioNeural");
         localStorage.setItem("tts_default_rate", "0");
+        localStorage.setItem("tts_default_pitch", "0");
         setToast("Configurações de TTS redefinidas para o padrão!");
       } else if (tabName === "soundboard") {
         await call("/api/settings", {
@@ -195,7 +195,6 @@ export function ConfigPage({
       } else if (tabName === "aparencia") {
         setAccentColor("purple");
         setCustomAccentColor("");
-        setAppTheme("theme-cyberpunk");
         setPrefFontSize("normal");
         setPrefGlow("true");
         setPrefRadius("normal");
@@ -903,18 +902,6 @@ export function ConfigPage({
                   </div>
                 )}
 
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                  <div className="selectField">
-                    <label>Selecione o tema geral do aplicativo:</label>
-                    <select value={appTheme} onChange={(e) => setAppTheme(e.target.value)}>
-                      <option value="theme-cyberpunk">Cyberpunk Escuro (Padrão)</option>
-                      <option value="theme-dracula">Dracula Vamp</option>
-                      <option value="theme-vampire">Vampire Red</option>
-                      <option value="theme-neon">Neon Green</option>
-                      <option value="theme-synthwave">Synthwave Retrowave</option>
-                    </select>
-                  </div>
-                </div>
               </div>
 
               {/* Card 2: Layout Tuning (Auto-saved) */}
@@ -1005,9 +992,16 @@ export function ConfigPage({
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <ToggleSetting
                     label="Iniciar rota automaticamente"
-                    description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo"
+                    description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo. Vem desativado por padrão."
                     checked={state.settings?.autoStartVirtual}
                     onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
+                  />
+
+                  <ToggleSetting
+                    label="Lembrar a última voz ao abrir"
+                    description="Se desativado, o app sempre abre em Sem efeito. Vem desativado por padrão."
+                    checked={state.settings?.rememberLastVoice}
+                    onChange={(v) => call("/api/settings", { rememberLastVoice: v })}
                   />
 
                   <ToggleSetting

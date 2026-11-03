@@ -86,8 +86,6 @@ export function ConfigPage({
   setAccentColor,
   customAccentColor,
   setCustomAccentColor,
-  appTheme,
-  setAppTheme,
   updateEffects,
   prefFontSize,
   setPrefFontSize,
@@ -196,7 +194,6 @@ export function ConfigPage({
       } else if (tabName === "aparencia") {
         setAccentColor("purple");
         setCustomAccentColor("");
-        setAppTheme("theme-cyberpunk");
         setPrefFontSize("normal");
         setPrefGlow("true");
         setPrefRadius("normal");
@@ -904,18 +901,6 @@ export function ConfigPage({
                   </div>
                 )}
 
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                  <div className="selectField">
-                    <label>Selecione o tema geral do aplicativo:</label>
-                    <select value={appTheme} onChange={(e) => setAppTheme(e.target.value)}>
-                      <option value="theme-cyberpunk">Cyberpunk Escuro (Padrão)</option>
-                      <option value="theme-dracula">Dracula Vamp</option>
-                      <option value="theme-vampire">Vampire Red</option>
-                      <option value="theme-neon">Neon Green</option>
-                      <option value="theme-synthwave">Synthwave Retrowave</option>
-                    </select>
-                  </div>
-                </div>
               </div>
 
               {/* Card 2: Layout Tuning (Auto-saved) */}

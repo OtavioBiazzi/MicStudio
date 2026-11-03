@@ -1,0 +1,195 @@
+/* ============================================================
+   Design unico do MicFudiddo Studio
+   Carregado por ultimo: define a escala de espacamento, a forma
+   dos componentes principais (barra lateral, dock, cards) e sobrescreve
+   os estilos antigos espalhados em styles.css.
+   ============================================================ */
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --dock-height: 68px;
+  --surface-raised: var(--bg-card);
+  --accent-ring: 0 0 0 2px var(--purple);
+}
+
+/* ---------- Pagina ---------- */
+.page {
+  padding: var(--space-5) var(--space-6) calc(var(--dock-height) + var(--space-5));
+}
+
+/* ---------- Barra lateral ---------- */
+.sidebar nav {
+  padding: var(--space-3);
+  gap: var(--space-1);
+}
+
+.sidebar nav button {
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.sidebar nav button:hover {
+  background: var(--purple-bg);
+  color: var(--text);
+}
+
+.sidebar nav button.active {
+  background: var(--purple-soft);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.sidebar nav button.active svg {
+  color: var(--purple-hover);
+}
+
+/* ---------- Dock: barra fixa embaixo, nao tapa mais os cards ---------- */
+.bottomBar {
+  left: var(--sidebar-width) !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  transform: none !important;
+  justify-content: stretch !important;
+}
+
+.floating-dock-inner {
+  width: 100%;
+  max-width: none;
+  min-height: var(--dock-height);
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg-bottom-bar);
+  box-shadow: none;
+  justify-content: flex-start;
+  padding: var(--space-2) var(--space-5);
+  gap: var(--space-4);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.floating-dock-inner:hover {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.floating-dock-inner .bbVolume {
+  flex: 0 1 220px;
+}
+
+.dockDivider {
+  height: 32px;
+  background: var(--border);
+}
+
+/* a voz ativa vira um bloco horizontal (antes era um avatar que saia da barra) */
+.dock-active-avatar-container {
+  flex-direction: row;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.dock-active-avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  border-width: 2px;
+  box-shadow: none;
+}
+
+.dock-active-label {
+  margin-top: 0;
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--text);
+  text-shadow: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bbBtn.toggle.on {
+  background: var(--purple);
+  box-shadow: none;
+}
+
+.bottomBar.dock-minimized {
+  bottom: var(--space-3) !important;
+  left: var(--sidebar-width) !important;
+  justify-content: center !important;
+}
+
+@media (max-width: 760px) {
+  .bottomBar {
+    left: 0 !important;
+  }
+
+  .floating-dock-inner {
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .dock-active-label {
+    display: none;
+  }
+}
+
+/* ---------- Cards de voz: planos, imagem menor, ativa bem clara ---------- */
+.voiceGrid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-4);
+}
+
+.voiceCard {
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.voiceCard:hover {
+  transform: none;
+  border-color: var(--border-active);
+  box-shadow: none;
+}
+
+.voiceCard.active {
+  border-color: var(--purple);
+  box-shadow: var(--accent-ring);
+}
+
+.voiceCard .cardImage {
+  aspect-ratio: 16 / 9;
+}
+
+.voiceCard .cardImage .cardEmoji {
+  font-size: 40px;
+}
+
+.voiceCard .cardInfo {
+  padding: var(--space-3);
+}
+
+.voiceCard.active .cardInfo .cardName::after {
+  content: "ATIVA";
+  margin-left: var(--space-2);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--purple);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  vertical-align: middle;
+}
+
+/* ---------- Superficies gerais: sem brilho, bordas leves ---------- */
+.settingCard {
+  box-shadow: none;
+}

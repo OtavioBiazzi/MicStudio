@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
 import "./components/workspace.css";
+import "./design.css";
 
 // Utils & Helpers
 import {

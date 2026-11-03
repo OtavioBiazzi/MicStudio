@@ -422,8 +422,12 @@ def fetch_myinstants_search(query: str, page: int) -> list[dict]:
         return []
 
 
+SAFE_DEFAULTS_VERSION = 1
+
 DEFAULT_APP_SETTINGS = {
     "autoStartVirtual": False,
+    "rememberLastVoice": False,
+    "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
     "launchAtStartup": False,
     "restoreOnDisable": True,
     "minimizeToTray": True,
@@ -483,6 +487,7 @@ DEFAULT_PROFILE = {
     "soundboardFavorites": [],
     "voiceRecents": [],
     "activeVoiceId": "clean",
+    "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
 }
 
 
@@ -1147,6 +1152,10 @@ class AppState:
         settings = dict(DEFAULT_APP_SETTINGS)
         if isinstance(raw, dict):
             settings.update({key: raw[key] for key in DEFAULT_APP_SETTINGS if key in raw})
+            if raw.get("safeDefaultsVersion", 0) < SAFE_DEFAULTS_VERSION:
+                # Antes o padrao ligava a rota virtual sozinho; migra uma unica vez.
+                settings["autoStartVirtual"] = False
+                settings["safeDefaultsVersion"] = SAFE_DEFAULTS_VERSION
         return settings
 
     def save_app_settings(self) -> None:
@@ -1420,6 +1429,13 @@ class AppState:
             for key in DEFAULT_PROFILE:
                 if key in raw:
                     profile[key] = raw[key]
+            if raw.get("safeDefaultsVersion", 0) < SAFE_DEFAULTS_VERSION:
+                profile["monitor"] = False
+        profile["safeDefaultsVersion"] = SAFE_DEFAULTS_VERSION
+        if not self.settings.get("rememberLastVoice", False):
+            # Abre sempre sem filtro; favoritos, dispositivos e volumes continuam salvos.
+            for key in ("gain", "pitch", "effects", "activeVoiceId"):
+                profile[key] = json.loads(json.dumps(DEFAULT_PROFILE[key]))
         return profile
 
     def find_device_index(self, name: str | None, hostapi: str | None, direction: str) -> int | None:
@@ -1637,6 +1653,7 @@ class AppState:
             "soundboardFavorites": self.soundboard_favorites,
             "voiceRecents": self.voice_recents,
             "activeVoiceId": self.active_voice_id,
+            "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
         }
         atomic_write_json(self.profile_path, self.profile)
 

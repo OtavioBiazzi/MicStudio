@@ -35,3 +35,36 @@ class TtsHelpersTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SafeStartupTests(unittest.TestCase):
+    def test_saved_voice_is_ignored_unless_remember_is_on(self):
+        state = backend.AppState.__new__(backend.AppState)
+        state.profile_path = None
+        raw = {"gain": 5.0, "activeVoiceId": "rewind_meme", "monitor": True,
+               "effects": {"robot_enabled": True}, "safeDefaultsVersion": 1}
+        original = backend.load_json_with_backup
+        backend.load_json_with_backup = lambda *a, **k: raw
+        try:
+            state.settings = {"rememberLastVoice": False}
+            profile = state.load_profile()
+            self.assertEqual(profile["activeVoiceId"], "clean")
+            self.assertEqual(profile["gain"], 1.0)
+            self.assertTrue(profile["monitor"])  # preferencia atual do usuario preservada
+
+            state.settings = {"rememberLastVoice": True}
+            profile = state.load_profile()
+            self.assertEqual(profile["activeVoiceId"], "rewind_meme")
+        finally:
+            backend.load_json_with_backup = original
+
+    def test_old_profile_without_version_gets_monitor_off(self):
+        state = backend.AppState.__new__(backend.AppState)
+        state.profile_path = None
+        state.settings = {"rememberLastVoice": True}
+        original = backend.load_json_with_backup
+        backend.load_json_with_backup = lambda *a, **k: {"monitor": True}
+        try:
+            self.assertFalse(state.load_profile()["monitor"])
+        finally:
+            backend.load_json_with_backup = original

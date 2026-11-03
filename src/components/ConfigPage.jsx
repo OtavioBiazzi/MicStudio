@@ -142,6 +142,7 @@ export function ConfigPage({
       if (tabName === "audio") {
         await call("/api/settings", {
           autoStartVirtual: false,
+          rememberLastVoice: false,
           restoreOnDisable: true,
           defaultMicOnClose: "restore",
           audioSampleRate: "48000",
@@ -994,6 +995,13 @@ export function ConfigPage({
                     description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo. Vem desativado por padrão."
                     checked={state.settings?.autoStartVirtual}
                     onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
+                  />
+
+                  <ToggleSetting
+                    label="Lembrar a última voz ao abrir"
+                    description="Se desativado, o app sempre abre em Sem efeito. Vem desativado por padrão."
+                    checked={state.settings?.rememberLastVoice}
+                    onChange={(v) => call("/api/settings", { rememberLastVoice: v })}
                   />
 
                   <ToggleSetting

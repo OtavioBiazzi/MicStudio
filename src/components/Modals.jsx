@@ -2225,6 +2225,9 @@ export function TTSModal({ onClose, call, setToast, settings }) {
   const [rate, setRate] = useState(() => {
     return Number(localStorage.getItem("tts_default_rate") || 0);
   }); // Slider: -50 to +50
+  const [pitch, setPitch] = useState(() => {
+    return Number(localStorage.getItem("tts_default_pitch") || 0);
+  }); // Slider: -50 to +50 Hz
   const [soundName, setSoundName] = useState("");
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -2273,7 +2276,8 @@ export function TTSModal({ onClose, call, setToast, settings }) {
       await call("/api/tts/speak", {
         text: text.trim(),
         voice: selectedVoice,
-        rate: formattedRate
+        rate: formattedRate,
+        pitch
       });
       setToast("📢 Falando...");
     } catch (err) {
@@ -2300,6 +2304,7 @@ export function TTSModal({ onClose, call, setToast, settings }) {
         text: text.trim(),
         voice: selectedVoice,
         rate: formattedRate,
+        pitch,
         name: soundName.trim()
       });
       setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
@@ -2442,6 +2447,27 @@ export function TTSModal({ onClose, call, setToast, settings }) {
                 }}
               />
             </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
+              <span>Tom da voz</span>
+              <span style={{ color: "var(--purple)", fontWeight: 800 }}>{pitch >= 0 ? `+${pitch}Hz` : `${pitch}Hz`}</span>
+            </span>
+            <input
+              type="range"
+              min={-50}
+              max={50}
+              step={5}
+              value={pitch}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setPitch(val);
+                localStorage.setItem("tts_default_pitch", val);
+              }}
+              disabled={isWorking}
+              style={{ width: "100%", height: 36, accentColor: "var(--purple)", cursor: "pointer" }}
+            />
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

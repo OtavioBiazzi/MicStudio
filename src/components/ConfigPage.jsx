@@ -162,6 +162,7 @@ export function ConfigPage({
         });
         localStorage.setItem("tts_default_voice", "pt-BR-AntonioNeural");
         localStorage.setItem("tts_default_rate", "0");
+        localStorage.setItem("tts_default_pitch", "0");
         setToast("Configurações de TTS redefinidas para o padrão!");
       } else if (tabName === "soundboard") {
         await call("/api/settings", {

@@ -192,6 +192,10 @@ async def _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir
                     return load_audio_mono(str(temp_path), sample_rate).astype(np.float32, copy=False)
                 except Exception as exc:
                     last_error = exc
+            try:
+                return await _synthesize_sapi_chunk(chunk, voice, rate, sample_rate, temp_dir, index)
+            except Exception as sapi_error:
+                print("TTS: voz offline indisponivel:", sapi_error)
             raise RuntimeError(
                 "Nao foi possivel gerar a voz. Verifique a conexao com a internet "
                 f"({type(last_error).__name__})."
@@ -199,6 +203,52 @@ async def _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir
         finally:
             try:
                 temp_path.unlink()
+            except Exception:
+                pass
+
+
+async def _synthesize_sapi_chunk(chunk, voice, rate, sample_rate, temp_dir, index) -> np.ndarray:
+    """Reserva offline: voz instalada no Windows (SAPI), escolhida pelo idioma da voz pedida."""
+    import asyncio
+    import subprocess
+    import uuid
+
+    if os.name != "nt":
+        raise RuntimeError("SAPI so existe no Windows.")
+    culture = "-".join(str(voice).split("-")[:2]) or "pt-BR"
+    try:
+        sapi_rate = max(-10, min(10, int(round(int(str(rate).replace("%", "").replace("+", "")) / 10))))
+    except ValueError:
+        sapi_rate = 0
+    token = uuid.uuid4().hex
+    text_path = temp_dir / f"sapi_{token}_{index}.txt"
+    wav_path = temp_dir / f"sapi_{token}_{index}.wav"
+    script = (
+        "Add-Type -AssemblyName System.Speech;"
+        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+        f"$s.Rate = {sapi_rate};"
+        f"$v = $s.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Culture.Name -eq '{culture}' }} | Select-Object -First 1;"
+        "if ($v) { $s.SelectVoice($v.VoiceInfo.Name) };"
+        f"$s.SetOutputToWaveFile('{wav_path}');"
+        f"$s.Speak([IO.File]::ReadAllText('{text_path}', [Text.Encoding]::UTF8));"
+        "$s.Dispose()"
+    )
+    text_path.write_text(chunk, encoding="utf-8")
+
+    def run() -> None:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            check=True, capture_output=True, timeout=TTS_CHUNK_TIMEOUT_SECONDS,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, run)
+        return load_audio_mono(str(wav_path), sample_rate).astype(np.float32, copy=False)
+    finally:
+        for path in (text_path, wav_path):
+            try:
+                path.unlink()
             except Exception:
                 pass
 

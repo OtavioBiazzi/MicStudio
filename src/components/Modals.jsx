@@ -1458,7 +1458,8 @@ const LOCAL_CHANGELOGS = {
 * O app abre sempre em Sem efeito. Nova opção "Lembrar a última voz ao abrir", desligada por padrão.
 * Rota virtual automática e monitoramento da própria voz vêm desligados por padrão, e os padrões antigos são migrados uma única vez.
 * TTS com mais de 300 vozes, geração paralela de textos longos, cache de frases repetidas, controle de tom e voz offline do Windows como reserva.
-* Erros do TTS aparecem na tela em vez de falhar em silêncio.`,
+* Erros do TTS aparecem na tela em vez de falhar em silêncio.
+* Interface mais ágil: o estado do soundboard muda na hora ao tocar ou parar um som, os sliders respondem sem atraso e o app abre mais rápido.`,
   "v1.4.3": `### Versão 1.4.3
 * Aviso de atualização somente uma vez por abertura do aplicativo. Voltar para a janela não repete o aviso; consultas periódicas de releases removidas.
 * Menu de versões continua consultando atualizações ao abrir ou ao clicar em atualizar a lista.

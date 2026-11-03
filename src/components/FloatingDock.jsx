@@ -172,23 +172,24 @@ export function FloatingDock({
           </button>
 
           <button
-            className={`bbBtn icon-only ${(state.controls?.monitor || state.controls?.soundboardMonitor) ? "on" : ""}`}
+            className={`bbBtn icon-only ${state.controls?.monitor ? "on" : ""}`}
             onClick={() => {
-              const isCurrentlyActive = !!(state.controls?.monitor || state.controls?.soundboardMonitor);
-              if (isCurrentlyActive) {
-                localStorage.setItem("prev_monitor", state.controls?.monitor ? "true" : "false");
+              // O botao representa o retorno da propria voz; o monitor do soundboard acompanha o liga/desliga.
+              if (state.controls?.monitor) {
                 localStorage.setItem("prev_soundboardMonitor", state.controls?.soundboardMonitor ? "true" : "false");
                 updateControls({ monitor: false, soundboardMonitor: false });
               } else {
-                const prevMonitor = localStorage.getItem("prev_monitor") !== "false";
                 const prevSoundboardMonitor = localStorage.getItem("prev_soundboardMonitor") !== "false";
-                updateControls({ monitor: prevMonitor, soundboardMonitor: prevSoundboardMonitor });
+                const patch = { monitor: true, soundboardMonitor: prevSoundboardMonitor };
+                // com o volume em 0% o retorno ligaria mudo
+                if ((state.controls?.monitorVolume ?? 1) < 0.05) patch.monitorVolume = 1;
+                updateControls(patch);
               }
             }}
             onContextMenu={handleMixerToggle}
             title="Monitoramento Local (Esquerdo: Liga/Desliga, Direito: Mixer Rápido)"
           >
-            {(state.controls?.monitor || state.controls?.soundboardMonitor) ? <SpeakerHigh size={16} /> : <SpeakerSlash size={16} color="var(--danger)" />}
+            {state.controls?.monitor ? <SpeakerHigh size={16} /> : <SpeakerSlash size={16} color="var(--danger)" />}
           </button>
 
           <div className="bbVolume" style={{ gap: 8 }}>

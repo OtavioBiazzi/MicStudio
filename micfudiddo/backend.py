@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import atexit
 import argparse
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 import json
 import mimetypes
@@ -109,44 +110,129 @@ def split_tts_text(text: str, limit: int = TTS_CHUNK_LIMIT) -> list[str]:
     return chunks
 
 
+TTS_CHUNK_TIMEOUT_SECONDS = 30
+TTS_MAX_PARALLEL_CHUNKS = 4
+TTS_CACHE_LIMIT = 24
+TTS_VOICES_TTL_SECONDS = 3600
+TTS_FALLBACK_VOICES = [
+    {"id": "pt-BR-AntonioNeural", "name": "Antonio (Masculina - BR)", "lang": "pt-BR"},
+    {"id": "pt-BR-FranciscaNeural", "name": "Francisca (Feminina - BR)", "lang": "pt-BR"},
+    {"id": "pt-BR-ThalitaMultilingualNeural", "name": "Thalita (Feminina - BR)", "lang": "pt-BR"},
+    {"id": "pt-PT-DuarteNeural", "name": "Duarte (Masculina - PT)", "lang": "pt-PT"},
+    {"id": "pt-PT-RaquelNeural", "name": "Raquel (Feminina - PT)", "lang": "pt-PT"},
+    {"id": "en-US-GuyNeural", "name": "Guy (Masculina - US)", "lang": "en-US"},
+    {"id": "en-US-AriaNeural", "name": "Aria (Feminina - US)", "lang": "en-US"},
+    {"id": "es-MX-JorgeNeural", "name": "Jorge (Masculina - MX)", "lang": "es-MX"},
+    {"id": "es-ES-ElviraNeural", "name": "Elvira (Feminina - ES)", "lang": "es-ES"},
+    {"id": "ja-JP-KeitaNeural", "name": "Keita (Masculina - JP)", "lang": "ja-JP"},
+    {"id": "ja-JP-NanamiNeural", "name": "Nanami (Feminina - JP)", "lang": "ja-JP"},
+    {"id": "de-DE-ConradNeural", "name": "Conrad (Masculina - DE)", "lang": "de-DE"},
+    {"id": "de-DE-KatjaNeural", "name": "Katja (Feminina - DE)", "lang": "de-DE"},
+]
+_tts_audio_cache: "OrderedDict[tuple, np.ndarray]" = OrderedDict()
+_tts_audio_cache_lock = threading.Lock()
+_tts_voices_cache: dict = {"voices": None, "expires": 0.0}
+
+
+def format_tts_offset(value, unit: str, limit: int) -> str:
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        number = 0
+    number = max(-limit, min(limit, number))
+    return f"{number:+d}{unit}"
+
+
+def list_tts_voices() -> list[dict]:
+    """Vozes do edge-tts (cache de 1h). Sem internet, cai na lista embutida."""
+    now = time.time()
+    if _tts_voices_cache["voices"] and _tts_voices_cache["expires"] > now:
+        return _tts_voices_cache["voices"]
+    try:
+        import asyncio
+        import edge_tts
+
+        async def fetch():
+            return await asyncio.wait_for(edge_tts.list_voices(), timeout=8)
+
+        raw = asyncio.run(fetch())
+        voices = []
+        for item in raw:
+            short = str(item.get("ShortName", ""))
+            if not short:
+                continue
+            first = str(item.get("FriendlyName", short)).split(" Online")[0].replace("Microsoft ", "")
+            gender = "Feminina" if item.get("Gender") == "Female" else "Masculina"
+            locale = str(item.get("Locale", ""))
+            voices.append({"id": short, "name": f"{first} ({gender} - {locale})", "lang": locale})
+        if voices:
+            preferred = {"pt-BR": 0, "pt-PT": 1, "en-US": 2}
+            voices.sort(key=lambda v: (preferred.get(v["lang"], 9), v["lang"], v["name"]))
+            _tts_voices_cache["voices"] = voices
+            _tts_voices_cache["expires"] = now + TTS_VOICES_TTL_SECONDS
+            return voices
+    except Exception as exc:
+        print("TTS: nao foi possivel listar vozes online:", exc)
+    return TTS_FALLBACK_VOICES
+
+
+async def _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir, index, semaphore):
+    import asyncio
+    import edge_tts
+    import uuid
+
+    async with semaphore:
+        temp_path = temp_dir / f"tts_{uuid.uuid4().hex}_{index}.mp3"
+        last_error: Exception | None = None
+        try:
+            for _attempt in range(2):
+                try:
+                    communicate = edge_tts.Communicate(chunk, voice, rate=rate, pitch=pitch)
+                    await asyncio.wait_for(communicate.save(str(temp_path)), timeout=TTS_CHUNK_TIMEOUT_SECONDS)
+                    return load_audio_mono(str(temp_path), sample_rate).astype(np.float32, copy=False)
+                except Exception as exc:
+                    last_error = exc
+            raise RuntimeError(
+                "Nao foi possivel gerar a voz. Verifique a conexao com a internet "
+                f"({type(last_error).__name__})."
+            )
+        finally:
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+
+
 async def synthesize_tts_text_to_audio(
     text: str,
     voice: str,
     rate: str,
     sample_rate: int,
     temp_dir: Path,
+    pitch: str = "+0Hz",
 ) -> np.ndarray:
-    import edge_tts
-    import uuid
+    import asyncio
 
     chunks = split_tts_text(text)
     if not chunks:
         raise RuntimeError("Texto vazio.")
 
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_paths: list[Path] = []
-    parts: list[np.ndarray] = []
-    try:
-        for index, chunk in enumerate(chunks):
-            temp_path = temp_dir / f"tts_{uuid.uuid4().hex}_{index}.mp3"
-            temp_paths.append(temp_path)
-            communicate = edge_tts.Communicate(chunk, voice, rate=rate)
-            await communicate.save(str(temp_path))
-            part = load_audio_mono(str(temp_path), sample_rate)
-            if part.size:
-                parts.append(part.astype(np.float32, copy=False))
-    finally:
-        for temp_path in temp_paths:
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception:
-                    pass
+    cache_key = (str(text).strip(), voice, rate, pitch, int(sample_rate))
+    with _tts_audio_cache_lock:
+        cached = _tts_audio_cache.get(cache_key)
+        if cached is not None:
+            _tts_audio_cache.move_to_end(cache_key)
+            return cached.copy()
 
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    semaphore = asyncio.Semaphore(TTS_MAX_PARALLEL_CHUNKS)
+    parts = await asyncio.gather(*(
+        _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir, index, semaphore)
+        for index, chunk in enumerate(chunks)
+    ))
+    parts = [part for part in parts if part.size]
     if not parts:
         raise RuntimeError("A sintese nao gerou audio.")
-    if len(parts) == 1:
-        return parts[0]
 
     gap = np.zeros(max(1, int(sample_rate * TTS_CHUNK_GAP_SECONDS)), dtype=np.float32)
     with_gaps: list[np.ndarray] = []
@@ -154,7 +240,13 @@ async def synthesize_tts_text_to_audio(
         if index:
             with_gaps.append(gap)
         with_gaps.append(part)
-    return np.concatenate(with_gaps).astype(np.float32, copy=False)
+    audio = np.concatenate(with_gaps).astype(np.float32, copy=False)
+
+    with _tts_audio_cache_lock:
+        _tts_audio_cache[cache_key] = audio.copy()
+        while len(_tts_audio_cache) > TTS_CACHE_LIMIT:
+            _tts_audio_cache.popitem(last=False)
+    return audio
 
 
 def scrape_myinstants_page(url: str, cache_key: str, default_category: str) -> list[dict]:
@@ -281,7 +373,7 @@ def fetch_myinstants_search(query: str, page: int) -> list[dict]:
 
 
 DEFAULT_APP_SETTINGS = {
-    "autoStartVirtual": True,
+    "autoStartVirtual": False,
     "launchAtStartup": False,
     "restoreOnDisable": True,
     "minimizeToTray": True,
@@ -330,7 +422,7 @@ DEFAULT_PROFILE = {
     "masterVoiceVolume": 1.0,
     "masterPitch": 0.0,
     "masterMute": False,
-    "monitor": True,
+    "monitor": False,
     "monitorVolume": 1.0,
     "soundboardMonitor": True,
     "soundboardMonitorVolume": 0.65,
@@ -841,7 +933,7 @@ class AppState:
         self.master_pitch = 0.0
         self.master_mute = False
         self.effects = EffectsSettings()
-        self.monitor_enabled = True
+        self.monitor_enabled = False
         self.monitor_volume = 1.0
         self.soundboard_monitor_enabled = True
         self.soundboard_monitor_volume = 0.65
@@ -1398,7 +1490,7 @@ class AppState:
         self.master_mute = bool(self.profile.get("masterMute", False))
         self.monitor_enabled = bool(self.profile.get("monitor", False))
         self.monitor_volume = max(0.0, min(3.0, float(self.profile.get("monitorVolume", 1.0))))
-        self.soundboard_monitor_enabled = bool(self.profile.get("soundboardMonitor", False))
+        self.soundboard_monitor_enabled = bool(self.profile.get("soundboardMonitor", True))
         self.soundboard_monitor_volume = max(0.0, min(3.0, float(self.profile.get("soundboardMonitorVolume", 0.65))))
         effects = self.profile.get("effects", {})
         if isinstance(effects, dict):
@@ -1856,7 +1948,7 @@ class AppState:
         self.gain = 1.0
         self.pitch = 0.0
         self.effects = EffectsSettings()
-        self.monitor_enabled = True
+        self.monitor_enabled = False
         self.monitor_volume = 1.0
         self.soundboard_monitor_enabled = True
         self.soundboard_monitor_volume = 0.65
@@ -2948,31 +3040,19 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
         if path == "/api/tts/voices":
-            return {
-                "voices": [
-                    {"id": "pt-BR-FranciscaNeural", "name": "Francisca (Feminina - BR)", "lang": "pt-BR"},
-                    {"id": "pt-BR-AntonioNeural", "name": "Antonio (Masculina - BR)", "lang": "pt-BR"},
-                    {"id": "en-US-AriaNeural", "name": "Aria (Feminina - US)", "lang": "en-US"},
-                    {"id": "en-US-GuyNeural", "name": "Guy (Masculina - US)", "lang": "en-US"},
-                    {"id": "es-ES-ElviraNeural", "name": "Elvira (Feminina - ES)", "lang": "es-ES"},
-                    {"id": "es-MX-JorgeNeural", "name": "Jorge (Masculina - MX)", "lang": "es-MX"},
-                    {"id": "ja-JP-NanamiNeural", "name": "Nanami (Feminina - JP)", "lang": "ja-JP"},
-                    {"id": "ja-JP-KeitaNeural", "name": "Keita (Masculina - JP)", "lang": "ja-JP"},
-                    {"id": "de-DE-KatjaNeural", "name": "Katja (Feminina - DE)", "lang": "de-DE"},
-                    {"id": "de-DE-ConradNeural", "name": "Conrad (Masculina - DE)", "lang": "de-DE"}
-                ]
-            }
+            return {"voices": list_tts_voices()}
 
         if path == "/api/tts/speak":
             text = data.get("text", "").strip()
             voice = data.get("voice", "pt-BR-FranciscaNeural")
-            rate = data.get("rate", "+0%")
+            rate = str(data.get("rate", "+0%"))
+            pitch = format_tts_offset(data.get("pitch", 0), "Hz", 100)
             if not text:
                 raise RuntimeError("Texto vazio.")
             import asyncio
             sr = STATE.engine.sample_rate or 48000
             try:
-                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, sr, STATE.online_cache_dir))
+                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, sr, STATE.online_cache_dir, pitch))
             except Exception as e:
                 raise RuntimeError(f"Erro na sintese de voz: {e}")
             route = str(STATE.settings.get("onlinePlaybackRoute", "both")).strip().lower()
@@ -3003,7 +3083,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/tts/save":
             text = data.get("text", "").strip()
             voice = data.get("voice", "pt-BR-FranciscaNeural")
-            rate = data.get("rate", "+0%")
+            rate = str(data.get("rate", "+0%"))
+            pitch = format_tts_offset(data.get("pitch", 0), "Hz", 100)
             name = data.get("name", "").strip()
             if not text:
                 raise RuntimeError("Texto vazio.")
@@ -3014,7 +3095,7 @@ class Handler(BaseHTTPRequestHandler):
             filename = f"tts_{uuid.uuid4().hex}.wav"
             dest_path = STATE.library.sounds_dir / filename
             try:
-                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, 48000, STATE.online_cache_dir))
+                audio = asyncio.run(synthesize_tts_text_to_audio(text, voice, rate, 48000, STATE.online_cache_dir, pitch))
             except Exception as e:
                 raise RuntimeError(f"Erro na sintese de voz: {e}")
             import soundfile as sf

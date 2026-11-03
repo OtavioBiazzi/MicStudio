@@ -20,6 +20,7 @@ import { voicePresets } from "./voicePresets";
 
 // API Client
 import { API, getAPI } from "./apiClient";
+import { useTtsVoices } from "./useTtsVoices";
 import packageMetadata from "../package.json";
 import { runtimeRefreshDelay } from "./runtimePolicy";
 
@@ -1386,6 +1387,7 @@ function TTSWidget() {
     return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
   });
   const [speaking, setSpeaking] = useState(false);
+  const [speakError, setSpeakError] = useState("");
   const [showSpeed, setShowSpeed] = useState(true);
   const [showVolume, setShowVolume] = useState(true);
   const [volume, setVolume] = useState(100);
@@ -1421,21 +1423,7 @@ function TTSWidget() {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  const voicesList = [
-    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
-    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
-    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
-    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
-  ];
+  const voicesList = useTtsVoices();
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1501,7 +1489,7 @@ function TTSWidget() {
     setSpeaking(true);
     const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
-      await fetch(`${API}/api/tts/speak`, {
+      const res = await fetch(`${API}/api/tts/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1510,8 +1498,15 @@ function TTSWidget() {
           rate: formattedRate
         })
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Erro ao gerar a voz.");
+      }
+      setSpeakError("");
     } catch (err) {
       console.error(err);
+      setText(ttsText);
+      setSpeakError(err.message || "Erro ao gerar a voz.");
     } finally {
       setSpeaking(false);
     }
@@ -1621,7 +1616,8 @@ function TTSWidget() {
             ref={inputRef}
             type="text" 
             autoFocus
-            placeholder={focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
+            title={speakError || undefined}
+            placeholder={speakError ? `⚠ ${speakError}` : focusShortcut ? `Digite para falar... (${focusShortcut} para escrever)` : "Digite para falar..."} 
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {

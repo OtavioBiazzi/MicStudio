@@ -13,6 +13,7 @@ import {
   Slider,
   EffectSliderRow
 } from "../utils";
+import { useTtsVoices } from "../useTtsVoices";
 
 const playbackModes = [
   { value: "restart", label: "Reiniciar ao clicar" },
@@ -2316,21 +2317,7 @@ export function TTSModal({ onClose, call, setToast, settings }) {
     }
   };
 
-  const voicesList = [
-    { id: "pt-BR-AntonioNeural", name: "Antonio (Masculina - BR)" },
-    { id: "pt-BR-FranciscaNeural", name: "Francisca (Feminina - BR)" },
-    { id: "pt-BR-ThalitaNeural", name: "Thalita (Feminina - BR)" },
-    { id: "pt-PT-DuarteNeural", name: "Duarte (Masculina - PT)" },
-    { id: "pt-PT-RaquelNeural", name: "Raquel (Feminina - PT)" },
-    { id: "en-US-GuyNeural", name: "Guy (Masculina - US)" },
-    { id: "en-US-AriaNeural", name: "Aria (Feminina - US)" },
-    { id: "es-MX-JorgeNeural", name: "Jorge (Masculina - MX)" },
-    { id: "es-ES-ElviraNeural", name: "Elvira (Feminina - ES)" },
-    { id: "ja-JP-KeitaNeural", name: "Keita (Masculina - JP)" },
-    { id: "ja-JP-NanamiNeural", name: "Nanami (Feminina - JP)" },
-    { id: "de-DE-ConradNeural", name: "Conrad (Masculina - DE)" },
-    { id: "de-DE-KatjaNeural", name: "Katja (Feminina - DE)" }
-  ];
+  const voicesList = useTtsVoices();
 
   const isWorking = loading || speaking;
 

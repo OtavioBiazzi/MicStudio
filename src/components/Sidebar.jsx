@@ -10,13 +10,26 @@ import {
   Waveform
 } from "@phosphor-icons/react";
 
-const pages = [
-  { id: "vozes", label: "Vozes", icon: MicrophoneStage },
-  { id: "soundboard", label: "Soundboard", icon: MusicNotes },
-  { id: "online_library", label: "Explorar Sons", icon: Broadcast },
-  { id: "favoritos", label: "Favoritos", icon: Star },
-  { id: "voicelab", label: "Voice Lab", icon: Flask },
-  { id: "config", label: "Configurações", icon: GearSix }
+const sections = [
+  {
+    label: "Estúdio",
+    pages: [
+      { id: "vozes", label: "Vozes", icon: MicrophoneStage },
+      { id: "soundboard", label: "Soundboard", icon: MusicNotes },
+      { id: "voicelab", label: "Voice Lab", icon: Flask }
+    ]
+  },
+  {
+    label: "Biblioteca",
+    pages: [
+      { id: "online_library", label: "Explorar Sons", icon: Broadcast },
+      { id: "favoritos", label: "Favoritos", icon: Star }
+    ]
+  },
+  {
+    label: "Sistema",
+    pages: [{ id: "config", label: "Configurações", icon: GearSix }]
+  }
 ];
 
 export function Sidebar({
@@ -46,8 +59,8 @@ export function Sidebar({
             <circle cx="5" cy="12" r="1.5" fill="url(#lg1)" opacity="0.5"/>
             <circle cx="29" cy="12" r="1.5" fill="url(#lg2)" opacity="0.5"/>
             <defs>
-              <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#00E5FF"/><stop offset="1" stopColor="#8B5CF6"/></linearGradient>
-              <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#8B5CF6"/><stop offset="1" stopColor="#D946EF"/></linearGradient>
+              <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#C4B5FD"/><stop offset="1" stopColor="#8B5CF6"/></linearGradient>
+              <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#A78BFA"/><stop offset="1" stopColor="#6D42D9"/></linearGradient>
             </defs>
           </svg>
         </div>
@@ -58,22 +71,27 @@ export function Sidebar({
       </div>
 
       <nav>
-        {pages.map((item) => {
-          const Icon = item.icon;
-          return (
-            <motion.button
-              className={page === item.id ? "active" : ""}
-              aria-current={page === item.id ? "page" : undefined}
-              key={item.id}
-              onClick={() => setPage(item.id)}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Icon size={20} weight="duotone" />
-              <span>{item.label}</span>
-            </motion.button>
-          );
-        })}
+        {sections.map((section) => (
+          <div className="nav-section" key={section.label}>
+            <span className="nav-label">{section.label}</span>
+            {section.pages.map((item) => {
+              const Icon = item.icon;
+              const active = page === item.id;
+              return (
+                <motion.button
+                  className={active ? "active" : ""}
+                  aria-current={active ? "page" : undefined}
+                  key={item.id}
+                  onClick={() => setPage(item.id)}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Icon size={19} weight={active ? "fill" : "regular"} />
+                  <span>{item.label}</span>
+                </motion.button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="sidebar-bottom">

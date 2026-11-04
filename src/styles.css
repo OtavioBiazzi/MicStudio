@@ -2285,7 +2285,7 @@ html,body,#root {
 .dropOverlay {
   position:absolute;
   inset:0;
-  background:rgba(139, 92, 246, 0.15);
+  background:rgba(var(--accent-rgb),  0.15);
   border:2px dashed var(--purple);
   border-radius:var(--radius-md);
   display:flex;
@@ -3639,7 +3639,7 @@ html,body,#root {
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), 0 0 10px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), 0 0 10px rgba(var(--accent-rgb),  0.3);
   z-index: 9999;
   animation: slideUpFade 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -3688,7 +3688,7 @@ html,body,#root {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 22px;
   padding: 16px 20px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(var(--accent-rgb),  0.15);
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -3756,8 +3756,8 @@ html,body,#root {
 }
 
 .mixer-action-btn.reset:hover {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.3);
+  background: rgba(var(--accent-rgb),  0.15);
+  border-color: rgba(var(--accent-rgb),  0.3);
   color: var(--purple-light);
 }
 
@@ -3895,11 +3895,11 @@ html,body,#root {
   border-radius: 4px;
 }
 .audioPlayersContainer::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(var(--accent-rgb),  0.2);
   border-radius: 4px;
 }
 .audioPlayersContainer::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.4);
+  background: rgba(var(--accent-rgb),  0.4);
 }
 
 .audioPlayerCard {
@@ -4100,7 +4100,7 @@ html,body,#root {
 
 .importButtonGroup:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb),  0.15);
 }
 
 .importButtonGroup button.btn {
@@ -4130,7 +4130,7 @@ html,body,#root {
 
 .collapsible-youtube-panel input:focus {
   border-color: var(--purple-soft) !important;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),  0.2);
 }
 
 /* Glassmorphic Sticky Audio Player (Always Active When Visible) */
@@ -4141,8 +4141,8 @@ html,body,#root {
   background: rgba(11, 17, 26, 0.82) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(139, 92, 246, 0.25) !important;
-  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(var(--accent-rgb),  0.25) !important;
+  border: 1px solid rgba(var(--accent-rgb),  0.3) !important;
   border-radius: var(--radius-md) !important;
   margin-left: -8px !important;
   margin-right: -8px !important;
@@ -4239,7 +4239,7 @@ body.gamer-mode-active * {
 
 .importButtonGroup:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb),  0.15);
 }
 
 .importButtonGroup button.btn {
@@ -4269,7 +4269,7 @@ body.gamer-mode-active * {
 
 .collapsible-youtube-panel input:focus {
   border-color: var(--purple-soft) !important;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),  0.2);
 }
 
 /* Glassmorphic Sticky Audio Player (Always Active When Visible) */
@@ -4280,8 +4280,8 @@ body.gamer-mode-active * {
   background: rgba(11, 17, 26, 0.82) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(139, 92, 246, 0.25) !important;
-  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(var(--accent-rgb),  0.25) !important;
+  border: 1px solid rgba(var(--accent-rgb),  0.3) !important;
   border-radius: var(--radius-md) !important;
   margin-left: -8px !important;
   margin-right: -8px !important;

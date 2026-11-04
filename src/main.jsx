@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { AudioAssistant } from "./components/AudioAssistant.jsx";
 import { GuideModal } from "./components/GuideModal.jsx";
 import { ProfilesPage } from "./components/ProfilesPage.jsx";
+import { accentVariables } from "./accentTheme.js";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
@@ -155,7 +156,8 @@ function App() {
     return localStorage.getItem("micfudiddo.customAccentColor") || "#8B5CF6";
   });
   const [profileName, setProfileName] = useState(() => {
-    return localStorage.getItem("micfudiddo.profileName") || "VozLab";
+    const saved = localStorage.getItem("micfudiddo.profileName");
+    return !saved || saved === "MicFudido" ? "VozLab" : saved;
   });
   const [profileSub, setProfileSub] = useState(() => {
     return localStorage.getItem("micfudiddo.profileSub") || "Plano Vitalício";
@@ -172,7 +174,14 @@ function App() {
     return localStorage.getItem("micfudiddo.profileBio") !== null ? localStorage.getItem("micfudiddo.profileBio") : "Olá! Bem-vindo ao meu perfil.";
   });
   const [profileReadme, setProfileReadme] = useState(() => {
-    return localStorage.getItem("micfudiddo.profileReadme") !== null ? localStorage.getItem("micfudiddo.profileReadme") : "# Sobre Mim\n\nOlá! Bem-vindo ao meu perfil no **MicFudiddo Studio**.\n\n### Meus Presets Favoritos\n- **Monstro Mecânico**: Voz grossa com modulação metálica\n- **Esquilo**: Voz super aguda para zoeira\n- **Rádio Antigo**: Perfeito para roleplay militar\n\n> Sinta-se livre para editar meu README clicando em *Editar Perfil*!\n\n_Criado com amor no MicFudiddo._";
+    const defaultReadme = "# Sobre Mim\n\nOlá! Bem-vindo ao meu perfil no **VozLab Studio**.\n\n### Meus Presets Favoritos\n- **Monstro Mecânico**: Voz grossa com modulação metálica\n- **Esquilo**: Voz super aguda para zoeira\n- **Rádio Antigo**: Perfeito para roleplay militar\n\n> Sinta-se livre para editar meu README clicando em *Editar Perfil*!\n\n_Criado com amor no VozLab Studio._";
+    const saved = localStorage.getItem("micfudiddo.profileReadme");
+    if (saved === null) return defaultReadme;
+    // Se o texto salvo e exatamente o padrao antigo (com o nome antigo do app), atualiza para o novo nome.
+    if (saved.includes("Bem-vindo ao meu perfil no **MicFudiddo Studio**") && saved.includes("_Criado com amor no MicFudiddo._")) {
+      return saved.replace("**MicFudiddo Studio**", "**VozLab Studio**").replace("_Criado com amor no MicFudiddo._", "_Criado com amor no VozLab Studio._");
+    }
+    return saved;
   });
   const [profileImagePosition, setProfileImagePosition] = useState(() => {
     return localStorage.getItem("micfudiddo.profileImagePosition") || "50";
@@ -313,15 +322,8 @@ function App() {
       } else {
         p = colorPalettes[key] || colorPalettes.purple;
       }
-      const r = document.documentElement;
-      r.style.setProperty("--purple", p.primary);
-      r.style.setProperty("--purple-hover", p.hover);
-      r.style.setProperty("--purple-dim", p.dim);
-      r.style.setProperty("--purple-glow", p.glow);
-      r.style.setProperty("--purple-soft", p.soft);
-      r.style.setProperty("--purple-bg", p.bg);
-      r.style.setProperty("--border-hover", p.borderHover);
-      r.style.setProperty("--border-active", p.borderActive);
+      const root = document.documentElement;
+      for (const [name, value] of Object.entries(accentVariables(p))) root.style.setProperty(name, value);
     };
     applyAccentColor(accentColor);
   }, [accentColor, customAccentColor]);
@@ -337,12 +339,12 @@ function App() {
     localStorage.setItem("micfudiddo.prefGlow", prefGlow);
     const glowMap = {
       none: "none",
-      soft: "0 0 10px rgba(139, 92, 246, 0.15)",
-      medium: "0 0 20px rgba(139, 92, 246, 0.25)",
-      high: "0 0 35px rgba(139, 92, 246, 0.45)"
+      soft: "0 0 10px rgba(var(--accent-rgb), 0.15)",
+      medium: "0 0 20px rgba(var(--accent-rgb), 0.25)",
+      high: "0 0 35px rgba(var(--accent-rgb), 0.45)"
     };
     document.documentElement.style.setProperty("--shadow-glow-purple", glowMap[prefGlow] || glowMap.medium);
-    document.documentElement.style.setProperty("--shadow-glow-cyan", (glowMap[prefGlow] || glowMap.medium).replace(/139,\s*92,\s*246/g, "0, 229, 255"));
+    document.documentElement.style.setProperty("--shadow-glow-cyan", (glowMap[prefGlow] || glowMap.medium).replace(/var\(--accent-rgb\)/g, "var(--accent-light-rgb)"));
     document.documentElement.style.setProperty("--shadow-glow-green", (glowMap[prefGlow] || glowMap.medium).replace(/139,\s*92,\s*246/g, "34, 197, 94"));
   }, [prefGlow]);
 
@@ -1219,6 +1221,9 @@ function App() {
                     setPage={setPage}
                     customVoices={customVoices}
                     activePreset={activePreset}
+                    setToast={setToast}
+                    soundboardFavorites={soundboardFavorites}
+                    toggleSoundboardFavorite={toggleSoundboardFavorite}
                   />
                 </ErrorBoundary>
               )}
@@ -1249,6 +1254,7 @@ function App() {
                     call={call}
                     setToast={setToast}
                     openAudioAssistant={() => setAudioAssistantOpen(true)}
+                    appVersion={appVersion}
                     selectedRecordDevices={selectedRecordDevices}
                     setSelectedRecordDevices={setSelectedRecordDevices}
                     setPage={setPage}
@@ -1351,6 +1357,14 @@ function App() {
             profileImagePosition={profileImagePosition}
             profileBio={profileBio}
             profileReadme={profileReadme}
+            stats={{
+              sounds: state?.sounds?.length || 0,
+              plays: state?.totalPlayCount || 0,
+              favoriteVoices: favorites.length,
+              favoriteSounds: soundboardFavorites.length,
+              customVoices: customVoices.length,
+              profiles: state?.audioProfiles?.length || 0
+            }}
           />
         )}
         {editProfileOpen && (

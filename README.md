@@ -10,7 +10,7 @@ Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem pr
 
 1. Vá para a seção de **[Releases (Lançamentos)](https://github.com/OtavioBiazzi/MicStudio/releases)** no topo direito desta página do GitHub.
 2. Localize a versão mais recente (marcada como **Latest**).
-3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 1.7.0.exe`) para baixá-lo.
+3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 1.7.1.exe`) para baixá-lo.
 4. Execute o arquivo baixado. O aplicativo será instalado automaticamente de forma portátil e os atalhos serão criados no seu Menu Iniciar para busca rápida!
 
 ---
@@ -78,7 +78,7 @@ npm run build:studio
 O executavel fica em:
 
 ```text
-studio-release\MicFudiddo Studio 1.7.0.exe
+studio-release\MicFudiddo Studio 1.7.1.exe
 ```
 
 Para colocar no Menu Iniciar e aparecer na busca do Windows:

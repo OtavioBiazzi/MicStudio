@@ -5,8 +5,8 @@ from micfudiddo.processing import EffectsSettings
 
 
 class FactoryDefaultsTests(unittest.TestCase):
-    def test_voice_monitor_and_auto_route_are_off_by_default(self):
-        self.assertFalse(backend.DEFAULT_APP_SETTINGS["autoStartVirtual"])
+    def test_voice_starts_on_without_filter_and_monitor_is_off(self):
+        self.assertTrue(backend.DEFAULT_APP_SETTINGS["autoStartVirtual"])
         self.assertFalse(backend.DEFAULT_PROFILE["monitor"])
         self.assertEqual(backend.DEFAULT_PROFILE["activeVoiceId"], "clean")
 
@@ -38,6 +38,19 @@ if __name__ == "__main__":
 
 
 class SafeStartupTests(unittest.TestCase):
+    def test_old_settings_are_migrated_to_voice_on_once(self):
+        state = backend.AppState.__new__(backend.AppState)
+        state.app_settings_path = None
+        original = backend.load_json_with_backup
+        try:
+            backend.load_json_with_backup = lambda *a, **k: {"autoStartVirtual": False, "safeDefaultsVersion": 1}
+            self.assertTrue(state.load_app_settings()["autoStartVirtual"])
+            # Depois de migrado, desligar de proposito e respeitado.
+            backend.load_json_with_backup = lambda *a, **k: {"autoStartVirtual": False, "settingsDefaultsVersion": 2, "safeDefaultsVersion": 1}
+            self.assertFalse(state.load_app_settings()["autoStartVirtual"])
+        finally:
+            backend.load_json_with_backup = original
+
     def test_saved_voice_is_ignored_unless_remember_is_on(self):
         state = backend.AppState.__new__(backend.AppState)
         state.profile_path = None

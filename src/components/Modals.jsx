@@ -1463,6 +1463,8 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.7.1": `### Versão 1.7.1
+* A voz agora abre ligada e sem filtro (Sem efeito) por padrão, e o aviso de "voz desligada" não aparece mais ao abrir. A opção continua em Configurações ("Ligar a voz ao abrir o app") para quem preferir ligar manualmente.`,
   "v1.7.0": `### Versão 1.7.0
 * App leve em segundo plano: ao minimizar para a bandeja, a interface é fechada depois de alguns segundos e a memória cai pela metade (de cerca de 530 MB para 260 MB nos testes). A voz, o soundboard, os atalhos e a bandeja continuam funcionando, e a janela reabre ao clicar no ícone.
 * Os atalhos de mutar o microfone, mutar o soundboard e ligar/desligar a voz funcionam direto, sem reabrir a janela, e mostram uma notificação discreta. Os demais atalhos acordam a janela escondida e executam.

@@ -142,7 +142,7 @@ export function ConfigPage({
     try {
       if (tabName === "audio") {
         await call("/api/settings", {
-          autoStartVirtual: false,
+          autoStartVirtual: true,
           rememberLastVoice: false,
           restoreOnDisable: true,
           defaultMicOnClose: "restore",
@@ -995,8 +995,8 @@ export function ConfigPage({
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <ToggleSetting
-                    label="Iniciar rota automaticamente"
-                    description="Ativa a rota de áudio virtual automaticamente ao inicializar o aplicativo. Vem desativado por padrão."
+                    label="Ligar a voz ao abrir o app"
+                    description="A voz já abre ligada e sem filtro (Sem efeito), pronta para usar no Discord e nos jogos. Desative se preferir ligar manualmente."
                     checked={state.settings?.autoStartVirtual}
                     onChange={(v) => call("/api/settings", { autoStartVirtual: v })}
                   />

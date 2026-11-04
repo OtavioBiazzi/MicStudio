@@ -50,7 +50,8 @@ export function FloatingDock({
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   // Avisa quando a voz caiu sozinha (ou nao conseguiu reconectar), em vez de ficar "OFF" em silencio.
   const voiceTrouble = Boolean(state.voiceProblem) || (Boolean(state.voiceWanted) && !processingActive && !state.monitorOnly);
-  const openNotice = !voiceTrouble && !noticeDismissed && !processingActive && !state.monitorOnly;
+  const autoStarts = state.settings?.autoStartVirtual === true;
+  const openNotice = !autoStarts && !voiceTrouble && !noticeDismissed && !processingActive && !state.monitorOnly;
   const togglePath = processingActive || state.virtualMode ? "/api/stop" : "/api/virtual/start";
   const [showMenu, setShowMenu] = useState(false);
   const [showMixer, setShowMixer] = useState(false);

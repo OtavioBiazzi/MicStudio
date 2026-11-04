@@ -423,11 +423,14 @@ def fetch_myinstants_search(query: str, page: int) -> list[dict]:
 
 
 SAFE_DEFAULTS_VERSION = 1
+# Versao dos padroes de configuracao: 2 = a voz liga sozinha ao abrir (sem filtro).
+SETTINGS_DEFAULTS_VERSION = 2
 
 DEFAULT_APP_SETTINGS = {
-    "autoStartVirtual": False,
+    "autoStartVirtual": True,
     "rememberLastVoice": False,
     "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
+    "settingsDefaultsVersion": SETTINGS_DEFAULTS_VERSION,
     "launchAtStartup": False,
     "restoreOnDisable": True,
     "minimizeToTray": True,
@@ -1190,8 +1193,11 @@ class AppState:
             settings.update({key: raw[key] for key in DEFAULT_APP_SETTINGS if key in raw})
             if raw.get("safeDefaultsVersion", 0) < SAFE_DEFAULTS_VERSION:
                 # Antes o padrao ligava a rota virtual sozinho; migra uma unica vez.
-                settings["autoStartVirtual"] = False
                 settings["safeDefaultsVersion"] = SAFE_DEFAULTS_VERSION
+            if int(raw.get("settingsDefaultsVersion", 0) or 0) < SETTINGS_DEFAULTS_VERSION:
+                # A voz deve abrir ligada e sem filtro; migra uma unica vez (a escolha seguinte do usuario e respeitada).
+                settings["autoStartVirtual"] = True
+                settings["settingsDefaultsVersion"] = SETTINGS_DEFAULTS_VERSION
         return settings
 
     def save_app_settings(self) -> None:

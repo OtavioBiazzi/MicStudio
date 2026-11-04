@@ -787,15 +787,24 @@ function cleanMediaUrl(url) {
 export function YoutubeImportModal({ onClose, call, setToast, state }) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
-  const [selectedTabs, setSelectedTabs] = useState(["Todos"]);
-  const [customTabs, setCustomTabs] = useState([]);
-  const [newTabName, setNewTabName] = useState("");
-  const [choosingDestination, setChoosingDestination] = useState(false);
+  const [chosenTab, setChosenTab] = useState("Todos");
 
   const destinationTabs = useMemo(() => {
-    const names = new Set(["Todos", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos"), ...customTabs]);
+    const names = new Set(["Todos", ...(state?.soundCategories || []).filter((name) => name !== "Favoritos")]);
     return Array.from(names);
-  }, [state?.soundCategories, customTabs]);
+  }, [state?.soundCategories]);
+
+  // Se ja houver um link do YouTube/TikTok copiado, ja vem preenchido.
+  useEffect(() => {
+    let alive = true;
+    navigator.clipboard?.readText?.().then((value) => {
+      const text = String(value || "").trim().toLowerCase();
+      if (alive && /^https?:\/\//.test(text) && (text.includes("youtu") || text.includes("tiktok."))) {
+        setYoutubeUrl(String(value).trim());
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const detectedSource = useMemo(() => {
     const value = youtubeUrl.toLowerCase();
@@ -833,16 +842,12 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
     }
   }, [state?.youtubeStatus, youtubeLoading, onClose]);
 
-  const handleImport = () => {
+  const handleStartDownload = async () => {
     if (!youtubeUrl || !youtubeUrl.trim()) {
-      setToast("Cole uma URL válida do YouTube ou TikTok.");
+      setToast("Cole um link do YouTube ou TikTok.");
       return;
     }
-    setChoosingDestination(true);
-    return;
-  };
-
-  const handleStartDownload = async () => {
+    const selectedTabs = chosenTab === "Todos" ? ["Todos"] : ["Todos", chosenTab];
     const sanitizedUrl = cleanMediaUrl(youtubeUrl);
     setLocalLoading(true);
     setToast(`Verificando link do ${detectedSource}...`);
@@ -852,22 +857,6 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
       setToast("Erro: " + err.message);
       setLocalLoading(false);
     }
-  };
-
-  const toggleTab = (tab) => {
-    setSelectedTabs((prev) => {
-      if (tab === "Todos") return prev.includes("Todos") ? prev : ["Todos", ...prev];
-      const next = prev.includes(tab) ? prev.filter((item) => item !== tab) : [...prev, tab];
-      return next.length ? (next.includes("Todos") ? next : ["Todos", ...next]) : ["Todos"];
-    });
-  };
-
-  const addCustomTab = () => {
-    const name = newTabName.trim();
-    if (!name) return;
-    setCustomTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
-    setSelectedTabs((prev) => prev.includes(name) ? prev : [...prev, name]);
-    setNewTabName("");
   };
 
   const handleCancel = async () => {
@@ -898,7 +887,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
         </div>
         <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
-            Cole um link do YouTube ou TikTok. Depois de clicar em Importar, escolha em quais abas o áudio vai aparecer.
+            Cole o link do vídeo e clique em Baixar áudio. É só isso.
           </p>
           
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -908,6 +897,7 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
               placeholder="https://www.youtube.com/watch?v=... ou https://www.tiktok.com/@perfil/video/..."
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !youtubeLoading) handleStartDownload(); }}
               disabled={youtubeLoading}
               autoFocus
               style={{
@@ -926,44 +916,18 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
             <small style={{ color: "var(--text-muted)", fontSize: 11 }}>Detectado: {detectedSource}</small>
           </div>
 
-          {choosingDestination && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Salvar nas abas</span>
-            <div className="destinationTabGrid">
-              {destinationTabs.map((tab) => (
-                <button
-                  key={tab}
-                  className={selectedTabs.includes(tab) ? "active" : ""}
-                  disabled={youtubeLoading}
-                  onClick={() => toggleTab(tab)}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                value={newTabName}
-                onChange={(e) => setNewTabName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addCustomTab(); }}
-                placeholder="Criar nova aba..."
-                disabled={youtubeLoading}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  padding: "9px 11px",
-                  background: "var(--bg-input)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  color: "var(--text)",
-                  fontSize: 12
-                }}
-              />
-              <button className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 12 }} onClick={addCustomTab} disabled={youtubeLoading}>Adicionar</button>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Salvar na aba</span>
+            <select
+              value={chosenTab}
+              onChange={(e) => setChosenTab(e.target.value)}
+              disabled={youtubeLoading}
+              style={{ flex: 1, padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
+            >
+              {destinationTabs.map((tab) => <option key={tab} value={tab}>{tab === "Todos" ? "Só em Todos" : tab}</option>)}
+            </select>
           </div>
-          )}
-          
+
           {youtubeLoading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
               <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--accent)", animation: "spin 0.6s linear infinite" }} />
@@ -993,9 +957,9 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
               <button
                 className="btn btn-primary"
                 style={{ padding: "8px 20px", fontSize: 12 }}
-                onClick={choosingDestination ? handleStartDownload : handleImport}
+                onClick={handleStartDownload}
               >
-                {choosingDestination ? "Iniciar download" : "Importar"}
+                Baixar áudio
               </button>
             </>
           )}
@@ -1006,6 +970,12 @@ export function YoutubeImportModal({ onClose, call, setToast, state }) {
 }
 
 // --- AdvancedSoundEditorModal ---
+const EXTRA_FX_KEYS = [
+  "chorus_enabled", "chorus_mix", "flanger_enabled", "flanger_mix", "ghost_enabled", "ghost_mix",
+  "telephone_enabled", "telephone_mix", "radio_enabled", "radio_mix", "whisper_enabled", "whisper_mix",
+  "tremolo_enabled", "tremolo_rate_hz", "wobble_enabled", "wobble_mix"
+];
+
 export function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, onDelete, soundboardFavorites, toggleSoundboardFavorite }) {
   const [draft, setDraft] = useState({});
   const [startSec, setStartSec] = useState(0);
@@ -1030,6 +1000,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
   const [compressorAmount, setCompressorAmount] = useState(0.45);
   const [reverseEnabled, setReverseEnabled] = useState(false);
   const [reverseMix, setReverseMix] = useState(0.65);
+
+  // Efeitos extras do motor de voz que tambem podem ser embutidos no audio.
+  const [extraFx, setExtraFx] = useState({});
+  const extraValue = (key, fallback) => extraFx[key] ?? fallback;
+  const toggleExtra = (key) => setExtraFx((prev) => ({ ...prev, [`${key}_enabled`]: !prev[`${key}_enabled`] }));
+  const setExtraAmount = (field, value) => setExtraFx((prev) => ({ ...prev, [field]: value }));
 
   const activateAllAtMax = () => {
     setDraft((prev) => ({
@@ -1080,6 +1056,9 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
       setCompressorAmount(fx.compressor_amount ?? 0.45);
       setReverseEnabled(!!fx.reverse_enabled);
       setReverseMix(fx.reverse_mix ?? 0.65);
+      const extras = {};
+      for (const key of EXTRA_FX_KEYS) if (fx[key] !== undefined) extras[key] = fx[key];
+      setExtraFx(extras);
     }
   }, []);
 
@@ -1114,7 +1093,8 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
       compressor_enabled: compressorEnabled,
       compressor_amount: Number(compressorAmount),
       reverse_enabled: reverseEnabled,
-      reverse_mix: Number(reverseMix)
+      reverse_mix: Number(reverseMix),
+      ...extraFx
     };
   };
 
@@ -1204,6 +1184,7 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
   };
 
   const handleRestore = () => {
+    setExtraFx({});
     setDraft({
       ...selected,
       name: selected.name,
@@ -1329,6 +1310,17 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                 <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
                 <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
                 <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Tom e velocidade</span>
+                  <select
+                    value={draft.pitch_mode || "preserve"}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, pitch_mode: e.target.value }))}
+                    style={{ padding: "5px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11 }}
+                  >
+                    <option value="preserve">Independentes (acelera sem ficar agudo)</option>
+                    <option value="resample">Juntos (efeito fita: acelera e fica agudo)</option>
+                  </select>
+                </div>
                 <Slider label="Fade In" value={draft.fade_in_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_in_ms: v }))} />
                 <Slider label="Fade Out" value={draft.fade_out_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_out_ms: v }))} />
               </div>
@@ -1385,6 +1377,25 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                   <EffectSliderRow label="Reverse Audio" enabled={reverseEnabled} value={reverseMix * 100} min={0} max={100} suffix="%" onToggle={() => setReverseEnabled(!reverseEnabled)} onChange={(v) => setReverseMix(v / 100)} />
                 </div>
               </div>
+
+              <div style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", letterSpacing: ".08em", margin: "14px 0 8px" }}>COR E TIMBRE</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <EffectSliderRow label="Robô" enabled={robotEnabled} value={robotRate} min={5} max={120} suffix="Hz" onToggle={() => setRobotEnabled(!robotEnabled)} onChange={(v) => setRobotRate(v)} />
+                  <EffectSliderRow label="Equalizador (graves ↔ agudos)" enabled={eqEnabled} value={eqTone * 100} min={0} max={100} suffix="%" onToggle={() => setEqEnabled(!eqEnabled)} onChange={(v) => setEqTone(v / 100)} />
+                  <EffectSliderRow label="Compressor" enabled={compressorEnabled} value={compressorAmount * 100} min={0} max={100} suffix="%" onToggle={() => setCompressorEnabled(!compressorEnabled)} onChange={(v) => setCompressorAmount(v / 100)} />
+                  <EffectSliderRow label="Chorus" enabled={!!extraFx.chorus_enabled} value={extraValue("chorus_mix", 0.28) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("chorus")} onChange={(v) => setExtraAmount("chorus_mix", v / 100)} />
+                  <EffectSliderRow label="Flanger" enabled={!!extraFx.flanger_enabled} value={extraValue("flanger_mix", 0.24) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("flanger")} onChange={(v) => setExtraAmount("flanger_mix", v / 100)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <EffectSliderRow label="Fantasma" enabled={!!extraFx.ghost_enabled} value={extraValue("ghost_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("ghost")} onChange={(v) => setExtraAmount("ghost_mix", v / 100)} />
+                  <EffectSliderRow label="Telefone" enabled={!!extraFx.telephone_enabled} value={extraValue("telephone_mix", 0.8) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("telephone")} onChange={(v) => setExtraAmount("telephone_mix", v / 100)} />
+                  <EffectSliderRow label="Rádio" enabled={!!extraFx.radio_enabled} value={extraValue("radio_mix", 0.7) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("radio")} onChange={(v) => setExtraAmount("radio_mix", v / 100)} />
+                  <EffectSliderRow label="Sussurro" enabled={!!extraFx.whisper_enabled} value={extraValue("whisper_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("whisper")} onChange={(v) => setExtraAmount("whisper_mix", v / 100)} />
+                  <EffectSliderRow label="Tremolo" enabled={!!extraFx.tremolo_enabled} value={extraValue("tremolo_rate_hz", 8)} min={1} max={20} suffix="Hz" onToggle={() => toggleExtra("tremolo")} onChange={(v) => setExtraAmount("tremolo_rate_hz", v)} />
+                  <EffectSliderRow label="Wobble" enabled={!!extraFx.wobble_enabled} value={extraValue("wobble_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("wobble")} onChange={(v) => setExtraAmount("wobble_mix", v / 100)} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1409,14 +1420,14 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
               className="btn btn-danger"
               onClick={activateAllAtMax}
               style={{
-                background: "linear-gradient(135deg, #ef4444, #b91c1c)",
-                border: "1px solid #f87171",
-                boxShadow: "0 0 10px rgba(239, 68, 68, 0.3)",
-                color: "#fff",
+                background: "transparent",
+                border: "1px solid var(--danger-soft)",
+                color: "var(--danger)",
                 fontWeight: 700
               }}
+              title="Liga tudo no máximo só para testar o limite. Fica bem alto."
             >
-              💥 ATIVAR NO MÁXIMO
+              Tudo no máximo
             </button>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -1452,6 +1463,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.6": `### Versão 1.5.6
+* Texto para voz (TTS): textos longos não travam mais o app inteiro durante a geração (antes um texto de 15 mil caracteres congelava tudo por mais de um minuto).
+* O TTS e o YouTube/TikTok agora também ficam no menu "Adicionar" do Soundboard.
+* Importar do YouTube/TikTok em um passo só: cole o link (ou já vem preenchido se estiver copiado), escolha a aba e baixe.
+* Editor de áudio: acelerar ou desacelerar não muda mais o tom por padrão. O modo "efeito fita" continua disponível. Novos efeitos: Robô, Equalizador, Compressor, Chorus, Flanger, Fantasma, Telefone, Rádio, Sussurro, Tremolo e Wobble.
+* Menu do botão direito reorganizado em grupos, com nomes e ícones corretos.
+* As abas do Soundboard e de Vozes rolam com a roda do mouse e arrastando.
+* Arrastar o ajuste rápido de volume não seleciona mais textos da página.
+* O guia de boas-vindas aparece só uma vez, e só para quem é novo no app.`,
   "v1.5.5": `### Versão 1.5.5
 * O player de áudio agora tem o mesmo visual de vidro do dock e fica logo acima dele, com um pequeno espaço entre os dois.
 * Nova tela de carregamento, com barras de onda animadas e etapas.

@@ -2959,7 +2959,11 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/sounds/search",
                 "/api/sounds/import-youtube",
                 "/api/sounds/export-mfsound",
-                "/api/sounds/import-mfsound"
+                "/api/sounds/import-mfsound",
+                # A sintese de voz pode levar minutos em textos longos; nao pode travar o app inteiro.
+                "/api/tts/speak",
+                "/api/tts/save",
+                "/api/tts/voices"
             }
             if path in slow_paths:
                 with com_initialized():
@@ -3315,10 +3319,11 @@ class Handler(BaseHTTPRequestHandler):
                 sf.write(str(dest_path), audio, sr, format="WAV", subtype="PCM_16")
             except Exception as e:
                 raise RuntimeError(f"Erro ao salvar audio gerado: {e}")
-            tabs = STATE.resolve_import_tabs(data.get("tabs"), "tts")
-            item = STATE.library.add_file(str(dest_path), name=name, category="TTS", tabs=tabs, source_kind="tts")
-            STATE.save_profile()
-            STATE.register_hotkeys()
+            with STATE.lock:
+                tabs = STATE.resolve_import_tabs(data.get("tabs"), "tts")
+                item = STATE.library.add_file(str(dest_path), name=name, category="TTS", tabs=tabs, source_kind="tts")
+                STATE.save_profile()
+                STATE.register_hotkeys()
             return {"ok": True, "sound": asdict(item)}
 
         if path == "/api/sounds/import-youtube":

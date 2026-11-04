@@ -30,7 +30,7 @@ const soundOutputRoutes = [
 const TTS_CHARACTER_LIMIT = 10000;
 
 // --- WaveformVisualizer ---
-export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, playingPosition }) {
+export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, previewPlaying = false, previewBase = 0, previewSpeed = 1 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -38,6 +38,23 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
   const [isDragging, setIsDragging] = useState(null);
 
   const [peaks, setPeaks] = useState([]);
+  const [playingPosition, setPlayingPosition] = useState(null);
+
+  // Cabeca de reproducao: avanca suave a cada quadro enquanto a previa toca (o estado do backend chega a cada ~0,4 s).
+  // Posicao no audio de origem = inicio do corte + tempo ja tocado x velocidade.
+  useEffect(() => {
+    if (!previewPlaying) { setPlayingPosition(null); return undefined; }
+    const startedAt = performance.now();
+    const limit = (end === null || end === undefined || end === "") ? duration : Number(end);
+    let frame;
+    const tick = () => {
+      const played = Number(previewBase) + (performance.now() - startedAt) / 1000;
+      setPlayingPosition(Math.min(limit, Number(start) + played * (Number(previewSpeed) || 1)));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [previewPlaying, previewBase, previewSpeed, start, end, duration]);
   
   useEffect(() => {
     if (!soundId) return;
@@ -85,6 +102,9 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
     const startPct = start / duration;
     const endPct = (end === null || end === undefined || end === "") ? 1.0 : (end / duration);
     const barWidth = (width / peaks.length) * zoom;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const themeTop = rootStyle.getPropertyValue("--accent-lighter").trim() || "#C4B5FD";
+    const themeBottom = rootStyle.getPropertyValue("--purple").trim() || "#8B5CF6";
 
     // Draw audio peaks
     peaks.forEach((peak, i) => {
@@ -99,8 +119,8 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
 
       if (isActive) {
         const grad = ctx.createLinearGradient(x, y, x, y + barHeight);
-        grad.addColorStop(0, "#00E5FF");
-        grad.addColorStop(1, "#8B5CF6");
+        grad.addColorStop(0, themeTop);
+        grad.addColorStop(1, themeBottom);
         ctx.fillStyle = grad;
       } else {
         ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
@@ -199,7 +219,7 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
   return (
     <div className="waveform-editor-container" ref={containerRef}>
       <div className="waveform-zoom-controls">
-        <span style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>✂️ EDITOR DE CORTE WAVEFORM</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Forma de onda e corte · arraste as barras de início e fim</span>
         <div className="waveform-zoom-buttons">
           <button className={`btn btn-ghost ${zoom === 1 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => { setZoom(1); setScrollLeft(0); }}>1x</button>
           <button className={`btn btn-ghost ${zoom === 1.5 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setZoom(1.5)}>1.5x</button>
@@ -1278,7 +1298,7 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
         transition={{ duration: 0.15 }}
       >
         <div className="sound-modal-header">
-          <h3>🎚️ Editor de Som Avançado: <span style={{ color: "var(--purple)" }}>{selected.name}</span></h3>
+          <h3>Editor de som <span className="editorSoundName">{selected.name}</span></h3>
           <button className="close-btn" onClick={onClose}><X size={18} /></button>
         </div>
 
@@ -1329,7 +1349,39 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
               end={endSec}
               duration={selected.duration || 6.0}
               onUpdateTrim={(s, e) => { setStartSec(s); setEndSec(e); }}
+              previewPlaying={Boolean(isCurrentlyPlaying)}
+              previewBase={Number(state?.player?.current || 0)}
+              previewSpeed={Number(draft.speed ?? 1.0)}
             />
+
+            <div className="editorTransport">
+              <button className={`btn ${isCurrentlyPlaying ? "btn-ghost danger" : "btn-primary"}`} onClick={isCurrentlyPlaying ? handleStopPreview : handlePreview}>
+                {isCurrentlyPlaying ? <><StopCircle size={15} weight="fill" /> Parar</> : <><Play size={15} weight="fill" /> Ouvir a seleção</>}
+              </button>
+              <label className="editorTime">
+                <span>Início</span>
+                <input type="number" min="0" step="0.05" value={Number(startSec).toFixed(2)}
+                  onChange={(e) => {
+                    const limit = endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec);
+                    const next = Math.max(0, Math.min(Number(e.target.value) || 0, limit - 0.05));
+                    setStartSec(next);
+                  }} />
+                <em>s</em>
+              </label>
+              <label className="editorTime">
+                <span>Fim</span>
+                <input type="number" min="0" step="0.05" value={(endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)).toFixed(2)}
+                  onChange={(e) => {
+                    const total = Number(selected.duration || 6);
+                    setEndSec(Math.min(total, Math.max(Number(startSec) + 0.05, Number(e.target.value) || total)));
+                  }} />
+                <em>s</em>
+              </label>
+              <span className="editorSelection">
+                Seleção: <strong>{Math.max(0, (endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)) - Number(startSec)).toFixed(2)}s</strong> de {Number(selected.duration || 6).toFixed(2)}s
+              </span>
+              <button className="btn btn-ghost" onClick={() => { setStartSec(0); setEndSec(Number(selected.duration || 6)); }}>Zerar corte</button>
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
               {/* Sliders Grid */}
@@ -1490,6 +1542,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.3.0": `### Versão 2.3.0
+* Editor de som corrigido: a forma de onda e o corte tinham ficado esmagados (altura zero) depois dos efeitos novos. Agora aparecem de novo, com player de verdade: botão para ouvir a seleção, cabeça de reprodução em movimento, campos de início e fim, "zerar corte" e as cores do tema. O emoji do título saiu.
+* Atalhos de segurar e de apertar corrigidos: segurar a tecla de um som não reinicia mais dezenas de vezes por segundo, o modo "segurar para repetir" agora toca enquanto a tecla está apertada e para ao soltar, e o glitch não fica mais preso se o evento de soltar se perder. Segurar um atalho global (mutar, ligar a voz) também não alterna sem parar.
+* Explorar Sons redesenhado: cabeçalho, busca com botão, abas segmentadas, filtros num popover (sem painel dentro de painel, com as cores do tema), chips dos filtros ativos, cards limpos, carregamento com esqueleto e estados vazios claros.
+* Texto para voz fica só no menu "Adicionar" do Soundboard.
+* Ícone do app com fundo violeta e microfone mais fino, para aparecer bem na barra de tarefas.`,
   "v2.2.1": `### Versão 2.2.1
 * Ícone atualizado: só o microfone violeta, maior e mais limpo, sem as ondas laterais.
 * Menos travadinhas ao tocar sons: tocar um som não regrava mais a biblioteca inteira na hora (o placar de plays é salvo em segundo plano) nem faz a interface baixar e redesenhar os 270 sons de novo. Só o card do som tocado é atualizado.`,

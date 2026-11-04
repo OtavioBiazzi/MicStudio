@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from micfudiddo.backend import AppState
+from micfudiddo.hotkeys import HoldTracker
 from micfudiddo.processing import EffectsSettings
 
 
@@ -19,11 +20,18 @@ class CommandHotkeyTests(unittest.TestCase):
         self.state.time_glitch_hotkey_down = False
         self.state.monitor_only_active = False
         self.state.voice_bypassed = False
+        self.state._hold = HoldTracker()
+        self.state._hold_hook = None
+        self.state._hotkey_futures = {}
+        self.state._glitch_hold_mode = False
+        self.state._glitch_signature = None
 
     def register(self):
         with patch.dict(sys.modules, {"keyboard": self.keyboard}):
             self.state.refresh_time_glitch_hotkey()
-        return self.keyboard.add_hotkey.call_args.args[1], self.keyboard.hook.call_args.args[0]
+        press = self.keyboard.add_hotkey.call_args.args[1]
+        # O observador de teclas soltas agora e unico e global; aqui simulamos os eventos dele.
+        return press, self.state._on_global_key_event
 
     def test_press_ignores_keyboard_auto_repeat_until_key_up(self):
         press, release = self.register()

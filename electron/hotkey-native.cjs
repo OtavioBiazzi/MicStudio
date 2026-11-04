@@ -42,4 +42,17 @@ async function runHotkeyNatively(action, { api, fetchImpl = fetch }) {
   return active ? "Voice changer desativado" : "Voice changer ativado";
 }
 
-module.exports = { isNativeAction, runHotkeyNatively };
+// O Windows repete o evento do atalho enquanto a tecla esta segurada. Sem isto, segurar "mutar" alternava o
+// microfone dezenas de vezes por segundo. A mesma acao so vale de novo depois de uma pausa curta.
+function createRepeatGuard(windowMs = 450, now = () => Date.now()) {
+  const last = new Map();
+  return function allow(action) {
+    const t = now();
+    const previous = last.get(action);
+    last.set(action, t);
+    // Enquanto a tecla segura gera repeticoes, a janela e renovada: so passa o primeiro disparo.
+    return previous === undefined || t - previous >= windowMs;
+  };
+}
+
+module.exports = { isNativeAction, runHotkeyNatively, createRepeatGuard };

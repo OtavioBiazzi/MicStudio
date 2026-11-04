@@ -209,7 +209,11 @@ export function ConfigPage({
   setPrefGamerMode,
   prefDockOpacity,
   setPrefDockOpacity,
-  appVersion = ""
+  appVersion = "",
+  updateStatus = "",
+  autoUpdateCheck = true,
+  setAutoUpdateCheck,
+  onCheckUpdates
 }) {
   const [tab, setTab] = useState("audio");
   const [deviceChanging, setDeviceChanging] = useState("");
@@ -788,6 +792,15 @@ export function ConfigPage({
                   <WaveTriangle size={14} /> Abrir assistente de áudio
                 </button>
               </div>
+            </Section>
+
+            <Section icon={ArrowClockwise} title="Atualizações" desc="O app só procura versão nova quando abre ou quando você clica no botão. Nunca fica procurando sozinho o tempo todo.">
+              <Row label={`Versão instalada ${appVersion}`} desc={updateStatus || "Clique para ver se existe uma versão mais nova."}>
+                <button className="btn btn-ghost" onClick={() => onCheckUpdates?.()}>
+                  <ArrowClockwise size={14} /> Procurar atualização
+                </button>
+              </Row>
+              <SwitchRow label="Procurar ao abrir o app" desc="Ligado por padrão. Desligue se preferir atualizar só pelo botão acima." checked={autoUpdateCheck} onChange={(v) => setAutoUpdateCheck?.(v)} />
             </Section>
 
             <Section icon={Wrench} title="Manutenção" advanced danger desc="Cada botão diz exatamente o que faz. Seus sons e perfis nunca são apagados por aqui.">

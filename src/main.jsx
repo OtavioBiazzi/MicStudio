@@ -232,68 +232,74 @@ function App() {
     });
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    const checkUpdates = async () => {
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [autoUpdateCheck, setAutoUpdateCheckState] = useState(() => {
+    try { return localStorage.getItem("vozlab.autoUpdateCheck") !== "off"; } catch { return true; }
+  });
+  const setAutoUpdateCheck = (value) => {
+    setAutoUpdateCheckState(value);
+    try { localStorage.setItem("vozlab.autoUpdateCheck", value ? "on" : "off"); } catch {}
+  };
+
+  // Procura atualizacao so quando o app abre (se o usuario nao desligou) ou quando ele clica no botao. Nunca em loop.
+  const checkForUpdates = async ({ manual = false, signal } = {}) => {
+    try {
+      const currentVersion = await window.micfudiddo?.getVersion?.();
+      if (!currentVersion) return;
+      if (!manual && window.micfudiddo?.claimUpdateCheck && !await window.micfudiddo.claimUpdateCheck()) return;
+      if (manual) setUpdateStatus("Procurando atualizações...");
+      const controller = new AbortController();
+      signal?.addEventListener?.("abort", () => controller.abort());
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let res;
       try {
-        const currentVersion = await window.micfudiddo?.getVersion?.();
-        if (!active || !currentVersion) return;
-        if (window.micfudiddo?.claimUpdateCheck && !await window.micfudiddo.claimUpdateCheck()) return;
-
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        let res;
-        try {
-          res = await fetch(
-            `https://api.github.com/repos/OtavioBiazzi/MicStudio/releases/latest?ts=${Date.now()}`,
-            { cache: "no-store", headers: { Accept: "application/vnd.github+json" }, signal: controller.signal }
-          );
-        } finally {
-          clearTimeout(timeout);
-        }
-        if (!res.ok) return;
-        const latestRelease = await res.json();
-        if (!active || !latestRelease?.tag_name) return;
-        const latestVersion = latestRelease.tag_name;
-        
-        const isNewer = (curr, lat) => {
-          const clean = (v) => v.replace(/^v/, "").split(".").map(Number);
-          const cParts = clean(curr);
-          const lParts = clean(lat);
-          for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
-            const cVal = cParts[i] || 0;
-            const lVal = lParts[i] || 0;
-            if (lVal > cVal) return true;
-            if (cVal > lVal) return false;
-          }
-          return false;
-        };
-
-        if (isNewer(currentVersion, latestVersion)) {
-          const assets = latestRelease.assets || [];
-          const asset = assets.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) ||
-                        assets.find(a => a.name.includes("Studio") && a.name.endsWith(".exe")) ||
-                        assets.find(a => a.name.endsWith(".exe"));
-          if (asset) {
-            setUpdateAvailable({
-              version: latestVersion,
-              changelog: latestRelease.body,
-              downloadUrl: asset.browser_download_url
-            });
-          }
-        } else {
-          setUpdateAvailable(null);
-        }
-      } catch (err) {
-        console.error("Erro ao verificar atualizações:", err);
+        res = await fetch(
+          `https://api.github.com/repos/OtavioBiazzi/MicStudio/releases/latest?ts=${Date.now()}`,
+          { cache: "no-store", headers: { Accept: "application/vnd.github+json" }, signal: controller.signal }
+        );
+      } finally {
+        clearTimeout(timeout);
       }
-    };
-    const timer = setTimeout(checkUpdates, 4000);
-    return () => {
-      active = false;
-      controller.abort();
-      clearTimeout(timer);
-    };
+      if (!res.ok) throw new Error(`GitHub ${res.status}`);
+      const latestRelease = await res.json();
+      if (!latestRelease?.tag_name) throw new Error("sem versão");
+      const latestVersion = latestRelease.tag_name;
+      const isNewer = (curr, lat) => {
+        const clean = (v) => v.replace(/^v/, "").split(".").map(Number);
+        const cParts = clean(curr);
+        const lParts = clean(lat);
+        for (let i = 0; i < Math.max(cParts.length, lParts.length); i++) {
+          const cVal = cParts[i] || 0;
+          const lVal = lParts[i] || 0;
+          if (lVal > cVal) return true;
+          if (cVal > lVal) return false;
+        }
+        return false;
+      };
+      if (isNewer(currentVersion, latestVersion)) {
+        const assets = latestRelease.assets || [];
+        const asset = assets.find(a => a.name.includes("Setup") && a.name.endsWith(".exe")) ||
+                      assets.find(a => a.name.endsWith(".exe"));
+        if (asset) {
+          setUpdateAvailable({ version: latestVersion, changelog: latestRelease.body, downloadUrl: asset.browser_download_url });
+          if (manual) setUpdateStatus(`Versão ${latestVersion} disponível.`);
+          return;
+        }
+      }
+      setUpdateAvailable(null);
+      if (manual) setUpdateStatus("Você já está na versão mais recente.");
+    } catch (err) {
+      console.error("Erro ao verificar atualizações:", err);
+      if (manual) setUpdateStatus("Não consegui verificar agora. Confira sua internet e tente de novo.");
+    }
+  };
+
+  useEffect(() => {
+    if (!autoUpdateCheck) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => checkForUpdates({ signal: controller.signal }), 4000);
+    return () => { controller.abort(); clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdateApp = async (downloadUrl) => {
@@ -1275,6 +1281,10 @@ function App() {
                     setToast={setToast}
                     openAudioAssistant={() => setAudioAssistantOpen(true)}
                     appVersion={appVersion}
+                    updateStatus={updateStatus}
+                    autoUpdateCheck={autoUpdateCheck}
+                    setAutoUpdateCheck={setAutoUpdateCheck}
+                    onCheckUpdates={() => checkForUpdates({ manual: true })}
                     selectedRecordDevices={selectedRecordDevices}
                     setSelectedRecordDevices={setSelectedRecordDevices}
                     setPage={setPage}

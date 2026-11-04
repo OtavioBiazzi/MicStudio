@@ -7,7 +7,7 @@
 ; ─── Process termination on init ───────────────────────────────
 !macro customInit
   DetailPrint "Fechando instâncias ativas do VozLab Studio..."
-  nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe" /IM "VozLab Studio.exe"'
+  nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe" /IM "VozLab Studio.exe" /IM "VozLab.exe"'
   Pop $0
   Pop $1
   

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   X, Play, Minus, Trash, Star, UploadSimple, FolderOpen, MagnifyingGlass,
   Pencil, Waveform, MusicNotes, ArrowClockwise, ArrowCounterClockwise,
-  StopCircle, Sparkle, YoutubeLogo, PushPin
+  StopCircle, Sparkle, YoutubeLogo, PushPin, Microphone, Eraser
 } from "@phosphor-icons/react";
 import {
   filePathToUrl,
@@ -1538,6 +1538,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.4.1": `### Versão 2.4.1
+
+**Voz por texto refeita**
+- Visual novo, no mesmo estilo do resto do app: cartões, ícone de microfone no lugar do emoji e botões claros.
+- As vozes agora são cartões com nome, gênero e país, separados por idioma (Português, Inglês, Espanhol e Outros idiomas), com busca.
+- Velocidade e tom mostram "Normal" quando estão no padrão e têm o botão "Voltar ao normal".
+- O nome do som é sugerido a partir do texto e deixa de mudar se você editar.
+- "Falar" virou "Ouvir", com aviso de carregando, e os botões ficam desativados até ter texto.
+`,
   "v2.4.0": `### Versão 2.4.0
 
 **Nome no Windows: VozLab**
@@ -2396,69 +2405,96 @@ export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm 
 }
 
 // --- TTSModal ---
+const TTS_LANG_NAMES = {
+  pt: "Português", en: "Inglês", es: "Espanhol", fr: "Francês", de: "Alemão", it: "Italiano",
+  ja: "Japonês", ko: "Coreano", zh: "Chinês", ru: "Russo", ar: "Árabe", hi: "Hindi",
+  nl: "Holandês", pl: "Polonês", tr: "Turco", sv: "Sueco", uk: "Ucraniano", vi: "Vietnamita", th: "Tailandês", id: "Indonésio"
+};
+const TTS_FEATURED_LANGS = ["pt", "en", "es"];
+
+function describeTtsVoice(voice) {
+  const full = String(voice.name || voice.id || "");
+  const first = full.split(" (")[0] || full;
+  const lower = full.toLowerCase();
+  const gender = lower.includes("femin") || lower.includes("female") ? "Feminina" : lower.includes("mascul") || lower.includes("male") ? "Masculina" : "";
+  const lang = String(voice.lang || voice.id || "").split("-");
+  const region = lang[1] ? lang[1].toUpperCase() : "";
+  return { first, gender, group: (lang[0] || "").toLowerCase(), region };
+}
+
 export function TTSModal({ onClose, call, setToast, settings }) {
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(() => {
-    return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural";
+    try { return localStorage.getItem("tts_default_voice") || "pt-BR-AntonioNeural"; } catch { return "pt-BR-AntonioNeural"; }
   });
-  const [rate, setRate] = useState(() => {
-    return Number(localStorage.getItem("tts_default_rate") || 0);
-  }); // Slider: -50 to +50
-  const [pitch, setPitch] = useState(() => {
-    return Number(localStorage.getItem("tts_default_pitch") || 0);
-  }); // Slider: -50 to +50 Hz
+  const readNumber = (key) => { try { return Number(localStorage.getItem(key) || 0) || 0; } catch { return 0; } };
+  const [rate, setRate] = useState(() => readNumber("tts_default_rate"));
+  const [pitch, setPitch] = useState(() => readNumber("tts_default_pitch"));
   const [soundName, setSoundName] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [pinHover, setPinHover] = useState(false);
+  const [voiceSearch, setVoiceSearch] = useState("");
+  const voicesList = useTtsVoices();
   const unlimited = settings?.unlimitedTts === true;
+  const remember = (key, value) => { try { localStorage.setItem(key, String(value)); } catch {} };
 
-  // Auto-fill soundName when text changes
+  const described = useMemo(() => voicesList.map((voice) => ({ voice, ...describeTtsVoice(voice) })), [voicesList]);
+  const selectedInfo = described.find((item) => item.voice.id === selectedVoice);
+  const [group, setGroup] = useState(null);
+  const activeGroup = group || selectedInfo?.group || "pt";
+
+  const groups = useMemo(() => {
+    const present = [...new Set(described.map((item) => item.group).filter(Boolean))];
+    const featured = TTS_FEATURED_LANGS.filter((code) => present.includes(code));
+    const others = present.filter((code) => !featured.includes(code)).sort();
+    return { featured, others };
+  }, [described]);
+
+  const visibleVoices = useMemo(() => {
+    const query = voiceSearch.trim().toLowerCase();
+    return described.filter((item) => {
+      if (query) return `${item.first} ${item.gender} ${item.region} ${TTS_LANG_NAMES[item.group] || item.group}`.toLowerCase().includes(query);
+      return item.group === activeGroup;
+    });
+  }, [described, activeGroup, voiceSearch]);
+
   const handleTextChange = (e) => {
     const val = e.target.value;
     setText(val);
-    
-    // Auto-generate name from first few words
-    const words = val.trim();
-    if (words) {
-      const truncated = words.length > 22 ? words.substring(0, 20) + "..." : words;
-      setSoundName(truncated);
-    } else {
-      setSoundName("");
+    if (!nameEdited) {
+      const trimmed = val.trim().replace(/\s+/g, " ");
+      setSoundName(trimmed.length > 24 ? `${trimmed.slice(0, 22)}...` : trimmed);
     }
   };
 
-  const handleVoiceChange = (e) => {
-    const val = e.target.value;
-    setSelectedVoice(val);
-    localStorage.setItem("tts_default_voice", val);
+  const pickVoice = (id) => {
+    setSelectedVoice(id);
+    remember("tts_default_voice", id);
   };
+  const changeRate = (val) => { setRate(val); remember("tts_default_rate", val); };
+  const changePitch = (val) => { setPitch(val); remember("tts_default_pitch", val); };
+  const resetTuning = () => { changeRate(0); changePitch(0); };
 
-  const handleRateChange = (val) => {
-    setRate(val);
-    localStorage.setItem("tts_default_rate", val);
+  const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
+  const rateLabel = rate === 0 ? "Normal" : formattedRate;
+  const pitchLabel = pitch === 0 ? "Normal" : pitch > 0 ? `+${pitch} Hz` : `${pitch} Hz`;
+
+  const confirmBigText = () => {
+    const lineCount = text.split("\n").length;
+    if (lineCount >= 5000) {
+      return window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
+    }
+    return true;
   };
 
   const handleSpeak = async () => {
-    if (!text.trim()) {
-      setToast("Digite algum texto para falar.");
-      return;
-    }
-    const lineCount = text.split('\n').length;
-    if (lineCount >= 5000) {
-      const confirm = window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
-      if (!confirm) return;
-    }
+    if (!text.trim()) { setToast("Digite algum texto para ouvir."); return; }
+    if (!confirmBigText()) return;
     setSpeaking(true);
-    const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
-      await call("/api/tts/speak", {
-        text: text.trim(),
-        voice: selectedVoice,
-        rate: formattedRate,
-        pitch
-      });
-      setToast("📢 Falando...");
+      await call("/api/tts/speak", { text: text.trim(), voice: selectedVoice, rate: formattedRate, pitch });
+      setToast("Falando...");
     } catch (err) {
       setToast("Erro ao falar: " + err.message);
     } finally {
@@ -2467,26 +2503,12 @@ export function TTSModal({ onClose, call, setToast, settings }) {
   };
 
   const handleSave = async () => {
-    if (!text.trim()) {
-      setToast("Digite algum texto antes de salvar.");
-      return;
-    }
-    const lineCount = text.split('\n').length;
-    if (lineCount >= 5000) {
-      const confirm = window.confirm(`Aviso: O texto contém ${lineCount.toLocaleString()} linhas. A geração do áudio pode demorar bastante. Deseja continuar mesmo assim?`);
-      if (!confirm) return;
-    }
+    if (!text.trim()) { setToast("Digite algum texto antes de salvar."); return; }
+    if (!confirmBigText()) return;
     setLoading(true);
-    const formattedRate = rate >= 0 ? `+${rate}%` : `${rate}%`;
     try {
-      const res = await call("/api/tts/save", {
-        text: text.trim(),
-        voice: selectedVoice,
-        rate: formattedRate,
-        pitch,
-        name: soundName.trim()
-      });
-      setToast(`💾 Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
+      const res = await call("/api/tts/save", { text: text.trim(), voice: selectedVoice, rate: formattedRate, pitch, name: soundName.trim() });
+      setToast(`Som "${res.sound?.name || "TTS"}" adicionado ao Soundboard!`);
       onClose();
     } catch (err) {
       setToast("Erro ao salvar: " + err.message);
@@ -2495,233 +2517,151 @@ export function TTSModal({ onClose, call, setToast, settings }) {
     }
   };
 
-  const handleClose = () => {
-    if (!loading && !speaking) {
-      onClose();
-    }
-  };
-
-  const voicesList = useTtsVoices();
-
   const isWorking = loading || speaking;
+  const handleClose = () => { if (!isWorking) onClose(); };
+  const canAct = !isWorking && text.trim().length > 0;
+  const limit = unlimited ? null : TTS_CHARACTER_LIMIT;
+  const nearLimit = limit && text.length > limit * 0.9;
 
   return (
     <div className="modalOverlay" onClick={handleClose}>
-      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, padding: 24 }}>
-        <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--purple)", display: "flex", alignItems: "center", gap: 8 }}>
-            🎙️ Gerar Voz por Texto (TTS)
-          </h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              onClick={() => {
-                window.micfudiddo?.openTtsWidget();
-                onClose();
-              }}
-              onMouseEnter={() => setPinHover(true)}
-              onMouseLeave={() => setPinHover(false)}
-              disabled={isWorking}
-              style={{
-                background: "none",
-                border: "none",
-                color: pinHover ? "var(--purple)" : "var(--text-muted)",
-                cursor: isWorking ? "not-allowed" : "pointer",
-                transition: "color 0.2s",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 4
-              }}
-              title="Fixar Widget Flutuante"
-            >
-              <PushPin size={18} weight={pinHover ? "fill" : "bold"} />
-            </button>
-            <button className="closeBtn" onClick={handleClose} disabled={isWorking} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: isWorking ? "not-allowed" : "pointer" }}>
-              <X size={18} />
-            </button>
+      <div className="modalContent ttsModal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Voz por texto">
+        <div className="ttsHead">
+          <span className="ttsHeadIcon"><Microphone size={20} weight="fill" /></span>
+          <div className="ttsHeadText">
+            <h3>Voz por texto</h3>
+            <p>Escreva, ouça e salve como um som do Soundboard.</p>
           </div>
+          <button
+            className="ttsIconBtn"
+            onClick={() => { window.micfudiddo?.openTtsWidget(); onClose(); }}
+            disabled={isWorking}
+            title="Fixar como widget flutuante"
+            aria-label="Fixar como widget flutuante"
+          >
+            <PushPin size={18} />
+          </button>
+          <button className="ttsIconBtn" onClick={handleClose} disabled={isWorking} aria-label="Fechar"><X size={18} /></button>
         </div>
-        <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Texto para Falar</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{text.length}{unlimited ? "" : `/${TTS_CHARACTER_LIMIT}`}</span>
+
+        <div className="ttsBody">
+          <section className="ttsCard">
+            <div className="ttsCardHead">
+              <span className="ttsLabel">O que falar</span>
+              <span className="ttsCardTools">
+                <span className={`ttsCount ${nearLimit ? "warn" : ""}`}>{text.length.toLocaleString("pt-BR")}{limit ? ` / ${limit.toLocaleString("pt-BR")}` : ""}</span>
+                {text && (
+                  <button className="ttsLink" onClick={() => { setText(""); if (!nameEdited) setSoundName(""); }} disabled={isWorking}>
+                    <Eraser size={13} /> Limpar
+                  </button>
+                )}
+              </span>
             </div>
             <textarea
-              placeholder="Digite aqui o que você quer que o robô fale..."
+              className="ttsText"
+              placeholder="Digite aqui o que você quer que a voz fale..."
               value={text}
               onChange={handleTextChange}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSpeak();
-                }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canAct) handleSpeak(); }
               }}
               disabled={isWorking}
-              {...(!unlimited ? { maxLength: TTS_CHARACTER_LIMIT } : {})}
+              {...(limit ? { maxLength: limit } : {})}
               autoFocus
-              rows={3}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                background: "var(--bg-input)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text)",
-                fontSize: 13,
-                outline: "none",
-                fontFamily: "var(--font)",
-                boxSizing: "border-box",
-                resize: "none"
-              }}
+              rows={4}
             />
-          </div>
+            <span className="ttsHint">Enter para ouvir · Shift+Enter para pular linha</span>
+          </section>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Selecionar Voz</span>
-              <select
-                value={selectedVoice}
-                onChange={handleVoiceChange}
-                disabled={isWorking}
-                style={{
-                  width: "100%",
-                  padding: "9px 12px",
-                  background: "var(--bg-input)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  color: "var(--text)",
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: "var(--font)",
-                  cursor: "pointer"
-                }}
-              >
-                {voicesList.map((v) => (
-                  <option key={v.id} value={v.id} style={{ background: "var(--bg-card)", color: "var(--text)" }}>
-                    {v.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
-                <span>Velocidade</span>
-                <span style={{ color: "var(--purple)", fontWeight: 800 }}>{rate >= 0 ? `+${rate}%` : `${rate}%`}</span>
+          <section className="ttsCard">
+            <div className="ttsCardHead">
+              <span className="ttsLabel">Voz</span>
+              <span className="ttsSearch">
+                <MagnifyingGlass size={14} />
+                <input value={voiceSearch} onChange={(e) => setVoiceSearch(e.target.value)} placeholder="Buscar voz" aria-label="Buscar voz" disabled={isWorking} />
               </span>
-              <input
-                type="range"
-                min={-95}
-                max={200}
-                step={5}
-                value={rate}
-                onChange={(e) => handleRateChange(Number(e.target.value))}
-                disabled={isWorking}
-                style={{
-                  width: "100%",
-                  height: 36,
-                  accentColor: "var(--purple)",
-                  cursor: "pointer"
-                }}
-              />
             </div>
-          </div>
+            {!voiceSearch.trim() && (
+              <div className="ttsLangs" role="tablist" aria-label="Idioma da voz">
+                {groups.featured.map((code) => (
+                  <button key={code} role="tab" aria-selected={activeGroup === code} className={`ttsLang ${activeGroup === code ? "on" : ""}`} onClick={() => setGroup(code)}>
+                    {TTS_LANG_NAMES[code]}
+                  </button>
+                ))}
+                {groups.others.length > 0 && (
+                  <select
+                    className={`ttsLang ttsLangMore ${groups.others.includes(activeGroup) ? "on" : ""}`}
+                    value={groups.others.includes(activeGroup) ? activeGroup : ""}
+                    onChange={(e) => e.target.value && setGroup(e.target.value)}
+                    aria-label="Outros idiomas"
+                  >
+                    <option value="">Outros idiomas</option>
+                    {[...groups.others].sort((a, b) => (TTS_LANG_NAMES[a] || a.toUpperCase()).localeCompare(TTS_LANG_NAMES[b] || b.toUpperCase())).map((code) => (
+                      <option key={code} value={code}>{TTS_LANG_NAMES[code] || code.toUpperCase()}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+            <div className="ttsVoices" role="listbox" aria-label="Vozes">
+              {visibleVoices.length === 0 && <span className="ttsEmpty">Nenhuma voz encontrada.</span>}
+              {visibleVoices.map((item) => (
+                <button
+                  key={item.voice.id}
+                  role="option"
+                  aria-selected={item.voice.id === selectedVoice}
+                  className={`ttsVoice ${item.voice.id === selectedVoice ? "on" : ""}`}
+                  onClick={() => pickVoice(item.voice.id)}
+                  disabled={isWorking}
+                >
+                  <strong>{item.first}</strong>
+                  <small>{[item.gender, item.region].filter(Boolean).join(" · ")}</small>
+                </button>
+              ))}
+            </div>
+          </section>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
-              <span>Tom da voz</span>
-              <span style={{ color: "var(--purple)", fontWeight: 800 }}>{pitch >= 0 ? `+${pitch}Hz` : `${pitch}Hz`}</span>
-            </span>
-            <input
-              type="range"
-              min={-50}
-              max={50}
-              step={5}
-              value={pitch}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setPitch(val);
-                localStorage.setItem("tts_default_pitch", val);
-              }}
-              disabled={isWorking}
-              style={{ width: "100%", height: 36, accentColor: "var(--purple)", cursor: "pointer" }}
-            />
-          </div>
+          <section className="ttsCard">
+            <div className="ttsCardHead">
+              <span className="ttsLabel">Ajustes da voz</span>
+              {(rate !== 0 || pitch !== 0) && (
+                <button className="ttsLink" onClick={resetTuning} disabled={isWorking}><ArrowCounterClockwise size={13} /> Voltar ao normal</button>
+              )}
+            </div>
+            <div className="ttsSliders">
+              <label className="ttsSlider">
+                <span><b>Velocidade</b><em>{rateLabel}</em></span>
+                <input type="range" min={-95} max={200} step={5} value={rate} style={{ "--fill": `${((rate + 95) / 295) * 100}%` }} onChange={(e) => changeRate(Number(e.target.value))} disabled={isWorking} />
+              </label>
+              <label className="ttsSlider">
+                <span><b>Tom</b><em>{pitchLabel}</em></span>
+                <input type="range" min={-50} max={50} step={5} value={pitch} style={{ "--fill": `${pitch + 50}%` }} onChange={(e) => changePitch(Number(e.target.value))} disabled={isWorking} />
+              </label>
+            </div>
+          </section>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Nome do Som (Para salvar)</span>
+          <section className="ttsCard">
+            <div className="ttsCardHead"><span className="ttsLabel">Nome do som ao salvar</span></div>
             <input
+              className="ttsName"
               type="text"
-              placeholder="Ex: Minha frase engraçada"
+              placeholder="Criado a partir do texto"
               value={soundName}
-              onChange={(e) => setSoundName(e.target.value)}
+              onChange={(e) => { setSoundName(e.target.value); setNameEdited(true); }}
               disabled={isWorking}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                background: "var(--bg-input)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text)",
-                fontSize: 13,
-                outline: "none",
-                fontFamily: "var(--font)",
-                boxSizing: "border-box"
-              }}
             />
-          </div>
+          </section>
         </div>
 
-        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
-          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} disabled={isWorking} onClick={handleClose}>
-            Fechar
+        <div className="ttsFoot">
+          <button className="btn btn-ghost" disabled={isWorking} onClick={handleClose}>Cancelar</button>
+          <button className="btn btn-ghost ttsAct" onClick={handleSpeak} disabled={!canAct} title="Toca agora para você testar">
+            {speaking ? <span className="ttsSpin" /> : <Play size={14} weight="fill" />}
+            <span>{speaking ? "Gerando..." : "Ouvir"}</span>
           </button>
-          
-          <button
-            className="btn"
-            style={{
-              padding: "8px 16px",
-              fontSize: 12,
-              background: "rgba(255, 255, 255, 0.05)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              cursor: isWorking ? "not-allowed" : "pointer"
-            }}
-            onClick={handleSpeak}
-            disabled={isWorking || !text.trim()}
-          >
-            {speaking ? (
-              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "var(--text)", animation: "spin 0.6s linear infinite" }} />
-            ) : (
-              <Play size={14} weight="fill" />
-            )}
-            <span>Falar</span>
-          </button>
-
-          <button
-            className="btn btn-primary"
-            style={{
-              padding: "8px 16px",
-              fontSize: 12,
-              background: "linear-gradient(135deg, var(--purple), var(--purple-dim))",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              cursor: isWorking ? "not-allowed" : "pointer"
-            }}
-            onClick={handleSave}
-            disabled={isWorking || !text.trim()}
-          >
-            {loading ? (
-              <div className="spinner" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#fff", animation: "spin 0.6s linear infinite" }} />
-            ) : (
-              <UploadSimple size={14} weight="bold" />
-            )}
-            <span>Salvar no Soundboard</span>
+          <button className="btn btn-primary ttsAct" onClick={handleSave} disabled={!canAct} title="Gera o áudio e guarda no Soundboard">
+            {loading ? <span className="ttsSpin light" /> : <UploadSimple size={14} weight="bold" />}
+            <span>{loading ? "Salvando..." : "Salvar no Soundboard"}</span>
           </button>
         </div>
       </div>

@@ -19,7 +19,7 @@ async function waitUntilReady(check, { timeoutMs = 30000, cancelled = () => fals
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs && !cancelled()) {
     if (await check()) return !cancelled();
-    if (!cancelled()) await sleep(350);
+    if (!cancelled()) await sleep(120);
   }
   return false;
 }

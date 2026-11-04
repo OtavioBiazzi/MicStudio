@@ -1046,9 +1046,11 @@ function cleanOldVersion() {
 
 app.whenReady().then(async () => {
   cleanOldVersion();
+  // O backend leva mais tempo que a janela: dispara primeiro e deixa a interface carregar enquanto ele sobe.
+  const backendStarting = startBackend();
   createWindow();
   createTray();
-  await startBackend();
+  await backendStarting;
   syncLaunchAtStartupFromBackend().catch((error) => {
     console.error("Falha ao sincronizar inicializacao com o Windows:", error);
   });

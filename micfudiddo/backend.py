@@ -55,372 +55,31 @@ from .windows_audio import (
 )
 
 
-class SoundCache:
-    def __init__(self, ttl_seconds: int = 1200) -> None:
-        self.cache = {}
-        self.ttl = ttl_seconds
-        self.lock = threading.Lock()
-
-    def get(self, key: str):
-        with self.lock:
-            if key in self.cache:
-                val, expires = self.cache[key]
-                if time.time() < expires:
-                    return val
-                else:
-                    del self.cache[key]
-            return None
-
-    def set(self, key: str, value) -> None:
-        with self.lock:
-            self.cache[key] = (value, time.time() + self.ttl)
-
-MYINSTANTS_CACHE = SoundCache(ttl_seconds=1200)
-
-TTS_CHUNK_LIMIT = 3500
-TTS_CHUNK_GAP_SECONDS = 0.12
-
-
-def split_tts_text(text: str, limit: int = TTS_CHUNK_LIMIT) -> list[str]:
-    text = str(text or "").strip()
-    if not text:
-        return []
-
-    chunks: list[str] = []
-    remaining = text
-    min_split = max(1, int(limit * 0.45))
-    separators = ("\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ")
-
-    while len(remaining) > limit:
-        window = remaining[: limit + 1]
-        split_at = -1
-        for separator in separators:
-            idx = window.rfind(separator)
-            if idx >= min_split:
-                split_at = idx + len(separator)
-                break
-        if split_at < min_split:
-            split_at = limit
-        chunk = remaining[:split_at].strip()
-        if chunk:
-            chunks.append(chunk)
-        remaining = remaining[split_at:].strip()
-
-    if remaining:
-        chunks.append(remaining)
-    return chunks
-
-
-TTS_CHUNK_TIMEOUT_SECONDS = 30
-TTS_MAX_PARALLEL_CHUNKS = 4
-TTS_CACHE_LIMIT = 24
-TTS_VOICES_TTL_SECONDS = 3600
-TTS_FALLBACK_VOICES = [
-    {"id": "pt-BR-AntonioNeural", "name": "Antonio (Masculina - BR)", "lang": "pt-BR"},
-    {"id": "pt-BR-FranciscaNeural", "name": "Francisca (Feminina - BR)", "lang": "pt-BR"},
-    {"id": "pt-BR-ThalitaMultilingualNeural", "name": "Thalita (Feminina - BR)", "lang": "pt-BR"},
-    {"id": "pt-PT-DuarteNeural", "name": "Duarte (Masculina - PT)", "lang": "pt-PT"},
-    {"id": "pt-PT-RaquelNeural", "name": "Raquel (Feminina - PT)", "lang": "pt-PT"},
-    {"id": "en-US-GuyNeural", "name": "Guy (Masculina - US)", "lang": "en-US"},
-    {"id": "en-US-AriaNeural", "name": "Aria (Feminina - US)", "lang": "en-US"},
-    {"id": "es-MX-JorgeNeural", "name": "Jorge (Masculina - MX)", "lang": "es-MX"},
-    {"id": "es-ES-ElviraNeural", "name": "Elvira (Feminina - ES)", "lang": "es-ES"},
-    {"id": "ja-JP-KeitaNeural", "name": "Keita (Masculina - JP)", "lang": "ja-JP"},
-    {"id": "ja-JP-NanamiNeural", "name": "Nanami (Feminina - JP)", "lang": "ja-JP"},
-    {"id": "de-DE-ConradNeural", "name": "Conrad (Masculina - DE)", "lang": "de-DE"},
-    {"id": "de-DE-KatjaNeural", "name": "Katja (Feminina - DE)", "lang": "de-DE"},
-]
-_tts_audio_cache: "OrderedDict[tuple, np.ndarray]" = OrderedDict()
-_tts_audio_cache_lock = threading.Lock()
-_tts_voices_cache: dict = {"voices": None, "expires": 0.0}
-
-
-def format_tts_offset(value, unit: str, limit: int) -> str:
-    try:
-        number = int(round(float(value)))
-    except (TypeError, ValueError):
-        number = 0
-    number = max(-limit, min(limit, number))
-    return f"{number:+d}{unit}"
-
-
-def list_tts_voices() -> list[dict]:
-    """Vozes do edge-tts (cache de 1h). Sem internet, cai na lista embutida."""
-    now = time.time()
-    if _tts_voices_cache["voices"] and _tts_voices_cache["expires"] > now:
-        return _tts_voices_cache["voices"]
-    try:
-        import asyncio
-        import edge_tts
-
-        async def fetch():
-            return await asyncio.wait_for(edge_tts.list_voices(), timeout=8)
-
-        raw = asyncio.run(fetch())
-        voices = []
-        for item in raw:
-            short = str(item.get("ShortName", ""))
-            if not short:
-                continue
-            first = str(item.get("FriendlyName", short)).split(" Online")[0].replace("Microsoft ", "")
-            gender = "Feminina" if item.get("Gender") == "Female" else "Masculina"
-            locale = str(item.get("Locale", ""))
-            voices.append({"id": short, "name": f"{first} ({gender} - {locale})", "lang": locale})
-        if voices:
-            preferred = {"pt-BR": 0, "pt-PT": 1, "en-US": 2}
-            voices.sort(key=lambda v: (preferred.get(v["lang"], 9), v["lang"], v["name"]))
-            _tts_voices_cache["voices"] = voices
-            _tts_voices_cache["expires"] = now + TTS_VOICES_TTL_SECONDS
-            return voices
-    except Exception as exc:
-        print("TTS: nao foi possivel listar vozes online:", exc)
-    return TTS_FALLBACK_VOICES
-
-
-async def _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir, index, semaphore):
-    import asyncio
-    import edge_tts
-    import uuid
-
-    async with semaphore:
-        temp_path = temp_dir / f"tts_{uuid.uuid4().hex}_{index}.mp3"
-        last_error: Exception | None = None
-        try:
-            for _attempt in range(2):
-                try:
-                    communicate = edge_tts.Communicate(chunk, voice, rate=rate, pitch=pitch)
-                    await asyncio.wait_for(communicate.save(str(temp_path)), timeout=TTS_CHUNK_TIMEOUT_SECONDS)
-                    return load_audio_mono(str(temp_path), sample_rate).astype(np.float32, copy=False)
-                except Exception as exc:
-                    last_error = exc
-            try:
-                return await _synthesize_sapi_chunk(chunk, voice, rate, sample_rate, temp_dir, index)
-            except Exception as sapi_error:
-                print("TTS: voz offline indisponivel:", sapi_error)
-            raise RuntimeError(
-                "Nao foi possivel gerar a voz. Verifique a conexao com a internet "
-                f"({type(last_error).__name__})."
-            )
-        finally:
-            try:
-                temp_path.unlink()
-            except Exception:
-                pass
-
-
-async def _synthesize_sapi_chunk(chunk, voice, rate, sample_rate, temp_dir, index) -> np.ndarray:
-    """Reserva offline: voz instalada no Windows (SAPI), escolhida pelo idioma da voz pedida."""
-    import asyncio
-    import subprocess
-    import uuid
-
-    if os.name != "nt":
-        raise RuntimeError("SAPI so existe no Windows.")
-    culture = "-".join(str(voice).split("-")[:2]) or "pt-BR"
-    try:
-        sapi_rate = max(-10, min(10, int(round(int(str(rate).replace("%", "").replace("+", "")) / 10))))
-    except ValueError:
-        sapi_rate = 0
-    token = uuid.uuid4().hex
-    text_path = temp_dir / f"sapi_{token}_{index}.txt"
-    wav_path = temp_dir / f"sapi_{token}_{index}.wav"
-    script = (
-        "Add-Type -AssemblyName System.Speech;"
-        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
-        f"$s.Rate = {sapi_rate};"
-        f"$v = $s.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Culture.Name -eq '{culture}' }} | Select-Object -First 1;"
-        "if ($v) { $s.SelectVoice($v.VoiceInfo.Name) };"
-        f"$s.SetOutputToWaveFile('{wav_path}');"
-        f"$s.Speak([IO.File]::ReadAllText('{text_path}', [Text.Encoding]::UTF8));"
-        "$s.Dispose()"
-    )
-    text_path.write_text(chunk, encoding="utf-8")
-
-    def run() -> None:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            check=True, capture_output=True, timeout=TTS_CHUNK_TIMEOUT_SECONDS,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-
-    try:
-        await asyncio.get_running_loop().run_in_executor(None, run)
-        return load_audio_mono(str(wav_path), sample_rate).astype(np.float32, copy=False)
-    finally:
-        for path in (text_path, wav_path):
-            try:
-                path.unlink()
-            except Exception:
-                pass
-
-
-async def synthesize_tts_text_to_audio(
-    text: str,
-    voice: str,
-    rate: str,
-    sample_rate: int,
-    temp_dir: Path,
-    pitch: str = "+0Hz",
-) -> np.ndarray:
-    import asyncio
-
-    chunks = split_tts_text(text)
-    if not chunks:
-        raise RuntimeError("Texto vazio.")
-
-    cache_key = (str(text).strip(), voice, rate, pitch, int(sample_rate))
-    with _tts_audio_cache_lock:
-        cached = _tts_audio_cache.get(cache_key)
-        if cached is not None:
-            _tts_audio_cache.move_to_end(cache_key)
-            return cached.copy()
-
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    semaphore = asyncio.Semaphore(TTS_MAX_PARALLEL_CHUNKS)
-    parts = await asyncio.gather(*(
-        _synthesize_tts_chunk(chunk, voice, rate, pitch, sample_rate, temp_dir, index, semaphore)
-        for index, chunk in enumerate(chunks)
-    ))
-    parts = [part for part in parts if part.size]
-    if not parts:
-        raise RuntimeError("A sintese nao gerou audio.")
-
-    gap = np.zeros(max(1, int(sample_rate * TTS_CHUNK_GAP_SECONDS)), dtype=np.float32)
-    with_gaps: list[np.ndarray] = []
-    for index, part in enumerate(parts):
-        if index:
-            with_gaps.append(gap)
-        with_gaps.append(part)
-    audio = np.concatenate(with_gaps).astype(np.float32, copy=False)
-
-    with _tts_audio_cache_lock:
-        _tts_audio_cache[cache_key] = audio.copy()
-        while len(_tts_audio_cache) > TTS_CACHE_LIMIT:
-            _tts_audio_cache.popitem(last=False)
-    return audio
-
-
-def scrape_myinstants_page(url: str, cache_key: str, default_category: str) -> list[dict]:
-    import urllib.request
-    import urllib.parse
-    import re
-    
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            html = response.read().decode("utf-8")
-    except Exception as e:
-        print("Failed to open scrape url:", url, e)
-        return []
-        
-    instants = re.findall(
-        r'style="background-color:([^";\s]+)[^"]*">.*?onclick="play\(\'([^\']+)\'[^)]*\)"[^>]*>.*?class="[^"]*instant-link[^"]*"[^>]*>([^<]+)</a>', 
-        html, 
-        re.DOTALL
-    )
-    
-    if not instants:
-        instants_no_color = re.findall(
-            r'onclick="play\(\'([^\']+)\'[^)]*\)"[^>]*>.*?class="[^"]*instant-link[^"]*"[^>]*>([^<]+)</a>', 
-            html, 
-            re.DOTALL
-        )
-        instants = [("#8B5CF6", path, name) for path, name in instants_no_color]
-        
-    sounds = []
-    for color, sound_path, name in instants:
-        color = color.strip()
-        sound_path = sound_path.strip()
-        name = name.strip()
-        
-        if not sound_path.startswith("http"):
-            if sound_path.startswith("/"):
-                sound_url = f"https://www.myinstants.com{sound_path}"
-            else:
-                sound_url = f"https://www.myinstants.com/media/sounds/{sound_path}"
-        else:
-            sound_url = sound_path
-            
-        slug = sound_url.split("/")[-1].replace(".mp3", "")
-        sound_id = f"online_{slug}"
-        
-        play_count = f"{((hash(name) & 0xffff) % 950 + 50) / 10:.1f}k"
-        
-        sounds.append({
-            "id": sound_id,
-            "name": name,
-            "category": default_category,
-            "url": sound_url,
-            "color": color,
-            "duration": "N/A",
-            "plays": play_count
-        })
-        
-    if sounds:
-        MYINSTANTS_CACHE.set(cache_key, sounds)
-    return sounds
-
-
-def fetch_myinstants_trending(page: int) -> list[dict]:
-    cache_key = f"trending_{page}"
-    cached = MYINSTANTS_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-        
-    if page == 1:
-        try:
-            import urllib.request
-            import json
-            url = "https://myinstants-api.vercel.app/trending"
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode("utf-8"))
-                sounds = []
-                for item in data:
-                    sound_url = item.get("sound") or f"https://www.myinstants.com/media/sounds/{item.get('slug')}.mp3"
-                    sound_id = f"online_{item.get('slug') or hash(sound_url) & 0xffffffff}"
-                    name = item.get("name") or item.get("title") or "Sem nome"
-                    play_count = item.get("plays") or f"{((hash(name) & 0xffff) % 950 + 50) / 10:.1f}k"
-                    sounds.append({
-                        "id": sound_id,
-                        "name": name,
-                        "category": "Trending",
-                        "url": sound_url,
-                        "color": "#8B5CF6",
-                        "duration": "N/A",
-                        "plays": play_count
-                    })
-                if sounds:
-                    MYINSTANTS_CACHE.set(cache_key, sounds)
-                    return sounds
-        except Exception as e:
-            print("Community API failed, falling back to direct scraping:", e)
-            
-    try:
-        scrape_url = f"https://www.myinstants.com/?page={page}"
-        return scrape_myinstants_page(scrape_url, cache_key, "Trending")
-    except Exception as e:
-        print("Direct scraping of trending failed:", e)
-        return []
-
-
-def fetch_myinstants_search(query: str, page: int) -> list[dict]:
-    if not query:
-        return fetch_myinstants_trending(page)
-        
-    cache_key = f"search_{query}_{page}"
-    cached = MYINSTANTS_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-        
-    import urllib.parse
-    scrape_url = f"https://www.myinstants.com/search/?name={urllib.parse.quote(query)}&page={page}"
-    try:
-        return scrape_myinstants_page(scrape_url, cache_key, "Busca")
-    except Exception as e:
-        print("Direct scraping of search failed:", e)
-        return []
+from .tts import (  # noqa: F401  (reexportados: o resto do app e os testes usam estes nomes)
+    TTS_CHUNK_LIMIT,
+    TTS_CHUNK_GAP_SECONDS,
+    split_tts_text,
+    TTS_CHUNK_TIMEOUT_SECONDS,
+    TTS_MAX_PARALLEL_CHUNKS,
+    TTS_CACHE_LIMIT,
+    TTS_VOICES_TTL_SECONDS,
+    TTS_FALLBACK_VOICES,
+    _tts_audio_cache,
+    _tts_audio_cache_lock,
+    _tts_voices_cache,
+    format_tts_offset,
+    list_tts_voices,
+    _synthesize_tts_chunk,
+    _synthesize_sapi_chunk,
+    synthesize_tts_text_to_audio,
+)
+from .myinstants import (  # noqa: F401  (reexportados para o resto do app e os testes)
+    SoundCache,
+    MYINSTANTS_CACHE,
+    scrape_myinstants_page,
+    fetch_myinstants_trending,
+    fetch_myinstants_search,
+)
 
 
 SAFE_DEFAULTS_VERSION = 1
@@ -498,460 +157,47 @@ DEFAULT_PROFILE = {
 }
 
 
-from collections import deque
-
-class AudioClippingManager:
-    def __init__(self, app_state: AppState) -> None:
-        self.app_state = app_state
-        self._voice_chunks: deque[np.ndarray] = deque()
-        self._pc_chunks: deque[np.ndarray] = deque()
-        self._voice_available = 0
-        self._pc_available = 0
-        self._lock = threading.Lock()
-        self._running = False
-        self._pa = None
-        self._pc_streams = []
-        self._monitor_history: deque[np.ndarray] = deque()
-        self._monitor_history_size = 0
-        self._dropped_voice_chunks = 0
-        self._dropped_pc_chunks = 0
-
-    def write_voice(self, samples: np.ndarray, monitor_voice: np.ndarray | None = None) -> None:
-        if not self._running:
-            return
-        source = str(self.app_state.settings.get("clipSource", "both"))
-        if source == "pc":
-            return
-        chunk = np.asarray(samples, dtype=np.float32).copy()
-        if chunk.size == 0:
-            return
-        if not self._lock.acquire(blocking=False):
-            self._dropped_voice_chunks += 1
-            return
-        try:
-            self._voice_chunks.append(chunk)
-            self._voice_available += chunk.size
-            max_samples = 60 * 48000
-            while self._voice_available > max_samples and self._voice_chunks:
-                overflow = self._voice_available - max_samples
-                first = self._voice_chunks[0]
-                if first.size <= overflow:
-                    self._voice_chunks.popleft()
-                    self._voice_available -= first.size
-                else:
-                    self._voice_chunks[0] = first[overflow:].copy()
-                    self._voice_available -= overflow
-
-            # Handle monitor history synchronously to preserve timing alignment
-            if monitor_voice is not None:
-                m_chunk = np.asarray(monitor_voice, dtype=np.float32).copy()
-            else:
-                m_chunk = np.zeros_like(chunk)
-            self._monitor_history.append(m_chunk)
-            self._monitor_history_size += m_chunk.size
-            while self._monitor_history_size > max_samples and self._monitor_history:
-                overflow = self._monitor_history_size - max_samples
-                first = self._monitor_history[0]
-                if first.size <= overflow:
-                    self._monitor_history.popleft()
-                    self._monitor_history_size -= first.size
-                else:
-                    self._monitor_history[0] = first[overflow:].copy()
-                    self._monitor_history_size -= overflow
-        finally:
-            self._lock.release()
-
-    def _make_pc_callback(self, device, stream_rate: int):
-        import pyaudiowpatch as pyaudio
-        def callback(in_data, frame_count, _time_info, status_flags):
-            if not self._running:
-                return (None, pyaudio.paComplete)
-            source = str(self.app_state.settings.get("clipSource", "both"))
-            if source == "voice":
-                return (None, pyaudio.paComplete)
-            data = np.frombuffer(in_data, dtype=np.float32)
-            if data.size == 0:
-                return (None, pyaudio.paContinue)
-            try:
-                data = data.reshape(-1, device.channels)
-                mono = data.mean(axis=1).astype(np.float32, copy=False)
-            except ValueError:
-                mono = data.astype(np.float32, copy=False)
-            
-            if int(stream_rate) != 48000:
-                from .recording import _resample_linear
-                mono = _resample_linear(mono, int(stream_rate), 48000)
-            
-            if not self._lock.acquire(blocking=False):
-                self._dropped_pc_chunks += 1
-                return (None, pyaudio.paContinue)
-            try:
-                self._pc_chunks.append(mono.copy())
-                self._pc_available += mono.size
-                max_samples = 60 * 48000
-                while self._pc_available > max_samples and self._pc_chunks:
-                    overflow = self._pc_available - max_samples
-                    first = self._pc_chunks[0]
-                    if first.size <= overflow:
-                        self._pc_chunks.popleft()
-                        self._pc_available -= first.size
-                    else:
-                        self._pc_chunks[0] = first[overflow:].copy()
-                        self._pc_available -= overflow
-            finally:
-                self._lock.release()
-            return (None, pyaudio.paContinue)
-        return callback
-
-    def update(self) -> None:
-        enabled = bool(self.app_state.settings.get("clipEnabled", False))
-        source = str(self.app_state.settings.get("clipSource", "both"))
-        
-        if enabled:
-            if source in ("both", "pc"):
-                self.start_capture()
-            else:
-                self.stop_pc_capture()
-                self._running = True
-        else:
-            self.stop_capture()
-
-    def start_capture(self) -> None:
-        self._running = True
-        self._dropped_voice_chunks = 0
-        self._dropped_pc_chunks = 0
-        if self._pc_streams:
-            return
-        
-        indexes = self.app_state.record_selected_indexes
-        devices = self.app_state.resolve_pc_record_devices(indexes)
-        
-        import pyaudiowpatch as pyaudio
-        self._pa = pyaudio.PyAudio()
-        self._pc_streams = []
-        
-        for device in devices:
-            try:
-                stream_rate = max(8000, int(device.sample_rate or 48000))
-                stream = self._pa.open(
-                    format=pyaudio.paFloat32,
-                    channels=device.channels,
-                    rate=stream_rate,
-                    input=True,
-                    input_device_index=device.index,
-                    frames_per_buffer=1024,
-                    stream_callback=self._make_pc_callback(device, stream_rate),
-                )
-                stream.start_stream()
-                self._pc_streams.append(stream)
-            except Exception as e:
-                print(f"Clipping: Error opening stream for {device.name}: {e}")
-                
-        print(f"Clipping: Started capturing PC audio on {len(self._pc_streams)} streams.")
-
-    def stop_pc_capture(self) -> None:
-        for stream in self._pc_streams:
-            try:
-                stream.stop_stream()
-                stream.close()
-            except Exception:
-                pass
-        self._pc_streams = []
-        
-        if self._pa:
-            try:
-                self._pa.terminate()
-            except Exception:
-                pass
-        self._pa = None
-        
-        with self._lock:
-            self._pc_chunks.clear()
-            self._pc_available = 0
-            self._monitor_history.clear()
-            self._monitor_history_size = 0
-            
-        print("Clipping: Stopped PC capture streams.")
-
-    def stop_capture(self) -> None:
-        self._running = False
-        self.stop_pc_capture()
-        with self._lock:
-            self._voice_chunks.clear()
-            self._voice_available = 0
-        print("Clipping: Stopped all capturing.")
-
-    def stats(self) -> dict:
-        with self._lock:
-            return {
-                "running": self._running,
-                "voiceBufferedSamples": self._voice_available,
-                "pcBufferedSamples": self._pc_available,
-                "droppedVoiceChunks": self._dropped_voice_chunks,
-                "droppedPcChunks": self._dropped_pc_chunks,
-            }
-
-    def save_clip(self, duration_sec: int) -> dict | None:
-        if not self._running:
-            return None
-        
-        source = str(self.app_state.settings.get("clipSource", "both"))
-        
-        with self._lock:
-            voice_chunks = list(self._voice_chunks)
-            pc_chunks = list(self._pc_chunks)
-            monitor_chunks = list(self._monitor_history)
-        
-        needed_samples = int(duration_sec * 48000)
-        
-        voice_audio = np.zeros(0, dtype=np.float32)
-        if source in ("both", "voice") and voice_chunks:
-            full_voice = np.concatenate(voice_chunks)
-            if full_voice.size > needed_samples:
-                voice_audio = full_voice[-needed_samples:]
-            else:
-                voice_audio = full_voice
-        
-        pc_audio = np.zeros(0, dtype=np.float32)
-        if source in ("both", "pc") and pc_chunks:
-            full_pc = np.concatenate(pc_chunks)
-            if full_pc.size > needed_samples:
-                pc_audio = full_pc[-needed_samples:]
-            else:
-                pc_audio = full_pc
-                
-        monitor_audio = np.zeros(0, dtype=np.float32)
-        if monitor_chunks:
-            full_monitor = np.concatenate(monitor_chunks)
-            if full_monitor.size > needed_samples:
-                monitor_audio = full_monitor[-needed_samples:]
-            else:
-                monitor_audio = full_monitor
-
-        # Align and subtract monitored voice from pc_audio if both exist to cancel duplication
-        if pc_audio.size > 0 and monitor_audio.size > 0:
-            try:
-                max_size = min(monitor_audio.size, pc_audio.size)
-                seg_len = 48000
-                search_margin = 12000
-                if max_size >= (seg_len + search_margin):
-                    num_windows = (max_size - search_margin) // seg_len
-                    best_energy = -1.0
-                    best_window_idx = 0
-                    for w in range(num_windows):
-                        start = w * seg_len
-                        end = start + seg_len
-                        energy = np.sum(monitor_audio[start:end] ** 2)
-                        if energy > best_energy:
-                            best_energy = energy
-                            best_window_idx = start
-                    
-                    if best_energy > 1e-3:
-                        voice_sig = monitor_audio[best_window_idx : best_window_idx + seg_len]
-                        pc_start = best_window_idx
-                        pc_end = best_window_idx + seg_len + search_margin
-                        if pc_end <= pc_audio.size:
-                            pc_sig = pc_audio[pc_start:pc_end]
-                            
-                            # Downsample by 4 for coarse search to be fast and light
-                            voice_ds = voice_sig[::4]
-                            pc_ds = pc_sig[::4]
-                            
-                            corr = np.correlate(pc_ds, voice_ds, mode='valid')
-                            if corr.size > 0:
-                                coarse_delay_ds = int(np.argmax(corr))
-                                coarse_delay = coarse_delay_ds * 4
-                                
-                                # Refine delay in [coarse_delay - 6, coarse_delay + 6]
-                                refine_min = max(0, coarse_delay - 6)
-                                refine_max = min(search_margin, coarse_delay + 6)
-                                
-                                best_d = coarse_delay
-                                best_dot = -1.0
-                                for d in range(refine_min, refine_max + 1):
-                                    dot_val = np.dot(pc_sig[d : d + seg_len], voice_sig)
-                                    if dot_val > best_dot:
-                                        best_dot = dot_val
-                                        best_d = d
-                                
-                                # Calculate optimal scale
-                                ref_voice = voice_sig
-                                ref_pc = pc_sig[best_d : best_d + seg_len]
-                                denom = np.dot(ref_voice, ref_voice)
-                                scale = np.dot(ref_pc, ref_voice) / denom if denom > 1e-5 else 0.0
-                                
-                                # If scale is reasonable, subtract from pc_audio
-                                if 0.05 < scale < 2.5:
-                                    pc_audio[best_d:] -= scale * monitor_audio[:pc_audio.size - best_d]
-                                    print(f"Offline Clipping Cancelation: aligned at {best_d} samples ({best_d/48000*1000:.2f}ms), scale={scale:.3f}", flush=True)
-            except Exception as e:
-                print(f"Error in offline clipping cancelation: {e}", flush=True)
-
-        max_len = max(voice_audio.size, pc_audio.size)
-        if max_len == 0:
-            return None
-            
-        mixed = np.zeros(max_len, dtype=np.float32)
-        if voice_audio.size > 0:
-            mixed[:voice_audio.size] += voice_audio
-        if pc_audio.size > 0:
-            mixed[:pc_audio.size] += pc_audio
-            
-        if source == "both" and voice_audio.size > 0 and pc_audio.size > 0:
-            mixed /= 2.0
-            
-        import soundfile as sf
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        output_dir = self.app_state.library.base_dir / "recordings"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"clip_{stamp}.wav"
-        output_path = output_dir / filename
-        
-        sf.write(str(output_path), mixed, 48000)
-        
-        # Save individual tracks for future clip remixing/separation
-        if voice_audio.size > 0:
-            sf.write(str(output_path.parent / f"{output_path.stem}.voice.wav"), voice_audio, 48000)
-        if pc_audio.size > 0:
-            sf.write(str(output_path.parent / f"{output_path.stem}.pc.wav"), pc_audio, 48000)
-        
-        item = self.app_state.add_recording_to_soundboard(output_path, name=f"Clip {time.strftime('%H%M%S')}")
-        self.app_state.status = f"Clipe de {duration_sec}s salvo: {item.name}"
-        return {"soundId": item.id, "name": item.name}
+from .clipping import (  # noqa: F401  (reexportados para o resto do app e os testes)
+    AudioClippingManager,
+)
 
 
-def _write_worker_status(status_path: Path, payload: dict) -> None:
-    tmp_path = status_path.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    tmp_path.replace(status_path)
-
-
-def _set_low_process_priority() -> None:
-    try:
-        import ctypes
-        import os
-
-        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        ctypes.windll.kernel32.SetPriorityClass(handle, BELOW_NORMAL_PRIORITY_CLASS)
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["OPENBLAS_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
-        os.environ["NUMEXPR_NUM_THREADS"] = "1"
-    except Exception:
-        pass
-
-
-def run_youtube_download_worker(job_path: str) -> int:
-    _set_low_process_priority()
-    job = json.loads(Path(job_path).read_text(encoding="utf-8-sig"))
-    youtube_url = str(job["url"])
-    work_dir = Path(job["workDir"])
-    status_path = Path(job["statusPath"])
-    cancel_path = Path(job["cancelPath"])
-    use_browser_cookies = bool(job.get("useBrowserCookies", False))
-    source_kind = str(job.get("source") or ("tiktok" if "tiktok." in youtube_url.lower() else "youtube"))
-    tabs = [str(tab).strip() for tab in job.get("tabs", []) if str(tab).strip()]
-    work_dir.mkdir(parents=True, exist_ok=True)
-
-    def cancelled() -> bool:
-        return cancel_path.exists()
-
-    def status(message: str, state: str = "running", **extra) -> None:
-        payload = {"state": state, "message": message, "time": time.time(), **extra}
-        _write_worker_status(status_path, payload)
-
-    try:
-        import imageio_ffmpeg
-        import yt_dlp
-
-        from .soundboard import sanitize_sound_name
-
-        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        outtmpl = str(work_dir / "download.%(ext)s")
-        browsers = [None]
-        if use_browser_cookies:
-            browsers.extend(["edge", "chrome", "firefox", "brave", "opera"])
-
-        def hook(d):
-            if cancelled():
-                raise RuntimeError("CANCELLED")
-            if d.get("status") == "downloading":
-                percent = d.get("_percent_str", "").strip()
-                speed = d.get("_speed_str", "").strip()
-                suffix = f" ({speed})" if speed else ""
-                status(f"Baixando: {percent}{suffix}".strip())
-            elif d.get("status") == "finished":
-                status("Convertendo audio...")
-
-        last_err = None
-        info = None
-        status("Iniciando download...")
-        for browser in browsers:
-            if cancelled():
-                raise RuntimeError("CANCELLED")
-            ydl_opts = {
-                "format": "bestaudio/best",
-                "outtmpl": outtmpl,
-                "ffmpeg_location": ffmpeg_path,
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": "192",
-                    }
-                ],
-                "quiet": True,
-                "no_warnings": True,
-                "progress_hooks": [hook],
-                "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-                "retries": 3,
-                "fragment_retries": 3,
-            }
-            if browser:
-                ydl_opts["cookiesfrombrowser"] = (browser,)
-                status(f"Tentando cookies do {browser}...")
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(youtube_url, download=True)
-                break
-            except Exception as exc:
-                if "CANCELLED" in str(exc) or cancelled():
-                    raise RuntimeError("CANCELLED") from exc
-                last_err = exc
-
-        if cancelled():
-            raise RuntimeError("CANCELLED")
-        if not info:
-            raise last_err or RuntimeError("Falha ao extrair audio.")
-
-        mp3_path = work_dir / "download.mp3"
-        if not mp3_path.exists():
-            raise RuntimeError("Falha ao converter audio.")
-
-        title = info.get("title", "Som do YouTube")
-        sanitized_title = sanitize_sound_name(title) or "som_youtube"
-        status(
-            "Download concluido.",
-            state="done",
-            title=title,
-            name=sanitized_title,
-            audioPath=str(mp3_path),
-            source=source_kind,
-            url=youtube_url,
-            tabs=tabs,
-        )
-        return 0
-    except Exception as exc:
-        if "CANCELLED" in str(exc) or cancelled():
-            status("Importacao cancelada.", state="cancelled")
-            return 2
-        status(f"Erro: {exc}", state="error", error=str(exc))
-        return 1
+from .youtube_worker import (  # noqa: F401  (reexportados para o resto do app e os testes)
+    _write_worker_status,
+    _set_low_process_priority,
+    run_youtube_download_worker,
+)
 
 
 class AppState:
+    def _start_device_prefetch(self) -> None:
+        """Consulta os dispositivos de audio em paralelo com o carregamento da biblioteca (economiza ~0,5 s)."""
+        self._prefetch_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="micfudiddo-boot")
+
+        def devices_job():
+            with com_initialized():
+                return query_audio_devices()
+
+        def record_job():
+            with com_initialized():
+                return query_record_devices(include_inputs=True, include_loopback=True)
+
+        self._prefetched = {
+            "devices": self._prefetch_pool.submit(devices_job),
+            "record": self._prefetch_pool.submit(record_job),
+        }
+
+    def _take_prefetched(self, key: str, fallback):
+        future = (getattr(self, "_prefetched", None) or {}).pop(key, None)
+        if future is not None:
+            try:
+                return future.result(timeout=20)
+            except Exception as exc:
+                print(f"Consulta antecipada de dispositivos falhou ({key}): {exc}", flush=True)
+        return fallback()
+
     def __init__(self) -> None:
+        self._start_device_prefetch()
         self.lock = threading.RLock()
         self._profile_save_lock = threading.Lock()
         self._profile_save_timer: threading.Timer | None = None
@@ -1735,7 +981,7 @@ class AppState:
         atomic_write_json(self.profile_path, self.profile)
 
     def refresh_devices(self) -> None:
-        self.devices = query_audio_devices()
+        self.devices = self._take_prefetched("devices", query_audio_devices)
         
         # Tenta resolver pelos nomes salvos
         input_idx = self.find_device_index(self.selected_input_name, self.selected_input_hostapi, "input")
@@ -1763,7 +1009,9 @@ class AppState:
         self.refresh_windows_capture_endpoints()
 
     def refresh_record_devices(self) -> None:
-        self.record_devices = query_record_devices(include_inputs=True, include_loopback=True)
+        self.record_devices = self._take_prefetched(
+            "record", lambda: query_record_devices(include_inputs=True, include_loopback=True)
+        )
 
     def device_by_index(self, index: int | None) -> AudioDevice | None:
         if index is None:

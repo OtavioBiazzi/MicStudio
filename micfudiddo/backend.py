@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import atexit
 import argparse
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 import json
 import mimetypes
@@ -1979,6 +1979,11 @@ class AppState:
         )
         with self.lock:
             self.library.record_play(item.id)
+            self.play_seq = getattr(self, "play_seq", 0) + 1
+            events = getattr(self, "play_events", None)
+            if events is None:
+                events = self.play_events = deque(maxlen=40)
+            events.append({"seq": self.play_seq, "id": item.id, "plays": item.play_count, "at": item.last_played_at})
             self.status = f"Tocando: {item.name}"
 
     def preview_sound_edit(self, data: dict) -> None:
@@ -2143,6 +2148,7 @@ class AppState:
             "activeVoiceId": self.active_voice_id,
             "voiceRecents": list(self.voice_recents),
             "libraryRevision": self.library_revision(),
+            "playEvents": list(getattr(self, "play_events", [])),
             "diagnostics": {
                 "pid": os.getpid(),
                 "threads": threading.active_count(),
@@ -2216,6 +2222,7 @@ class AppState:
             "player": self.engine.player_state(),
             "players": self.engine.player_states(),
             "totalPlayCount": sum(max(0, int(item.play_count or 0)) for item in self.library.items),
+            "playEvents": list(getattr(self, "play_events", [])),
             "sounds": [
                 {
                     **asdict(item),
@@ -2261,10 +2268,7 @@ class AppState:
         }
 
     def library_revision(self) -> int:
-        try:
-            return self.library.index_path.stat().st_mtime_ns
-        except OSError:
-            return 0
+        return int(self.library.revision)
 
     def cover_http_url(self, item: SoundItem) -> str:
         if not item.cover_path:
@@ -2340,6 +2344,10 @@ def flush_profile_on_exit() -> None:
             state.flush_profile()
         except Exception as exc:
             print("Falha ao gravar o perfil ao sair:", exc, flush=True)
+        try:
+            state.library.flush_stats()
+        except Exception as exc:
+            print("Falha ao gravar o placar de plays ao sair:", exc, flush=True)
 
 
 def install_microphone_safety_handlers() -> None:

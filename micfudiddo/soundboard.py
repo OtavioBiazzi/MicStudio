@@ -182,6 +182,11 @@ class SoundLibrary:
         self.covers_dir.mkdir(parents=True, exist_ok=True)
         self.items: list[SoundItem] = []
         self.defaults = SoundDefaults()
+        # "revision" so muda quando a biblioteca muda de verdade (adicionar, remover, editar). Tocar um som so
+        # atualiza o placar de plays e NAO conta como mudanca (senao a interface rebaixaria tudo a cada play).
+        self.revision = 1
+        self._stats_lock = threading.Lock()
+        self._stats_timer = None
         self.load_settings()
         self.load()
 
@@ -213,6 +218,24 @@ class SoundLibrary:
 
     def save(self) -> None:
         atomic_write_json(self.index_path, [asdict(item) for item in self.items])
+        self.revision += 1
+
+    def save_stats_later(self, delay: float = 2.0) -> None:
+        """Grava o placar de plays em segundo plano (varios plays seguidos viram uma unica gravacao)."""
+        with self._stats_lock:
+            if self._stats_timer is not None:
+                return
+            timer = threading.Timer(delay, self.flush_stats)
+            timer.daemon = True
+            self._stats_timer = timer
+            timer.start()
+
+    def flush_stats(self) -> None:
+        with self._stats_lock:
+            timer, self._stats_timer = self._stats_timer, None
+        if timer is not None:
+            timer.cancel()
+            atomic_write_json(self.index_path, [asdict(item) for item in self.items])
 
     def load_settings(self) -> SoundDefaults:
         if not self.settings_path.exists():
@@ -407,7 +430,7 @@ class SoundLibrary:
             return
         item.play_count = max(0, int(item.play_count)) + 1
         item.last_played_at = time.time()
-        self.update(item)
+        self.save_stats_later()
 
     def trimmed_copy(self, item_id: str, start_seconds: float, end_seconds: float | None = None) -> SoundItem:
         item = self.by_id(item_id)

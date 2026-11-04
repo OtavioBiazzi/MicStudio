@@ -3,6 +3,7 @@ import { AudioAssistant } from "./components/AudioAssistant.jsx";
 import { GuideModal } from "./components/GuideModal.jsx";
 import { ProfilesPage } from "./components/ProfilesPage.jsx";
 import { accentVariables } from "./accentTheme.js";
+import { freshEvents, newestSeq, patchSoundsWithPlays } from "./playEvents.js";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
@@ -437,6 +438,20 @@ function App() {
       });
     }
 
+    // Tocar um som nao refaz a biblioteca inteira: o backend manda so "o som X foi tocado" e atualizamos so esse card.
+    let playPatches = null;
+    if (Array.isArray(data.playEvents)) {
+      if (data.sounds) {
+        playSeqRef.current = newestSeq(data.playEvents);
+      } else {
+        const fresh = freshEvents(data.playEvents, playSeqRef.current);
+        if (fresh.length) {
+          playPatches = fresh;
+          playSeqRef.current = newestSeq(fresh);
+        }
+      }
+    }
+
     const optimistic = controlsOptimisticRef.current;
     setState((prev) => {
       let normalizedData = data;
@@ -445,6 +460,10 @@ function App() {
       }
       if (!prev) return normalizedData;
       const nextState = { ...prev, ...normalizedData };
+      if (playPatches && prev.sounds) {
+        nextState.sounds = patchSoundsWithPlays(prev.sounds, playPatches);
+        nextState.totalPlayCount = (prev.totalPlayCount || 0) + playPatches.length;
+      }
       if (data.controlsRevision != null && prev.controlsRevision > data.controlsRevision &&
           prev.diagnostics?.pid === data.diagnostics?.pid) {
         nextState.controls = prev.controls;
@@ -462,6 +481,7 @@ function App() {
   };
 
   const quickRefreshRef = useRef(null);
+  const playSeqRef = useRef(0);
 
   const call = async (path, body = {}) => {
     if (path === "/api/glitch/trigger") {

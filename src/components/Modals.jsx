@@ -1490,6 +1490,9 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.2.1": `### Versão 2.2.1
+* Ícone atualizado: só o microfone violeta, maior e mais limpo, sem as ondas laterais.
+* Menos travadinhas ao tocar sons: tocar um som não regrava mais a biblioteca inteira na hora (o placar de plays é salvo em segundo plano) nem faz a interface baixar e redesenhar os 270 sons de novo. Só o card do som tocado é atualizado.`,
   "v2.2.0": `### Versão 2.2.0
 * Temas de verdade: ao trocar a cor (Rubi Carmim, Ouro Âmbar, etc.), botões, destaques, brilhos, bordas e o logo mudam junto. O texto sobre botões claros fica escuro para continuar legível.
 * Configurações refeitas do zero: menu lateral agrupado, uma coluna de leitura, cada opção com texto curto explicando o que faz, e as opções técnicas escondidas em "Avançado". Cada seção tem "Restaurar padrão".

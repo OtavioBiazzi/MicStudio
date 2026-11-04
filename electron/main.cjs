@@ -1,8 +1,9 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, Tray, clipboard } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, shell, Tray, clipboard } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 const { backendFailure, waitUntilReady } = require("./backend-status.cjs");
 const { createIntroOpener, createSessionGate } = require("./onboarding.cjs");
+const { runHotkeyNatively } = require("./hotkey-native.cjs");
 
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
@@ -19,6 +20,8 @@ let registeredSoundShortcuts = new Map();
 let registeredGlobalShortcuts = new Map();
 let shortcutConflicts = new Map();
 let rendererRecoveryAttempts = 0;
+let uiSleepTimer = null;
+const UI_SLEEP_DELAY_MS = 20000;
 const claimUpdateCheck = createSessionGate();
 let openIntroVideo;
 let backendStartPromise;
@@ -416,9 +419,7 @@ async function refreshSoundHotkeys() {
               focusTtsWidgetWindow();
             }
           } else {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send("hotkey:trigger", actionName);
-            }
+            dispatchHotkey(actionName);
           }
         });
         if (ok) {
@@ -500,8 +501,72 @@ async function readAppSettings() {
 }
 
 async function closeOrHideWindow() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.hide();
+  scheduleUiSleep();
+}
+
+// Na bandeja a interface (Chromium) e o que mais gasta memoria. Depois de alguns segundos escondida,
+// a janela e destruida; o audio, os atalhos e a bandeja continuam no ar e a janela volta sob demanda.
+async function scheduleUiSleep() {
+  clearTimeout(uiSleepTimer);
+  const settings = await readAppSettings();
+  if (settings.freeMemoryInTray === false) return;
+  uiSleepTimer = setTimeout(() => {
+    if (quitting || !mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible()) return;
+    const sleeping = mainWindow;
+    mainWindow = null;
+    sleeping.destroy();
+  }, UI_SLEEP_DELAY_MS);
+}
+
+function showMainWindow() {
+  clearTimeout(uiSleepTimer);
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow({ show: false, wake: true });
+    mainWindow.once("ready-to-show", () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.show();
+      mainWindow.focus();
+    });
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function notifyHotkey(body) {
+  try {
+    if (Notification.isSupported()) new Notification({ title: "MicFudiddo Studio", body, silent: true }).show();
+  } catch (_) {}
+}
+
+async function dispatchHotkey(action) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("hotkey:trigger", action);
+    return;
+  }
+  // Interface liberada: as acoes simples vao direto ao backend, sem reabrir nada.
+  try {
+    const message = await runHotkeyNatively(action, { api: API });
+    if (message) {
+      notifyHotkey(message);
+      return;
+    }
+  } catch (error) {
+    console.error("Falha ao executar atalho sem interface:", error);
+    return;
+  }
+  // As demais precisam da interface: acorda a janela escondida e repassa a acao.
+  if (quitting) return;
+  createWindow({ show: false, wake: true });
+  mainWindow.webContents.once("did-finish-load", () => {
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hotkey:trigger", action);
+    }, 2500);
+  });
+  scheduleUiSleep();
 }
 
 function askCloseChoice() {
@@ -515,8 +580,9 @@ async function quitAppFully() {
   app.quit();
 }
 
-function createWindow() {
+function createWindow({ show = true, wake = false } = {}) {
   mainWindow = new BrowserWindow({
+    show,
     width: 1280,
     height: 860,
     minWidth: 1060,
@@ -567,9 +633,9 @@ function createWindow() {
 
 
   if (isDev) {
-    mainWindow.loadURL("http://127.0.0.1:5177");
+    mainWindow.loadURL(`http://127.0.0.1:5177${wake ? "/?wake=1" : ""}`);
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "studio-dist", "index.html"));
+    mainWindow.loadFile(path.join(__dirname, "..", "studio-dist", "index.html"), wake ? { query: { wake: "1" } } : undefined);
   }
   mainWindow.on("close", (event) => {
     if (!quitting) {
@@ -596,7 +662,7 @@ function createTray() {
   tray = new Tray(getIconPath());
   tray.setToolTip("MicFudiddo Studio");
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Mostrar", click: () => mainWindow?.show() },
+    { label: "Mostrar", click: () => showMainWindow() },
     {
       label: "Fechar",
       click: async () => {
@@ -606,7 +672,8 @@ function createTray() {
       }
     }
   ]));
-  tray.on("double-click", () => mainWindow?.show());
+  tray.on("double-click", () => showMainWindow());
+  tray.on("click", () => showMainWindow());
 }
 
 ipcMain.handle("dialog:save-mfsound", async (_event, defaultName) => {
@@ -1018,10 +1085,7 @@ ipcMain.handle("backend:retry", async () => {
 ipcMain.handle("backend:open-logs", () => shell.openPath(path.join(app.getPath("userData"), "logs")));
 
 app.on("second-instance", () => {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  showMainWindow();
 });
 
 app.on("before-quit", async (event) => {

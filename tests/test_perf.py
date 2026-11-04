@@ -126,5 +126,10 @@ class VoiceWatchdogTests(unittest.TestCase):
         self.assertIn("sem microfone", state.voice_problem)
 
 
+class TraySettingTests(unittest.TestCase):
+    def test_free_memory_in_tray_is_on_by_default(self):
+        self.assertIs(backend.DEFAULT_APP_SETTINGS["freeMemoryInTray"], True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1023,6 +1023,13 @@ export function ConfigPage({
                   />
 
                   <ToggleSetting
+                    label="Liberar memória na bandeja"
+                    description="Ao minimizar para a bandeja, a interface é fechada e libera centenas de MB de memória (bom para jogar). A voz, o soundboard e os atalhos continuam funcionando, e a janela reabre ao clicar no ícone."
+                    checked={state.settings?.freeMemoryInTray !== false}
+                    onChange={(v) => call("/api/settings", { freeMemoryInTray: v })}
+                  />
+
+                  <ToggleSetting
                     label="Salvar modificações de cada voz"
                     description="Mantém seus ajustes quando você sai e volta para uma voz. Desative para sempre reabrir o preset original."
                     checked={state.settings?.voiceEditPersistence !== "reset"}

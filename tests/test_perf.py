@@ -71,5 +71,46 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(state._storage_cache[1], 2048)
 
 
+class VoiceWatchdogTests(unittest.TestCase):
+    def make(self, running=False):
+        state = make_state(Path(tempfile.gettempdir()))
+        state.voice_wanted = True
+        state.voice_problem = ""
+        state._voice_recover_failures = 0
+        state.monitor_only_active = False
+        state.status = ""
+        state.engine = SimpleNamespace(running=running)
+        state.refresh_devices = lambda: None
+        return state
+
+    def test_reconnects_when_voice_dropped(self):
+        state = self.make()
+        started = []
+        state.start = lambda: started.append(1)
+        state.recover_voice_if_needed()
+        self.assertEqual(started, [1])
+        self.assertEqual(state.voice_problem, "")
+
+    def test_does_nothing_when_user_turned_voice_off(self):
+        state = self.make()
+        state.voice_wanted = False
+        state.start = lambda: self.fail("nao deveria religar")
+        state.recover_voice_if_needed()
+
+    def test_reports_problem_and_gives_up_after_retries(self):
+        state = self.make()
+        calls = []
+
+        def boom():
+            calls.append(1)
+            raise RuntimeError("sem microfone")
+
+        state.start = boom
+        for _ in range(10):
+            state.recover_voice_if_needed()
+        self.assertEqual(len(calls), 5)
+        self.assertIn("sem microfone", state.voice_problem)
+
+
 if __name__ == "__main__":
     unittest.main()

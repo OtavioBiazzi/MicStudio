@@ -1020,6 +1020,10 @@ class AppState:
                 print("Erro ao recuperar microfone padrao temporario:", e)
         self.virtual_mode_active = False
         self.monitor_only_active = False
+        # A voz foi ligada pelo usuario e deve continuar ligada; o vigia religa se o audio cair.
+        self.voice_wanted = False
+        self.voice_problem = ""
+        self._voice_recover_failures = 0
         self.status = "Backend pronto"
         self.hotkey_handles = []
         self.time_glitch_hotkey_handles = []
@@ -1896,6 +1900,43 @@ class AppState:
         self.monitor_only_active = False
         self.status = "Processamento desligado"
 
+    def set_voice_wanted(self, wanted: bool) -> None:
+        self.voice_wanted = bool(wanted)
+        self.voice_problem = ""
+        self._voice_recover_failures = 0
+
+    def recover_voice_if_needed(self) -> None:
+        """Religa a voz quando ela caiu sozinha (microfone desconectado, troca de dispositivo, driver)."""
+        if not self.voice_wanted or self.engine.running or self.monitor_only_active:
+            if self.engine.running:
+                self.voice_problem = ""
+                self._voice_recover_failures = 0
+            return
+        if self._voice_recover_failures >= 5:
+            return
+        try:
+            self.refresh_devices()
+            self.start()
+            self.voice_problem = ""
+            self._voice_recover_failures = 0
+            self.status = "Voz reconectada automaticamente"
+        except Exception as exc:
+            self._voice_recover_failures += 1
+            self.voice_problem = (
+                f"A voz caiu e nao foi possivel reconectar ({exc}). "
+                "Confira o microfone em Configuracoes e ligue a voz de novo."
+            )
+
+    def voice_watchdog_loop(self) -> None:
+        while True:
+            time.sleep(2.0)
+            try:
+                with self.lock:
+                    with com_initialized():
+                        self.recover_voice_if_needed()
+            except Exception as exc:
+                print("Vigia da voz:", exc, flush=True)
+
     def shutdown_resources(self) -> None:
         with self.lock:
             if self._shutdown_started:
@@ -1995,6 +2036,7 @@ class AppState:
             raise
 
     def deactivate_virtual(self) -> None:
+        self.voice_wanted = False
         self.stop()
         self.restore_microphone_safety()
         self.virtual_mode_active = False
@@ -2542,6 +2584,8 @@ class AppState:
             "status": self.status,
             "running": self.engine.running,
             "monitorOnly": self.monitor_only_active,
+            "voiceWanted": self.voice_wanted,
+            "voiceProblem": self.voice_problem,
             "sampleRate": self.engine.sample_rate,
             "blockSize": self.engine.block_size,
             "level": self.engine.last_level,
@@ -2924,11 +2968,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/devices/refresh":
             STATE.refresh_devices()
             STATE.refresh_record_devices()
-            return None
+            return STATE.snapshot()
         if path == "/api/selection":
             selected = data.get("selected", data)
             STATE.change_device_selection(selected)
-            return None
+            return STATE.snapshot()
         if path == "/api/controls":
             controls = data.get("controls", data)
             previous_time_glitch_hotkey = STATE.time_glitch_hotkey_signature()
@@ -3013,8 +3057,10 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/api/start":
             STATE.start()
+            STATE.set_voice_wanted(True)
             return None
         if path == "/api/stop":
+            STATE.set_voice_wanted(False)
             if STATE.virtual_mode_active and STATE.settings.get("restoreOnDisable", True):
                 STATE.deactivate_virtual()
             else:
@@ -3024,8 +3070,10 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/api/virtual/start":
             STATE.activate_virtual()
+            STATE.set_voice_wanted(True)
             return None
         if path == "/api/virtual/stop":
+            STATE.set_voice_wanted(False)
             STATE.deactivate_virtual()
             if STATE.monitor_enabled or STATE.soundboard_monitor_enabled:
                 STATE.start_monitor_only()
@@ -4181,6 +4229,7 @@ def main() -> None:
         install_microphone_safety_handlers()
         STATE = AppState()
         STATE.api_port = args.port
+        threading.Thread(target=STATE.voice_watchdog_loop, daemon=True, name="micfudiddo-voice-watchdog").start()
         while server_thread.is_alive():
             server_thread.join(timeout=0.5)
     except Exception:

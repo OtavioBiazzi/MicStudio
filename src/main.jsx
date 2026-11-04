@@ -1236,6 +1236,7 @@ function App() {
           setDockMinimized={setDockMinimized}
           setSelectedSound={setSelectedSound}
           forcedPresetId={forcedPresetId}
+          setToast={setToast}
         />
       </ErrorBoundary>
 

@@ -1452,6 +1452,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.5": `### Versão 1.5.5
+* O player de áudio agora tem o mesmo visual de vidro do dock e fica logo acima dele, com um pequeno espaço entre os dois.
+* Nova tela de carregamento, com barras de onda animadas e etapas.
+* Tocar vários sons ao mesmo tempo continua funcionando: o botão de tocar no card e a prévia do painel param só aquele som, sem derrubar os outros que estão tocando.
+* Novos testes cobrem sons simultâneos, parar e pausar um som isolado e o modo de um som por vez.`,
   "v1.5.4": `### Versão 1.5.4
 * O ajuste rápido de volume do Soundboard agora acompanha o arrasto do mouse sem atraso nem voltar para trás.
 * Soundboard redesenhado: cabeçalho único com busca e menu "Adicionar" (arquivos, pasta ou link), gravação em uma faixa própria e botão de tocar direto na capa de cada som.

@@ -168,6 +168,8 @@ export function FloatingDock({
             transform: "translateX(-50%)",
             width: "max-content",
             maxWidth: "min(560px, 92vw)",
+            pointerEvents: "auto",
+            zIndex: 60,
             display: "flex",
             alignItems: "center",
             gap: 10,

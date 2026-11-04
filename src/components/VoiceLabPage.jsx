@@ -236,6 +236,27 @@ export function VoiceLabPage({
     <div className="voiceLab">
       <h2 className="srOnly">Voice Lab</h2>
 
+      <div className="labHeader">
+        <div className="labHeaderText">
+          <h1>Voice Lab</h1>
+          <p>Monte sua própria voz: ajuste os módulos abaixo, fale no microfone para ouvir o resultado e salve como preset.</p>
+        </div>
+        <div className="labActions">
+          <button className="labSaveBtn" onClick={saveVoice}>
+            <FloppyDisk size={16} /> Salvar como preset
+          </button>
+          <button className="labPreviewBtn" onClick={exportVoices} title="Salvar todas as suas vozes em um arquivo">
+            <Export size={16} /> Exportar
+          </button>
+          <button className="labPreviewBtn" onClick={importVoices} title="Carregar vozes de um arquivo">
+            <UploadSimple size={16} /> Importar
+          </button>
+          <button className="labPreviewBtn labDanger" onClick={activateAllAtMax} title="Liga todos os efeitos no máximo. Serve só para testar o limite e fica bem alto.">
+            Tudo no máximo
+          </button>
+        </div>
+      </div>
+
       <div className="voice-lab-grid-modular">
         <div className="voice-lab-card-modular" style={{ alignSelf: "flex-start" }}>
           <div className="voice-lab-module-title">
@@ -449,34 +470,6 @@ export function VoiceLabPage({
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="labActions" style={{ marginTop: 28 }}>
-        <button
-          className="labSaveBtn"
-          onClick={activateAllAtMax}
-          style={{
-            background: "linear-gradient(135deg, #ef4444, #b91c1c)",
-            border: "1px solid #f87171",
-            boxShadow: "0 0 15px rgba(239, 68, 68, 0.4)",
-            fontWeight: 800,
-            color: "#ffffff"
-          }}
-        >
-          💥 ATIVAR TUDO NO MÁXIMO
-        </button>
-        <button className="labSaveBtn" onClick={saveVoice}>
-          <FloppyDisk size={16} /> Salvar Snapshot Voz
-        </button>
-        <button className="labPreviewBtn" onClick={() => setToast("Preview Analógico: Ajuste os sliders modulares e fale no mic com o processamento Ativo!")}>
-          <Play size={16} /> Ouvir Prévia
-        </button>
-        <button className="labPreviewBtn" onClick={exportVoices}>
-          <Export size={16} /> Exportar Biblioteca
-        </button>
-        <button className="labPreviewBtn" onClick={importVoices}>
-          <UploadSimple size={16} /> Importar Presets
-        </button>
       </div>
 
       {customVoices.length > 0 && (

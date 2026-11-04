@@ -1452,6 +1452,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.4": `### Versão 1.5.4
+* O ajuste rápido de volume do Soundboard agora acompanha o arrasto do mouse sem atraso nem voltar para trás.
+* Soundboard redesenhado: cabeçalho único com busca e menu "Adicionar" (arquivos, pasta ou link), gravação em uma faixa própria e botão de tocar direto na capa de cada som.
+* Voice Lab redesenhado: ações no topo (Salvar como preset, Exportar, Importar), layout em duas colunas e botões não ficam mais atrás do dock. Removido o botão "Ouvir Prévia", que só mostrava um aviso.
+* O player de áudio agora flutua acima do dock, sem mudar a altura da tela, e usa as cores do novo design.`,
   "v1.5.3": `### Versão 1.5.3
 * Corrigido: os botões "Ligar voz" e "Como resolver" do aviso do dock não respondiam ao clique.
 * O player do topo agora flutua sobre o conteúdo e não muda mais a altura da tela ao tocar ou parar um som. Também ganhou as cores do novo design.

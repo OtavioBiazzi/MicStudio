@@ -101,3 +101,25 @@ export function summarizeChecks(checks) {
   const warns = checks.filter((c) => c.level === "warn").length;
   return { errors, warns, ok: errors === 0 && warns === 0 };
 }
+
+// Texto para o usuario colar quando pedir ajuda: mostra o essencial, sem dados pessoais.
+export function buildReport(state, appVersion = "") {
+  if (!state) return "Sem estado do app.";
+  const name = (list, index) => (list || []).find((d) => d.index === index)?.name || "nenhum";
+  const controls = state.controls || {};
+  const lines = [
+    `MicFudiddo Studio ${appVersion}`.trim(),
+    `Voz ligada: ${state.running && !state.monitorOnly ? "sim" : "nao"}`,
+    `Microfone: ${name(state.devices?.inputs, state.selected?.input)}`,
+    `Saida (cabo virtual): ${name(state.devices?.outputs, state.selected?.output)}`,
+    `Fone (retorno): ${name(state.devices?.outputs, state.selected?.monitor)}`,
+    `Cabo virtual detectado: ${state.virtualCableDetected ? "sim" : "nao"}`,
+    `Mudo: ${controls.masterMute ? "sim" : "nao"} | Retorno: ${controls.monitor ? "ligado" : "desligado"} (${Math.round(Number(controls.monitorVolume ?? 1) * 100)}%)`,
+    `Taxa: ${state.sampleRate || "-"} Hz | Bloco: ${state.blockSize || "-"}`,
+    `Status: ${state.status || "-"}`,
+    `Ultimo erro: ${state.lastError || "nenhum"}`,
+    `Problema da voz: ${state.voiceProblem || "nenhum"}`,
+    `Aviso do audio: ${state.lastCallbackStatus || "nenhum"}`
+  ];
+  return lines.join("\n");
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { AudioAssistant } from "./components/AudioAssistant.jsx";
+import { GuideModal } from "./components/GuideModal.jsx";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
@@ -105,6 +106,8 @@ function App() {
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [chooseMicOnCloseOpen, setChooseMicOnCloseOpen] = useState(false);
   const [audioAssistantOpen, setAudioAssistantOpen] = useState(false);
+  const [guideTab, setGuideTab] = useState(null);
+  const guideCheckedRef = useRef(false);
   const [bootError, setBootError] = useState(null);
   const [bootStatus, setBootStatus] = useState(null);
   const [bootElapsed, setBootElapsed] = useState(0);
@@ -860,6 +863,20 @@ function App() {
     }
   }, [state, autoBootTried]);
 
+  useEffect(() => {
+    if (!state || guideCheckedRef.current) return;
+    guideCheckedRef.current = true;
+    let seen = true;
+    try { seen = localStorage.getItem("micfudiddo.guideSeen") === "1"; } catch { /* sem storage */ }
+    if (!seen) setGuideTab("first");
+  }, [state]);
+
+  useEffect(() => {
+    if (!state?.voiceNotice) return;
+    setToast(state.voiceNotice);
+    callSilent("/api/voice/notice-dismiss").catch(() => {});
+  }, [state?.voiceNotice]);
+
   const handleConfirmMicOnClose = useCallback(async (device_id) => {
     setChooseMicOnCloseOpen(false);
     try {
@@ -1246,6 +1263,15 @@ function App() {
 
       {/* Modals */}
       <AnimatePresence>
+        {guideTab && (
+          <GuideModal
+            initialTab={guideTab}
+            onClose={() => {
+              try { localStorage.setItem("micfudiddo.guideSeen", "1"); } catch { /* sem storage */ }
+              setGuideTab(null);
+            }}
+          />
+        )}
         {audioAssistantOpen && (
           <AudioAssistant
             state={state}
@@ -1253,6 +1279,8 @@ function App() {
             updateControls={updateControls}
             setPage={setPage}
             setToast={setToast}
+            appVersion={appVersion}
+            openGuide={(tab) => setGuideTab(tab)}
             onClose={() => setAudioAssistantOpen(false)}
           />
         )}

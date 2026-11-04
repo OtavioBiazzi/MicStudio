@@ -1452,6 +1452,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.3": `### Versão 1.5.3
+* Corrigido: os botões "Ligar voz" e "Como resolver" do aviso do dock não respondiam ao clique.
+* O player do topo agora flutua sobre o conteúdo e não muda mais a altura da tela ao tocar ou parar um som. Também ganhou as cores do novo design.
+* Guia de primeiros passos na primeira abertura, e guia de uso no Discord, OBS, jogos e chamadas.
+* Assistente de áudio ganhou medidor do microfone e botão "Copiar relatório" para pedir ajuda.
+* Se o microfone sumir, o app troca para outro disponível e avisa qual foi escolhido.`,
   "v1.5.2": `### Versão 1.5.2
 * Trocar microfone, saída ou fone em Configurações agora aparece na hora, sem precisar reiniciar o app.
 * Se a voz cair sozinha (microfone desconectado, driver), o app tenta reconectar automaticamente e avisa o motivo se não conseguir.

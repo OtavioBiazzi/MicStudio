@@ -1,10 +1,35 @@
-import React, { useState } from "react";
-import { runAudioChecks, summarizeChecks, VB_CABLE_URL } from "../audioChecks.js";
+import React, { useEffect, useState } from "react";
+import { runAudioChecks, summarizeChecks, buildReport, VB_CABLE_URL } from "../audioChecks.js";
+import { getAPI } from "../apiClient";
 
 const ICON = { ok: "✅", warn: "⚠️", error: "❌" };
 
-export function AudioAssistant({ state, call, updateControls, setPage, setToast, onClose }) {
+export function AudioAssistant({ state, call, updateControls, setPage, setToast, onClose, openGuide, appVersion }) {
   const [busy, setBusy] = useState("");
+  const [level, setLevel] = useState(0);
+  const voiceOn = Boolean(state?.running) && !state?.monitorOnly;
+
+  // Medidor do microfone: so faz sentido com a voz ligada.
+  useEffect(() => {
+    if (!voiceOn) { setLevel(0); return undefined; }
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const data = await getAPI("/api/runtime");
+        if (alive) setLevel(Math.min(1, Number(data.level) || 0));
+      } catch { /* ignora */ }
+    }, 150);
+    return () => { alive = false; clearInterval(timer); };
+  }, [voiceOn]);
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(buildReport(state, appVersion));
+      setToast?.("Relatório copiado! Cole na conversa de suporte.");
+    } catch {
+      setToast?.("Não consegui copiar o relatório.");
+    }
+  };
   const checks = runAudioChecks(state);
   const summary = summarizeChecks(checks);
 
@@ -74,6 +99,15 @@ export function AudioAssistant({ state, call, updateControls, setPage, setToast,
             : "Veja abaixo o que precisa de atenção. Cada item tem um botão que resolve."}
         </p>
 
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+            {voiceOn ? "Fale algo: se a barra mexer, o app está te ouvindo." : "Ligue a voz para testar se o app está ouvindo seu microfone."}
+          </div>
+          <div style={{ height: 8, borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.round(level * 100)}%`, background: "var(--cyan)", transition: "width 120ms linear" }} />
+          </div>
+        </div>
+
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {checks.map((check) => (
             <div
@@ -108,7 +142,11 @@ export function AudioAssistant({ state, call, updateControls, setPage, setToast,
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Fechar</button>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button className="btn btn-ghost" onClick={onClose}>Fechar</button>
+            <button className="btn btn-ghost" onClick={() => { onClose(); openGuide?.("programs"); }}>Usar no Discord/jogos</button>
+            <button className="btn btn-ghost" onClick={copyReport}>Copiar relatório</button>
+          </div>
           {!summary.ok && (
             <button className="btn btn-primary" disabled={Boolean(busy)} onClick={fixAll}>
               {busy === "all" ? "Arrumando..." : "Arrumar tudo automaticamente"}

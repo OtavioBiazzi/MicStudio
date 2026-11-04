@@ -30,6 +30,7 @@ from .devices import (
     query_audio_devices,
 )
 from .engine import AudioEngine, EngineConfig
+from . import profiles as audio_profiles
 from .processing import EffectsSettings
 from .recording import MultiDeviceRecorder, query_record_devices
 from .soundboard import (
@@ -491,6 +492,8 @@ DEFAULT_PROFILE = {
     "soundboardFavorites": [],
     "voiceRecents": [],
     "activeVoiceId": "clean",
+    "audioProfiles": [],
+    "activeAudioProfileId": "",
     "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
 }
 
@@ -1604,6 +1607,17 @@ class AppState:
         if isinstance(effects, dict):
             self.effects = EffectsSettings.from_mapping(effects)
 
+        self.audio_profiles = audio_profiles.sanitize_profile_list(self.profile.get("audioProfiles", []))
+        remembered_profile = str(self.profile.get("activeAudioProfileId", "") or "")
+        # Sem "lembrar a ultima voz", o app abre em Sem efeito e nenhum perfil fica marcado como ativo.
+        self.active_audio_profile_id = (
+            remembered_profile
+            if (getattr(self, "settings", None) or {}).get("rememberLastVoice", False)
+            and any(p["id"] == remembered_profile for p in self.audio_profiles)
+            else ""
+        )
+        self.profile_notice = ""
+        self._last_foreground_exe = ""
         self.voice_favorites = list(self.profile.get("voiceFavorites", []))
         self.soundboard_favorites = list(self.profile.get("soundboardFavorites", []))
         self.voice_recents = list(self.profile.get("voiceRecents", []))
@@ -1714,6 +1728,8 @@ class AppState:
             "soundboardFavorites": self.soundboard_favorites,
             "voiceRecents": self.voice_recents,
             "activeVoiceId": self.active_voice_id,
+            "audioProfiles": self.audio_profiles,
+            "activeAudioProfileId": self.active_audio_profile_id,
             "safeDefaultsVersion": SAFE_DEFAULTS_VERSION,
         }
         atomic_write_json(self.profile_path, self.profile)
@@ -1812,6 +1828,19 @@ class AppState:
                     self.hotkey_handles.append(handle)
                 except Exception as e:
                     print(f"Error registering hotkey {hotkey} for sound {item.name}: {e}")
+        for profile in self.audio_profiles:
+            hotkey = str(profile.get("hotkey") or "").strip().lower().replace("control", "ctrl").replace(" ", "")
+            if not hotkey:
+                continue
+            try:
+                handle = keyboard.add_hotkey(
+                    hotkey,
+                    lambda profile_id=profile["id"]: self._apply_profile_from_background(profile_id, automatic=False),
+                    suppress=False,
+                )
+                self.hotkey_handles.append(handle)
+            except Exception as e:
+                print(f"Error registering hotkey {hotkey} for profile {profile['name']}: {e}")
         self.refresh_time_glitch_hotkey()
 
     def time_glitch_hotkey_signature(self) -> tuple:
@@ -1907,6 +1936,235 @@ class AppState:
         self.engine.stop()
         self.monitor_only_active = False
         self.status = "Processamento desligado"
+
+    def apply_controls(self, data: dict) -> None:
+        controls = data.get("controls", data)
+        previous_time_glitch_hotkey = self.time_glitch_hotkey_signature()
+        voice_id = str(data.get("activeVoiceId") or self.active_voice_id)
+        if voice_id != self.active_voice_id or data.get("resetVoice", False):
+            self.engine.reset_voice_effects()
+        if voice_id != self.active_voice_id:
+            self.active_voice_id = voice_id
+            self.voice_recents = [voice_id] + [v for v in self.voice_recents if v != voice_id][:19]
+        self.voice_bypassed = bool(data.get("voiceBypassed", getattr(self, "voice_bypassed", False)))
+        self.gain = max(0.0, float(controls.get("gain", self.gain)))
+        self.pitch = float(controls.get("pitch", self.pitch))
+        self.master_mic_gain = max(0.0, float(controls.get("masterMicGain", self.master_mic_gain)))
+        self.master_voice_volume = max(0.0, float(controls.get("masterVoiceVolume", self.master_voice_volume)))
+        self.master_pitch = float(controls.get("masterPitch", self.master_pitch))
+        self.master_mute = bool(controls.get("masterMute", self.master_mute))
+        self.monitor_enabled = bool(controls.get("monitor", self.monitor_enabled))
+        self.monitor_volume = max(0.0, min(3.0, float(controls.get("monitorVolume", self.monitor_volume))))
+        self.soundboard_monitor_enabled = bool(controls.get("soundboardMonitor", self.soundboard_monitor_enabled))
+        self.soundboard_monitor_volume = max(0.0, min(3.0, float(controls.get("soundboardMonitorVolume", self.soundboard_monitor_volume))))
+        effects = controls.get("effects")
+        if effects:
+            self.effects = EffectsSettings.from_mapping(effects, self.effects)
+        if self.time_glitch_hotkey_signature() != previous_time_glitch_hotkey:
+            self.refresh_time_glitch_hotkey()
+        if self.monitor_only_active:
+            if self.monitor_enabled or self.soundboard_monitor_enabled:
+                self.engine.set_controls(
+                    1.0,
+                    0.0,
+                    EffectsSettings(),
+                    monitor_volume=self.monitor_volume,
+                    soundboard_monitor_enabled=self.soundboard_monitor_enabled,
+                    soundboard_monitor_volume=self.soundboard_monitor_volume,
+                    master_mic_gain=self.master_mic_gain,
+                    master_voice_volume=self.master_voice_volume,
+                    master_pitch=self.master_pitch,
+                    master_mute=self.master_mute,
+                )
+                self.engine.set_monitor(
+                    self.monitor_enabled,
+                    self.device_by_index(self.selected_monitor),
+                    monitor_volume=self.monitor_volume,
+                    soundboard_monitor_enabled=self.soundboard_monitor_enabled,
+                    soundboard_monitor_volume=self.soundboard_monitor_volume,
+                )
+            else:
+                self.stop()
+        else:
+            self.engine.set_controls(
+                self.gain,
+                self.pitch,
+                self.effects,
+                monitor_volume=self.monitor_volume,
+                soundboard_monitor_enabled=self.soundboard_monitor_enabled,
+                soundboard_monitor_volume=self.soundboard_monitor_volume,
+                master_mic_gain=self.master_mic_gain,
+                master_voice_volume=self.master_voice_volume,
+                master_pitch=self.master_pitch,
+                master_mute=self.master_mute,
+            )
+            self.engine.set_monitor(
+                self.monitor_enabled,
+                self.device_by_index(self.selected_monitor),
+                monitor_volume=self.monitor_volume,
+                soundboard_monitor_enabled=self.soundboard_monitor_enabled,
+                soundboard_monitor_volume=self.soundboard_monitor_volume,
+            )
+            if (self.monitor_enabled or self.soundboard_monitor_enabled) and not self.engine.running:
+                self.start_monitor_only()
+        self.controls_revision += 1
+        self.request_save_profile()
+
+    # ---------------- perfis de audio ----------------
+
+    def _profile_by_id(self, profile_id: str) -> dict | None:
+        for profile in self.audio_profiles:
+            if profile["id"] == str(profile_id):
+                return profile
+        return None
+
+    def _current_controls(self) -> dict:
+        return {
+            "gain": self.gain,
+            "pitch": self.pitch,
+            "masterMicGain": self.master_mic_gain,
+            "masterVoiceVolume": self.master_voice_volume,
+            "masterPitch": self.master_pitch,
+            "masterMute": self.master_mute,
+            "monitor": self.monitor_enabled,
+            "monitorVolume": self.monitor_volume,
+            "soundboardMonitor": self.soundboard_monitor_enabled,
+            "soundboardMonitorVolume": self.soundboard_monitor_volume,
+            "effects": asdict(self.effects),
+        }
+
+    def _current_device_refs(self) -> dict:
+        def ref(name, hostapi):
+            return {"name": name, "hostapi": hostapi} if name else None
+
+        return {
+            "input": ref(self.selected_input_name, self.selected_input_hostapi),
+            "output": ref(self.selected_output_name, self.selected_output_hostapi),
+            "monitor": ref(self.selected_monitor_name, self.selected_monitor_hostapi),
+        }
+
+    def create_audio_profile(self, data: dict) -> dict:
+        if len(self.audio_profiles) >= audio_profiles.MAX_PROFILES:
+            raise RuntimeError(f"Limite de {audio_profiles.MAX_PROFILES} perfis atingido.")
+        profile = audio_profiles.make_profile(
+            data.get("name"),
+            data.get("emoji"),
+            self.active_voice_id,
+            self._current_controls(),
+            self._current_device_refs(),
+            apply_devices=bool(data.get("applyDevices", False)),
+            processes=data.get("processes"),
+            hotkey=str(data.get("hotkey") or ""),
+        )
+        self.audio_profiles.append(profile)
+        self.active_audio_profile_id = profile["id"]
+        self.save_profile()
+        self.register_hotkeys()
+        return profile
+
+    def update_audio_profile(self, profile_id: str, patch: dict) -> None:
+        profile = self._profile_by_id(profile_id)
+        if profile is None:
+            raise RuntimeError("Perfil nao encontrado.")
+        merged = dict(profile)
+        for key in ("name", "emoji", "processes", "hotkey", "applyDevices"):
+            if key in patch:
+                merged[key] = patch[key]
+        if patch.get("capture"):
+            # "Atualizar com o estado atual": regrava voz, efeitos, volumes e dispositivos.
+            merged["voiceId"] = self.active_voice_id
+            merged["controls"] = self._current_controls()
+            merged["devices"] = self._current_device_refs()
+        cleaned = audio_profiles.sanitize_profile(merged)
+        if cleaned is None:
+            raise RuntimeError("Dê um nome para o perfil.")
+        cleaned["id"] = profile["id"]
+        cleaned["createdAt"] = profile.get("createdAt", cleaned["createdAt"])
+        self.audio_profiles[self.audio_profiles.index(profile)] = cleaned
+        self.save_profile()
+        self.register_hotkeys()
+
+    def delete_audio_profile(self, profile_id: str) -> None:
+        profile = self._profile_by_id(profile_id)
+        if profile is None:
+            return
+        self.audio_profiles.remove(profile)
+        if self.active_audio_profile_id == profile["id"]:
+            self.active_audio_profile_id = ""
+        self.save_profile()
+        self.register_hotkeys()
+
+    def apply_audio_profile(self, profile_id: str, *, automatic: bool = False) -> None:
+        profile = self._profile_by_id(profile_id)
+        if profile is None:
+            raise RuntimeError("Perfil nao encontrado.")
+        self.apply_controls(
+            {
+                "controls": dict(profile["controls"]),
+                "activeVoiceId": profile["voiceId"],
+                "voiceBypassed": False,
+                "resetVoice": True,
+            }
+        )
+        if profile.get("applyDevices"):
+            selection = {}
+            for key, direction in (("input", "input"), ("output", "output"), ("monitor", "output")):
+                ref = (profile.get("devices") or {}).get(key)
+                if not ref:
+                    continue
+                index = self.find_device_index(ref["name"], ref.get("hostapi"), direction)
+                if index is not None:
+                    selection[key] = index
+            if selection:
+                try:
+                    self.change_device_selection(selection)
+                except Exception as exc:
+                    self.profile_notice = f"Perfil aplicado, mas nao foi possivel trocar os dispositivos: {exc}"
+        self.active_audio_profile_id = profile["id"]
+        origin = "automaticamente" if automatic else "aplicado"
+        if not self.profile_notice or "dispositivos" not in self.profile_notice:
+            self.profile_notice = f"Perfil \"{profile['name']}\" {origin}."
+        self.save_profile()
+
+    def import_audio_profiles(self, raw_profiles) -> int:
+        added = 0
+        for item in raw_profiles if isinstance(raw_profiles, list) else []:
+            if len(self.audio_profiles) >= audio_profiles.MAX_PROFILES:
+                break
+            profile = audio_profiles.sanitize_profile(item, keep_id=False)
+            if profile is not None:
+                self.audio_profiles.append(profile)
+                added += 1
+        if added:
+            self.save_profile()
+            self.register_hotkeys()
+        return added
+
+    def _apply_profile_from_background(self, profile_id: str, *, automatic: bool) -> None:
+        """Usado pelo vigia de programas e pelos atalhos, que rodam fora das rotas HTTP."""
+        with self.lock:
+            with com_initialized():
+                self.apply_audio_profile(profile_id, automatic=automatic)
+
+    def profile_watch_loop(self) -> None:
+        """Troca o perfil sozinho quando um programa configurado fica em primeiro plano.
+
+        So consulta o Windows se algum perfil tiver programas; sem isso o custo e zero."""
+        while True:
+            time.sleep(2.0)
+            try:
+                if not any(profile.get("processes") for profile in self.audio_profiles):
+                    self._last_foreground_exe = ""
+                    continue
+                exe = audio_profiles.foreground_process_name()
+                if not exe or exe == self._last_foreground_exe:
+                    continue
+                self._last_foreground_exe = exe
+                match = audio_profiles.match_profile_for_process(self.audio_profiles, exe)
+                if match and match["id"] != self.active_audio_profile_id:
+                    self._apply_profile_from_background(match["id"], automatic=True)
+            except Exception as exc:
+                print("Vigia de perfis:", exc, flush=True)
 
     def set_voice_wanted(self, wanted: bool) -> None:
         self.voice_wanted = bool(wanted)
@@ -2601,6 +2859,8 @@ class AppState:
             "voiceWanted": self.voice_wanted,
             "voiceProblem": self.voice_problem,
             "voiceNotice": self.voice_notice,
+            "activeAudioProfileId": self.active_audio_profile_id,
+            "profileNotice": self.profile_notice,
             "sampleRate": self.engine.sample_rate,
             "blockSize": self.engine.block_size,
             "level": self.engine.last_level,
@@ -2677,6 +2937,8 @@ class AppState:
                 "inputChannels": self.settings.get("inputChannels", "mono"),
             },
             "clipStats": self.clipping_manager.stats(),
+            "audioProfiles": self.audio_profiles,
+            "activeAudioProfileId": self.active_audio_profile_id,
             "virtualMode": self.virtual_mode_active,
             "virtualCableDetected": choose_virtual_output_device(self.devices) is not None,
             "controlsRevision": self.controls_revision,
@@ -2984,6 +3246,28 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, 500)
 
     def _route_post(self, path: str, data: dict):
+        if path == "/api/profiles/create":
+            STATE.create_audio_profile(data)
+            return STATE.snapshot()
+        if path == "/api/profiles/update":
+            STATE.update_audio_profile(str(data.get("id") or ""), data.get("patch") or {})
+            return STATE.snapshot()
+        if path == "/api/profiles/delete":
+            STATE.delete_audio_profile(str(data.get("id") or ""))
+            return STATE.snapshot()
+        if path == "/api/profiles/apply":
+            STATE.apply_audio_profile(str(data.get("id") or ""))
+            return STATE.snapshot()
+        if path == "/api/profiles/import":
+            added = STATE.import_audio_profiles(data.get("profiles"))
+            if not added:
+                raise RuntimeError("Nenhum perfil valido encontrado no arquivo.")
+            return STATE.snapshot()
+        if path == "/api/profiles/notice-dismiss":
+            STATE.profile_notice = ""
+            return STATE.runtime_snapshot()
+        if path == "/api/profiles/foreground":
+            return {"process": audio_profiles.foreground_process_name()}
         if path == "/api/voice/notice-dismiss":
             STATE.voice_notice = ""
             return STATE.runtime_snapshot()
@@ -2996,77 +3280,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE.change_device_selection(selected)
             return STATE.snapshot()
         if path == "/api/controls":
-            controls = data.get("controls", data)
-            previous_time_glitch_hotkey = STATE.time_glitch_hotkey_signature()
-            voice_id = str(data.get("activeVoiceId") or STATE.active_voice_id)
-            if voice_id != STATE.active_voice_id or data.get("resetVoice", False):
-                STATE.engine.reset_voice_effects()
-            if voice_id != STATE.active_voice_id:
-                STATE.active_voice_id = voice_id
-                STATE.voice_recents = [voice_id] + [v for v in STATE.voice_recents if v != voice_id][:19]
-            STATE.voice_bypassed = bool(data.get("voiceBypassed", getattr(STATE, "voice_bypassed", False)))
-            STATE.gain = max(0.0, float(controls.get("gain", STATE.gain)))
-            STATE.pitch = float(controls.get("pitch", STATE.pitch))
-            STATE.master_mic_gain = max(0.0, float(controls.get("masterMicGain", STATE.master_mic_gain)))
-            STATE.master_voice_volume = max(0.0, float(controls.get("masterVoiceVolume", STATE.master_voice_volume)))
-            STATE.master_pitch = float(controls.get("masterPitch", STATE.master_pitch))
-            STATE.master_mute = bool(controls.get("masterMute", STATE.master_mute))
-            STATE.monitor_enabled = bool(controls.get("monitor", STATE.monitor_enabled))
-            STATE.monitor_volume = max(0.0, min(3.0, float(controls.get("monitorVolume", STATE.monitor_volume))))
-            STATE.soundboard_monitor_enabled = bool(controls.get("soundboardMonitor", STATE.soundboard_monitor_enabled))
-            STATE.soundboard_monitor_volume = max(0.0, min(3.0, float(controls.get("soundboardMonitorVolume", STATE.soundboard_monitor_volume))))
-            effects = controls.get("effects")
-            if effects:
-                STATE.effects = EffectsSettings.from_mapping(effects, STATE.effects)
-            if STATE.time_glitch_hotkey_signature() != previous_time_glitch_hotkey:
-                STATE.refresh_time_glitch_hotkey()
-            if STATE.monitor_only_active:
-                if STATE.monitor_enabled or STATE.soundboard_monitor_enabled:
-                    STATE.engine.set_controls(
-                        1.0,
-                        0.0,
-                        EffectsSettings(),
-                        monitor_volume=STATE.monitor_volume,
-                        soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
-                        soundboard_monitor_volume=STATE.soundboard_monitor_volume,
-                        master_mic_gain=STATE.master_mic_gain,
-                        master_voice_volume=STATE.master_voice_volume,
-                        master_pitch=STATE.master_pitch,
-                        master_mute=STATE.master_mute,
-                    )
-                    STATE.engine.set_monitor(
-                        STATE.monitor_enabled,
-                        STATE.device_by_index(STATE.selected_monitor),
-                        monitor_volume=STATE.monitor_volume,
-                        soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
-                        soundboard_monitor_volume=STATE.soundboard_monitor_volume,
-                    )
-                else:
-                    STATE.stop()
-            else:
-                STATE.engine.set_controls(
-                    STATE.gain,
-                    STATE.pitch,
-                    STATE.effects,
-                    monitor_volume=STATE.monitor_volume,
-                    soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
-                    soundboard_monitor_volume=STATE.soundboard_monitor_volume,
-                    master_mic_gain=STATE.master_mic_gain,
-                    master_voice_volume=STATE.master_voice_volume,
-                    master_pitch=STATE.master_pitch,
-                    master_mute=STATE.master_mute,
-                )
-                STATE.engine.set_monitor(
-                    STATE.monitor_enabled,
-                    STATE.device_by_index(STATE.selected_monitor),
-                    monitor_volume=STATE.monitor_volume,
-                    soundboard_monitor_enabled=STATE.soundboard_monitor_enabled,
-                    soundboard_monitor_volume=STATE.soundboard_monitor_volume,
-                )
-                if (STATE.monitor_enabled or STATE.soundboard_monitor_enabled) and not STATE.engine.running:
-                    STATE.start_monitor_only()
-            STATE.controls_revision += 1
-            STATE.request_save_profile()
+            STATE.apply_controls(data)
             return None
         if path == "/api/glitch/trigger":
             if (not STATE.effects.time_glitch_enabled or STATE.effects.time_glitch_trigger_mode != "shortcut"
@@ -4253,6 +4467,7 @@ def main() -> None:
         STATE = AppState()
         STATE.api_port = args.port
         threading.Thread(target=STATE.voice_watchdog_loop, daemon=True, name="micfudiddo-voice-watchdog").start()
+        threading.Thread(target=STATE.profile_watch_loop, daemon=True, name="micfudiddo-profile-watch").start()
         while server_thread.is_alive():
             server_thread.join(timeout=0.5)
     except Exception:

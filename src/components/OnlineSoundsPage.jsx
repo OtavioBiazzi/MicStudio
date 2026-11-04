@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlass, FadersHorizontal, YoutubeLogo, Lightning, ChartBar,
-  Sparkle, PauseCircle, Play, CheckCircle, Plus, MusicNotes, Microphone, X, SpeakerHigh
+  Sparkle, Pause, Play, Check, Plus, MusicNotes, X, SpeakerHigh, Broadcast
 } from "@phosphor-icons/react";
 import { formatTime } from "../utils";
-import { YoutubeImportModal, TTSModal } from "./Modals";
+import { YoutubeImportModal } from "./Modals";
 import { API } from "../apiClient";
 
 export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, toggleSoundboardFavorite }) {
@@ -24,7 +24,6 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
   const [maxDur, setMaxDur] = useState(300);
   const [showFilters, setShowFilters] = useState(false);
   const [showYoutubeModal, setShowYoutubeModal] = useState(false);
-  const [showTTSModal, setShowTTSModal] = useState(false);
   const [pendingSoundDestination, setPendingSoundDestination] = useState(null);
 
   const parseDuration = (durVal) => {
@@ -94,6 +93,15 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
   }, [sounds]);
 
   const loaderRef = useRef(null);
+
+  useEffect(() => {
+    if (!showFilters) return undefined;
+    const close = (event) => {
+      if (!event.target.closest?.(".exFilterWrap")) setShowFilters(false);
+    };
+    const timer = setTimeout(() => window.addEventListener("click", close), 0);
+    return () => { clearTimeout(timer); window.removeEventListener("click", close); };
+  }, [showFilters]);
 
   const loadSounds = async (pageNumber, queryStr, isAppend) => {
     if (pageNumber === 1) {
@@ -225,330 +233,172 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
     }
   };
 
+  const filtersActive = minDur > 0 || maxDur < 300;
+  const previewVolume = Math.round(Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100);
+  const searching = Boolean(activeQuery) && !["recent", "recommended"].includes(activeQuery);
+  const clearFilters = () => { setMinDur(0); setMaxDur(300); };
+  const runSearch = () => { setSelectedPill(""); setActiveQuery(queryInput.trim()); };
+  const TABS = [
+    { id: "Populares", icon: ChartBar },
+    { id: "Recentes", icon: Lightning },
+    { id: "Recomendados", icon: Sparkle }
+  ];
+
   return (
-    <div>
+    <div className="exPage">
       <h2 className="srOnly">Explorar Sons</h2>
 
-      <div className="pageToolbar" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div className="toolbarLeft" style={{ display: "flex", gap: 12, width: "100%", alignItems: "center" }}>
-          <div className="searchBar" style={{ marginBottom: 0, flex: 1 }}>
-            <MagnifyingGlass size={16} className="searchIcon" />
-            <input
-              placeholder="Buscar sons online (Aperte Enter para buscar)..."
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-          <button
-            onClick={() => {
-              setShowFilters(!showFilters);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "10px 16px",
-              background: showFilters ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
-              border: showFilters ? "1px solid var(--purple)" : "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              color: showFilters ? "var(--text)" : "var(--text-secondary)",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              height: 38,
-              transition: "all 0.2s"
-            }}
-          >
-            <FadersHorizontal size={16} />
-            <span>Filtros</span>
-          </button>
-          <button
-            onClick={() => {
-              setShowYoutubeModal(true);
-              setShowFilters(false);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "10px 16px",
-              background: showYoutubeModal ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
-              border: showYoutubeModal ? "1px solid var(--purple)" : "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              color: showYoutubeModal ? "var(--text)" : "var(--text-secondary)",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              height: 38,
-              transition: "all 0.2s"
-            }}
-          >
-            <YoutubeLogo size={16} color="#FF0000" />
-            <span>Adicionar Som do YouTube/TikTok</span>
-          </button>
-          <button
-            onClick={() => {
-              setShowTTSModal(true);
-              setShowFilters(false);
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "10px 16px",
-              background: showTTSModal ? "var(--purple-soft)" : "rgba(255, 255, 255, 0.05)",
-              border: showTTSModal ? "1px solid var(--purple)" : "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              color: showTTSModal ? "var(--text)" : "var(--text-secondary)",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              height: 38,
-              transition: "all 0.2s"
-            }}
-          >
-            <Microphone size={16} color="var(--purple)" />
-            <span>Gerar Voz por Texto (TTS)</span>
-          </button>
+      <header className="exHeader">
+        <div>
+          <h1>Explorar sons</h1>
+          <p>Biblioteca online: ouça uma prévia e adicione ao seu soundboard.</p>
+        </div>
+        <button className="btn btn-ghost exYoutube" onClick={() => { setShowYoutubeModal(true); setShowFilters(false); }}>
+          <YoutubeLogo size={16} weight="fill" /> Baixar do YouTube ou TikTok
+        </button>
+      </header>
+
+      <div className="exToolbar">
+        <div className="exSearch">
+          <MagnifyingGlass size={16} />
+          <input
+            placeholder="Buscar sons (ex.: risada, explosão, meme)..."
+            value={queryInput}
+            onChange={(e) => setQueryInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          {queryInput && (
+            <button className="exClear" aria-label="Limpar busca" onClick={() => { setQueryInput(""); handlePillClick("Populares"); }}>
+              <X size={14} />
+            </button>
+          )}
+          <button className="exSearchBtn" onClick={runSearch}>Buscar</button>
         </div>
 
-        <AnimatePresence>
+        <div className="exFilterWrap">
+          <button className={`exFilterBtn ${showFilters || filtersActive ? "on" : ""}`} onClick={() => setShowFilters((open) => !open)} aria-expanded={showFilters}>
+            <FadersHorizontal size={16} /> Filtros {filtersActive && <i className="exDot" />}
+          </button>
           {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0, marginTop: 0 }}
-              animate={{ height: "auto", opacity: 1, marginTop: 4 }}
-              exit={{ height: 0, opacity: 0, marginTop: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              style={{ overflow: "hidden" }}
-            >
-              <div className="collapsible-filters-panel" style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid var(--border)",
-                padding: "12px 16px",
-                borderRadius: "var(--radius-md)",
-                flexWrap: "wrap"
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 240 }}>
-                  <SpeakerHigh size={16} color="var(--cyan)" />
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 112 }}>Volume da prévia</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100)}
-                    onChange={(e) => call("/api/settings", { onlinePreviewVolume: String(Number(e.target.value) / 100) })}
-                    style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2, accentColor: "var(--cyan)" }}
-                    aria-label="Volume da prévia dos sons online"
-                  />
-                  <span style={{ fontSize: 11, color: "var(--text-secondary)", minWidth: 34, textAlign: "right" }}>
-                    {Math.round(Number(state.settings?.onlinePreviewVolume ?? 0.25) * 100)}%
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>
-                  <Lightning size={16} color="var(--cyan)" />
-                  <span>Filtrar Duração (s):</span>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 55 }}>Mín: {minDur}s</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={300}
-                    step={1}
-                    value={minDur}
-                    onChange={(e) => setMinDur(Math.min(Number(e.target.value), maxDur))}
-                    style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2, accentColor: "var(--cyan)" }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 55 }}>Máx: {maxDur === 300 ? "300s+" : `${maxDur}s`}</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={300}
-                    step={1}
-                    value={maxDur}
-                    onChange={(e) => setMaxDur(Math.max(Number(e.target.value), minDur))}
-                    style={{ flex: 1, height: 4, background: "var(--border)", borderRadius: 2, accentColor: "var(--purple)" }}
-                  />
-                </div>
-
-                <button
-                  onClick={() => { setMinDur(0); setMaxDur(300); }}
-                  style={{
-                    padding: "4px 8px",
-                    background: "none",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-xs)",
-                    color: "var(--text-muted)",
-                    fontSize: 10,
-                    cursor: "pointer",
-                    transition: "all 0.2s"
-                  }}
-                >
-                  Limpar
-                </button>
+            <div className="exPopover" role="dialog" aria-label="Filtros">
+              <div className="exPopoverBlock">
+                <div className="exPopoverTitle">Duração do som <em>{minDur}s a {maxDur === 300 ? "300s ou mais" : `${maxDur}s`}</em></div>
+                <label className="exSliderRow">
+                  <span>Mínima</span>
+                  <input type="range" min={0} max={300} step={1} value={minDur} onChange={(e) => setMinDur(Math.min(Number(e.target.value), maxDur))} />
+                </label>
+                <label className="exSliderRow">
+                  <span>Máxima</span>
+                  <input type="range" min={0} max={300} step={1} value={maxDur} onChange={(e) => setMaxDur(Math.max(Number(e.target.value), minDur))} />
+                </label>
               </div>
-            </motion.div>
+              <div className="exPopoverBlock">
+                <div className="exPopoverTitle"><SpeakerHigh size={14} /> Volume das prévias <em>{previewVolume}%</em></div>
+                <input
+                  className="exVolume"
+                  type="range" min={0} max={100} step={1} value={previewVolume}
+                  onChange={(e) => call("/api/settings", { onlinePreviewVolume: String(Number(e.target.value) / 100) })}
+                  aria-label="Volume da prévia dos sons online"
+                />
+              </div>
+              <div className="exPopoverFooter">
+                <button className="btn btn-ghost" onClick={clearFilters} disabled={!filtersActive}>Limpar duração</button>
+                <button className="btn btn-primary" onClick={() => setShowFilters(false)}>Pronto</button>
+              </div>
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
-      <div className="categoryPills" style={{ marginTop: 12 }}>
-        <button
-          className={selectedPill === "Populares" ? "active" : ""}
-          onClick={() => handlePillClick("Populares")}
-        >
-          <ChartBar size={12} style={{ marginRight: 6 }} /> Populares
-        </button>
-        <button
-          className={selectedPill === "Recentes" ? "active" : ""}
-          onClick={() => handlePillClick("Recentes")}
-        >
-          <Lightning size={12} style={{ marginRight: 6 }} /> Recentes
-        </button>
-        <button
-          className={selectedPill === "Recomendados" ? "active" : ""}
-          onClick={() => handlePillClick("Recomendados")}
-        >
-          <Sparkle size={12} style={{ marginRight: 6 }} /> Recomendados
-        </button>
+      <div className="exTabsRow">
+        <div className="exTabs" role="tablist">
+          {TABS.map(({ id, icon: Icon }) => (
+            <button key={id} role="tab" aria-selected={selectedPill === id} className={selectedPill === id ? "active" : ""} onClick={() => handlePillClick(id)}>
+              <Icon size={14} /> {id}
+            </button>
+          ))}
+        </div>
+        <span className="exCount">
+          {searching ? <>Resultados para <strong>"{activeQuery}"</strong> · </> : null}
+          {loading && page === 1 ? "buscando..." : `${filteredSounds.length} ${filteredSounds.length === 1 ? "som" : "sons"}`}
+        </span>
       </div>
+
+      {filtersActive && (
+        <div className="exChips">
+          <button className="exChip" onClick={clearFilters}>
+            Duração: {minDur}s a {maxDur === 300 ? "300s+" : `${maxDur}s`} <X size={12} />
+          </button>
+        </div>
+      )}
 
       {loading && page === 1 ? (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "64px 0",
-            gap: 12,
-            color: "var(--text-muted)",
-            fontSize: 13,
-            border: "1px dashed var(--border)",
-            borderRadius: "var(--radius-md)",
-            background: "rgba(255,255,255,0.01)",
-            marginTop: 16,
-          }}
-        >
-          <div
-            className="spinner"
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.08)",
-              borderTopColor: "var(--purple)",
-              animation: "spin 0.8s linear infinite",
-            }}
-          />
-          <span>Buscando sons na nuvem...</span>
+        <div className="exGrid" aria-busy="true" aria-label="Carregando sons">
+          {Array.from({ length: 9 }, (_, i) => (
+            <div key={i} className="exCard exSkeleton"><span className="exPlay" /><div className="exInfo"><i /><i /></div></div>
+          ))}
         </div>
       ) : (
-        <div style={{ marginTop: 16 }}>
-          <div className="online-library-grid">
+        <>
+          {filteredSounds.length === 0 && (
+            <div className="exEmpty">
+              <Broadcast size={34} weight="duotone" />
+              <h3>{sounds.length > 0 ? "Nenhum som com esse filtro" : "Nenhum som encontrado"}</h3>
+              <p>{sounds.length > 0 ? "A duração escolhida está escondendo os resultados." : "Tente outra palavra ou volte para Populares."}</p>
+              {sounds.length > 0
+                ? <button className="btn btn-primary" onClick={clearFilters}>Limpar filtros</button>
+                : <button className="btn btn-primary" onClick={() => { setQueryInput(""); handlePillClick("Populares"); }}>Ver populares</button>}
+            </div>
+          )}
+
+          <div className="exGrid">
             {filteredSounds.map((sound) => {
               const status = downloading[sound.id];
               const isAlreadyInLocal = state.sounds?.some((s) => s.name === sound.name);
               const isPlaying = state.player?.state === "playing" && state.player?.soundId === sound.id;
+              const added = status === "imported" || isAlreadyInLocal;
+              const durationText = sound.duration === "Nuvem" ? "Nuvem" : (sound.duration && sound.duration !== "N/A" ? formatTime(sound.duration) : "...");
 
               return (
-                <div key={sound.id} className="online-sound-card">
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <button className={`play-btn ${isPlaying ? "playing" : ""}`} aria-label={isPlaying ? `Parar prévia: ${sound.name}` : `Ouvir prévia: ${sound.name}`} title={isPlaying ? "Parar prévia" : "Ouvir prévia"} onClick={() => handlePlayPreview(sound)}>
-                      {isPlaying ? <PauseCircle size={20} weight="fill" /> : <Play size={20} weight="fill" />}
+                <div key={sound.id} className={`exCard ${isPlaying ? "playing" : ""}`}>
+                  <button
+                    className="exPlay"
+                    aria-label={isPlaying ? `Parar prévia: ${sound.name}` : `Ouvir prévia: ${sound.name}`}
+                    title={isPlaying ? "Parar prévia" : "Ouvir prévia"}
+                    onClick={() => handlePlayPreview(sound)}
+                  >
+                    {isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}
+                  </button>
+
+                  <div className="exInfo">
+                    <div className="exName" title={sound.name}>{sound.name}</div>
+                    <div className="exMeta">
+                      <span className="exTag" style={{ "--tag": sound.color || "var(--purple)" }}>{sound.category || "Online"}</span>
+                      <span>{sound.plays} plays</span>
+                      <span>{durationText}</span>
+                    </div>
+                  </div>
+
+                  {added ? (
+                    <span className="exAdded"><Check size={14} weight="bold" /> No soundboard</span>
+                  ) : (
+                    <button className="exAdd" onClick={() => setPendingSoundDestination(sound)} disabled={status === "downloading"}>
+                      {status === "downloading" ? "Adicionando..." : <><Plus size={14} weight="bold" /> Adicionar</>}
                     </button>
-                    
-                    <div className="online-sound-cover" style={{ width: 34, height: 34, borderRadius: "50%", background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))`, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${sound.color || "var(--purple-soft)"}`, flexShrink: 0 }}>
-                      <MusicNotes size={16} color={sound.color || "var(--purple)"} />
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: "var(--text)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {sound.name}
-                      </div>
-                      <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-                        {sound.category || "Online"} • {sound.plays} plays • {sound.duration === "Nuvem" ? "Nuvem" : (sound.duration && sound.duration !== "N/A" ? formatTime(sound.duration) : "...")}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                    {status === "imported" || isAlreadyInLocal ? (
-                      <button className="import-btn imported" disabled style={{ width: "100%" }}>
-                        <CheckCircle size={14} weight="bold" /> Adicionado ao Soundboard
-                      </button>
-                    ) : (
-                      <button
-                        className="import-btn"
-                        onClick={() => setPendingSoundDestination(sound)}
-                        disabled={status === "downloading"}
-                        style={{ width: "100%" }}
-                      >
-                        {status === "downloading" ? (
-                          <span>Adicionando...</span>
-                        ) : (
-                          <>
-                            <Plus size={14} weight="bold" style={{ marginRight: 6 }} /> Adicionar ao Soundboard
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {hasMore && (
-            <div
-              ref={loaderRef}
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                padding: "24px 0",
-                color: "var(--text-muted)",
-                fontSize: 12,
-              }}
-            >
-              {loadingMore ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div
-                    className="spinner"
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: "50%",
-                      border: "2px solid rgba(255,255,255,0.08)",
-                      borderTopColor: "var(--purple)",
-                      animation: "spin 0.8s linear infinite",
-                    }}
-                  />
-                  <span>Carregando mais sons...</span>
-                </div>
-              ) : (
-                <span>Desça para carregar mais</span>
-              )}
+          {hasMore && filteredSounds.length > 0 && (
+            <div ref={loaderRef} className="exLoadMore">
+              {loadingMore ? "Carregando mais sons..." : "Role para carregar mais"}
             </div>
           )}
-        </div>
+          {/* o observador precisa existir mesmo quando o filtro esconde tudo */}
+          {hasMore && filteredSounds.length === 0 && <div ref={loaderRef} className="exLoadMore" />}
+        </>
       )}
 
       <AnimatePresence>
@@ -558,14 +408,6 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
             call={call}
             setToast={setToast}
             state={state}
-          />
-        )}
-        {showTTSModal && (
-          <TTSModal
-            onClose={() => setShowTTSModal(false)}
-            call={call}
-            setToast={setToast}
-            settings={state.settings}
           />
         )}
         {pendingSoundDestination && (

@@ -3,7 +3,8 @@ const path = require("path");
 const { spawn } = require("child_process");
 const { backendFailure, waitUntilReady } = require("./backend-status.cjs");
 const { createIntroOpener, createSessionGate } = require("./onboarding.cjs");
-const { runHotkeyNatively } = require("./hotkey-native.cjs");
+const { runHotkeyNatively, createRepeatGuard } = require("./hotkey-native.cjs");
+const hotkeyRepeatGuard = createRepeatGuard();
 
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
@@ -546,6 +547,7 @@ function notifyHotkey(body) {
 }
 
 async function dispatchHotkey(action) {
+  if (!hotkeyRepeatGuard(action)) return; // repeticao automatica do teclado com a tecla segurada
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("hotkey:trigger", action);
     return;

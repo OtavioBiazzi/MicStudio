@@ -31,6 +31,7 @@ from .devices import (
 )
 from .engine import AudioEngine, EngineConfig
 from . import profiles as audio_profiles
+from .hotkeys import HoldTracker
 from .processing import EffectsSettings
 from .recording import MultiDeviceRecorder, query_record_devices
 from .soundboard import (
@@ -282,6 +283,12 @@ class AppState:
         self.hotkey_handles = []
         self.time_glitch_hotkey_handles = []
         self.time_glitch_hotkey_down = False
+        # "Apertar" x "segurar": um disparo por pressionamento, aviso ao soltar (ver hotkeys.py).
+        self._hold = HoldTracker(still_held=self._hotkey_still_held)
+        self._hold_hook = None
+        self._hotkey_futures = {}
+        self._glitch_hold_mode = False
+        self._glitch_signature = None
         self._shutdown_started = False
         
         self.custom_voices_path = self.library.base_dir / "custom_voices.json"
@@ -1070,7 +1077,7 @@ class AppState:
                 try:
                     handle = keyboard.add_hotkey(
                         hotkey, 
-                        lambda item_id=item.id: self.play_sound(item_id),
+                        lambda item_id=item.id, combo=hotkey: self._sound_hotkey_pressed(item_id, combo),
                         suppress=False
                     )
                     self.hotkey_handles.append(handle)
@@ -1083,13 +1090,88 @@ class AppState:
             try:
                 handle = keyboard.add_hotkey(
                     hotkey,
-                    lambda profile_id=profile["id"]: self._apply_profile_from_background(profile_id, automatic=False),
+                    lambda profile_id=profile["id"], combo=hotkey: self._profile_hotkey_pressed(profile_id, combo),
                     suppress=False,
                 )
                 self.hotkey_handles.append(handle)
             except Exception as e:
                 print(f"Error registering hotkey {hotkey} for profile {profile['name']}: {e}")
+        self._ensure_key_hook()
         self.refresh_time_glitch_hotkey()
+
+    # ---------------- apertar x segurar ----------------
+
+    def _hotkey_still_held(self, hotkey: str) -> bool:
+        try:
+            import keyboard
+
+            return bool(keyboard.is_pressed(hotkey))
+        except Exception:
+            return True
+
+    def _ensure_key_hook(self) -> None:
+        """Um unico observador de teclas soltas para todos os atalhos (som, perfil e glitch)."""
+        if self._hold_hook is not None:
+            return
+        try:
+            import keyboard
+
+            self._hold_hook = keyboard.hook(self._on_global_key_event, suppress=False)
+        except Exception as exc:
+            print("Nao foi possivel observar as teclas soltas:", exc)
+
+    def _on_global_key_event(self, event) -> None:
+        if getattr(event, "event_type", "") != "up":
+            return
+        for hotkey_id in self._hold.key_up(getattr(event, "name", "")):
+            try:
+                self._on_hotkey_released(hotkey_id)
+            except Exception as exc:
+                print("Atalho solto:", exc)
+
+    def _on_hotkey_released(self, hotkey_id: str) -> None:
+        if hotkey_id == "glitch":
+            self.time_glitch_hotkey_down = False
+            # So solta o glitch se ainda for a mesma configuracao/voz que foi registrada (callback velho nao pode parar uma voz nova).
+            if self._glitch_hold_mode and self.time_glitch_hotkey_signature() == getattr(self, "_glitch_signature", None):
+                self.engine.release_time_glitch()
+            return
+        if hotkey_id.startswith("sound:"):
+            item_id = hotkey_id[len("sound:"):]
+            future = self._hotkey_futures.pop(hotkey_id, None)
+            item = self.library.by_id(item_id)
+            if item is not None and str(item.playback_mode or "").strip().lower() == "hold_loop":
+                # "Segurar para repetir": soltou a tecla, para o som (depois que ele de fato comecou a tocar).
+                def stop(*_args) -> None:
+                    self.engine.stop_sound(sound_id=item_id)
+
+                if future is not None and not future.done():
+                    future.add_done_callback(stop)
+                else:
+                    stop()
+
+    def _sound_hotkey_pressed(self, item_id: str, hotkey: str) -> None:
+        hotkey_id = f"sound:{item_id}"
+        if not self._hold.press(hotkey_id, hotkey):
+            return  # repeticao automatica do teclado enquanto a tecla esta segurada
+        try:
+            self._hotkey_futures[hotkey_id] = self.playback_executor.submit(self._play_sound_from_hotkey, item_id)
+        except RuntimeError:
+            self._hold.release(hotkey_id)  # o app esta fechando
+
+    def _play_sound_from_hotkey(self, item_id: str) -> None:
+        try:
+            self.play_sound(item_id)
+        except Exception as exc:
+            print("Atalho de som:", exc, flush=True)
+
+    def _profile_hotkey_pressed(self, profile_id: str, hotkey: str) -> None:
+        if not self._hold.press(f"profile:{profile_id}", hotkey):
+            return
+        try:
+            self.playback_executor.submit(self._apply_profile_from_background, profile_id, automatic=False)
+        except RuntimeError:
+            pass
 
     def time_glitch_hotkey_signature(self) -> tuple:
         return (
@@ -1117,6 +1199,7 @@ class AppState:
                 pass
         self.time_glitch_hotkey_handles = []
         self.time_glitch_hotkey_down = False
+        self._hold.release("glitch")
         self.engine.release_time_glitch()
 
         effects = self.effects
@@ -1136,7 +1219,9 @@ class AppState:
             return
 
         hold_mode = effects.time_glitch_shortcut_mode == "hold"
+        self._glitch_hold_mode = hold_mode
         registered_signature = self.time_glitch_hotkey_signature()
+        self._glitch_signature = registered_signature
 
         def trigger() -> None:
             # Ignore callbacks racing with a refresh or a voice change.
@@ -1144,25 +1229,14 @@ class AppState:
                 return
             if not self.engine.running or self.monitor_only_active or getattr(self, "voice_bypassed", False):
                 return
-            if self.time_glitch_hotkey_down:
-                return
+            if not self._hold.press("glitch", hotkey):
+                return  # repeticao do teclado enquanto segura
             self.time_glitch_hotkey_down = True
             self.engine.trigger_time_glitch(hold=hold_mode)
 
         try:
             press_handle = keyboard.add_hotkey(hotkey, trigger, suppress=False)
             self.time_glitch_hotkey_handles.append(("hotkey", press_handle))
-            def release(event) -> None:
-                if self.time_glitch_hotkey_signature() != registered_signature or not self.time_glitch_hotkey_down:
-                    return
-                name = str(event.name or "").lower().removeprefix("left ").removeprefix("right ")
-                if event.event_type == "up" and name in [key.strip() for key in hotkey.split("+")]:
-                    self.time_glitch_hotkey_down = False
-                    if hold_mode:
-                        self.engine.release_time_glitch()
-
-            release_handle = keyboard.hook(release, suppress=False)
-            self.time_glitch_hotkey_handles.append(("hook", release_handle))
         except Exception as e:
             print(f"Error registering command glitch hotkey {hotkey}: {e}")
             for kind, handle in self.time_glitch_hotkey_handles:
@@ -1489,6 +1563,12 @@ class AppState:
                         keyboard.unhook(handle)
                 except Exception:
                     pass
+            if self._hold_hook is not None:
+                try:
+                    keyboard.unhook(self._hold_hook)
+                except Exception:
+                    pass
+                self._hold_hook = None
         except Exception:
             pass
         self.hotkey_handles = []

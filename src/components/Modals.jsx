@@ -16,10 +16,27 @@ import {
 import { useTtsVoices } from "../useTtsVoices";
 
 const playbackModes = [
-  { value: "restart", label: "Reiniciar ao clicar" },
-  { value: "stop", label: "Parar ao clicar" },
-  { value: "overlap", label: "Sobrepor áudio" }
+  { value: "restart", label: "Recomeçar do início", desc: "Tocar de novo recomeça o som do início." },
+  { value: "overlap", label: "Tocar por cima", desc: "Cada vez toca por cima do anterior, sem cortar." },
+  { value: "stop", label: "Tocar e parar", desc: "Tocar de novo enquanto está tocando para o som." },
+  { value: "pause", label: "Pausar e continuar", desc: "Tocar de novo pausa; mais uma vez continua de onde parou." },
+  { value: "hold_loop", label: "Segurar para repetir", desc: "Repete enquanto você segura a tecla do atalho e para ao soltar." }
 ];
+
+function OptionRow({ label, desc, checked, onChange }) {
+  return (
+    <label className="optRow">
+      <span className="optText">
+        <span className="optLabel">{label}</span>
+        {desc && <span className="optDesc">{desc}</span>}
+      </span>
+      <span className="toggleSwitch">
+        <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />
+        <span className="toggleTrack" />
+      </span>
+    </label>
+  );
+}
 
 const soundOutputRoutes = [
   { value: "both", label: "Microfone + Monitoramento" },
@@ -30,7 +47,7 @@ const soundOutputRoutes = [
 const TTS_CHARACTER_LIMIT = 10000;
 
 // --- WaveformVisualizer ---
-export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, playingPosition }) {
+export function WaveformVisualizer({ soundId, path, start, end, duration, onUpdateTrim, previewPlaying = false, previewBase = 0, previewSpeed = 1 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -38,6 +55,23 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
   const [isDragging, setIsDragging] = useState(null);
 
   const [peaks, setPeaks] = useState([]);
+  const [playingPosition, setPlayingPosition] = useState(null);
+
+  // Cabeca de reproducao: avanca suave a cada quadro enquanto a previa toca (o estado do backend chega a cada ~0,4 s).
+  // Posicao no audio de origem = inicio do corte + tempo ja tocado x velocidade.
+  useEffect(() => {
+    if (!previewPlaying) { setPlayingPosition(null); return undefined; }
+    const startedAt = performance.now();
+    const limit = (end === null || end === undefined || end === "") ? duration : Number(end);
+    let frame;
+    const tick = () => {
+      const played = Number(previewBase) + (performance.now() - startedAt) / 1000;
+      setPlayingPosition(Math.min(limit, Number(start) + played * (Number(previewSpeed) || 1)));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [previewPlaying, previewBase, previewSpeed, start, end, duration]);
   
   useEffect(() => {
     if (!soundId) return;
@@ -85,6 +119,9 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
     const startPct = start / duration;
     const endPct = (end === null || end === undefined || end === "") ? 1.0 : (end / duration);
     const barWidth = (width / peaks.length) * zoom;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const themeTop = rootStyle.getPropertyValue("--accent-lighter").trim() || "#C4B5FD";
+    const themeBottom = rootStyle.getPropertyValue("--purple").trim() || "#8B5CF6";
 
     // Draw audio peaks
     peaks.forEach((peak, i) => {
@@ -99,8 +136,8 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
 
       if (isActive) {
         const grad = ctx.createLinearGradient(x, y, x, y + barHeight);
-        grad.addColorStop(0, "#00E5FF");
-        grad.addColorStop(1, "#8B5CF6");
+        grad.addColorStop(0, themeTop);
+        grad.addColorStop(1, themeBottom);
         ctx.fillStyle = grad;
       } else {
         ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
@@ -199,7 +236,7 @@ export function WaveformVisualizer({ soundId, path, start, end, duration, onUpda
   return (
     <div className="waveform-editor-container" ref={containerRef}>
       <div className="waveform-zoom-controls">
-        <span style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>✂️ EDITOR DE CORTE WAVEFORM</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Forma de onda e corte · arraste as barras de início e fim</span>
         <div className="waveform-zoom-buttons">
           <button className={`btn btn-ghost ${zoom === 1 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => { setZoom(1); setScrollLeft(0); }}>1x</button>
           <button className={`btn btn-ghost ${zoom === 1.5 ? "active" : ""}`} style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setZoom(1.5)}>1.5x</button>
@@ -1278,7 +1315,7 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
         transition={{ duration: 0.15 }}
       >
         <div className="sound-modal-header">
-          <h3>🎚️ Editor de Som Avançado: <span style={{ color: "var(--purple)" }}>{selected.name}</span></h3>
+          <h3>Editor de som <span className="editorSoundName">{selected.name}</span></h3>
           <button className="close-btn" onClick={onClose}><X size={18} /></button>
         </div>
 
@@ -1329,7 +1366,39 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
               end={endSec}
               duration={selected.duration || 6.0}
               onUpdateTrim={(s, e) => { setStartSec(s); setEndSec(e); }}
+              previewPlaying={Boolean(isCurrentlyPlaying)}
+              previewBase={Number(state?.player?.current || 0)}
+              previewSpeed={Number(draft.speed ?? 1.0)}
             />
+
+            <div className="editorTransport">
+              <button className={`btn ${isCurrentlyPlaying ? "btn-ghost danger" : "btn-primary"}`} onClick={isCurrentlyPlaying ? handleStopPreview : handlePreview}>
+                {isCurrentlyPlaying ? <><StopCircle size={15} weight="fill" /> Parar</> : <><Play size={15} weight="fill" /> Ouvir a seleção</>}
+              </button>
+              <label className="editorTime">
+                <span>Início</span>
+                <input type="number" min="0" step="0.05" value={Number(startSec).toFixed(2)}
+                  onChange={(e) => {
+                    const limit = endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec);
+                    const next = Math.max(0, Math.min(Number(e.target.value) || 0, limit - 0.05));
+                    setStartSec(next);
+                  }} />
+                <em>s</em>
+              </label>
+              <label className="editorTime">
+                <span>Fim</span>
+                <input type="number" min="0" step="0.05" value={(endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)).toFixed(2)}
+                  onChange={(e) => {
+                    const total = Number(selected.duration || 6);
+                    setEndSec(Math.min(total, Math.max(Number(startSec) + 0.05, Number(e.target.value) || total)));
+                  }} />
+                <em>s</em>
+              </label>
+              <span className="editorSelection">
+                Seleção: <strong>{Math.max(0, (endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)) - Number(startSec)).toFixed(2)}s</strong> de {Number(selected.duration || 6).toFixed(2)}s
+              </span>
+              <button className="btn btn-ghost" onClick={() => { setStartSec(0); setEndSec(Number(selected.duration || 6)); }}>Zerar corte</button>
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
               {/* Sliders Grid */}
@@ -1353,24 +1422,21 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
               </div>
 
               {/* Behavior & Options */}
-              <div style={{ background: "var(--bg-card-secondary)", padding: 12, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>Playback:</span>
-                  <select value={draft.playback_mode || "restart"} onChange={(e) => setDraft({ ...draft, playback_mode: e.target.value })} style={{ padding: "4px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11 }}>
+              <div className="editorOptions">
+                <div className="optTitle">Como este som toca</div>
+                <label className="optSelectRow">
+                  <span className="optLabel">Ao tocar de novo</span>
+                  <select value={draft.playback_mode || "restart"} onChange={(e) => setDraft({ ...draft, playback_mode: e.target.value })}>
                     {playbackModes.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!draft.loop} onChange={(e) => setDraft({ ...draft, loop: e.target.checked })} /> Looping Contínuo
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!draft.normalize} onChange={(e) => setDraft({ ...draft, normalize: e.target.checked })} /> Normalizar Picos
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!draft.block_voice} onChange={(e) => setDraft({ ...draft, block_voice: e.target.checked })} /> Bloquear Minha Voz
-                  </label>
-                </div>
+                </label>
+                <p className="optModeDesc">{(playbackModes.find((m) => m.value === (draft.playback_mode || "restart")) || playbackModes[0]).desc}</p>
+
+                <OptionRow label="Repetir em loop" desc="O som toca de novo sem parar até você interromper." checked={draft.loop} onChange={(v) => setDraft({ ...draft, loop: v })} />
+                <OptionRow label="Igualar o volume" desc="Normaliza o som para ele não ficar baixo nem estourar." checked={draft.normalize} onChange={(v) => setDraft({ ...draft, normalize: v })} />
+                <OptionRow label="Calar a minha voz" desc="Sua voz não vai para o Discord enquanto este som toca." checked={draft.block_voice} onChange={(v) => setDraft({ ...draft, block_voice: v })} />
+                <OptionRow label="Parar os outros sons" desc="Ao tocar este, os outros sons são interrompidos." checked={draft.stop_other_sounds} onChange={(v) => setDraft({ ...draft, stop_other_sounds: v })} />
+                <OptionRow label="Silenciar os outros sons" desc="Os outros sons ficam mudos enquanto este toca." checked={draft.mute_other_sounds} onChange={(v) => setDraft({ ...draft, mute_other_sounds: v })} />
                 {selected.isClip && (
                   <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
                     <span style={{ fontSize: 10, fontWeight: 800, color: "var(--purple)", textTransform: "uppercase" }}>Canais do Clipe</span>
@@ -1490,6 +1556,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.3.0": `### Versão 2.3.0
+* Editor de som corrigido: a forma de onda e o corte tinham ficado esmagados (altura zero) depois dos efeitos novos. Agora aparecem de novo, com player de verdade: botão para ouvir a seleção, cabeça de reprodução em movimento, campos de início e fim, "zerar corte" e as cores do tema. O emoji do título saiu.
+* Atalhos de segurar e de apertar corrigidos: segurar a tecla de um som não reinicia mais dezenas de vezes por segundo, o modo "segurar para repetir" agora toca enquanto a tecla está apertada e para ao soltar, e o glitch não fica mais preso se o evento de soltar se perder. Segurar um atalho global (mutar, ligar a voz) também não alterna sem parar.
+* Explorar Sons redesenhado: cabeçalho, busca com botão, abas segmentadas, filtros num popover (sem painel dentro de painel, com as cores do tema), chips dos filtros ativos, cards limpos, carregamento com esqueleto e estados vazios claros.
+* Cartão "Como este som toca" refeito no editor: chaves com explicação do que cada uma faz, e agora os cinco modos aparecem (recomeçar, tocar por cima, tocar e parar, pausar e continuar, segurar para repetir), além de "parar os outros sons" e "silenciar os outros sons".
+* Texto para voz fica só no menu "Adicionar" do Soundboard.
+* Ícone do app com fundo violeta e microfone mais fino, para aparecer bem na barra de tarefas.`,
   "v2.2.1": `### Versão 2.2.1
 * Ícone atualizado: só o microfone violeta, maior e mais limpo, sem as ondas laterais.
 * Menos travadinhas ao tocar sons: tocar um som não regrava mais a biblioteca inteira na hora (o placar de plays é salvo em segundo plano) nem faz a interface baixar e redesenhar os 270 sons de novo. Só o card do som tocado é atualizado.`,

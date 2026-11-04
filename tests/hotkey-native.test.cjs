@@ -61,3 +61,28 @@ test("falha do backend vira erro", async () => {
   const fetchImpl = async () => ({ ok: false, status: 500, json: async () => ({}) });
   await assert.rejects(() => runHotkeyNatively("mute_mic", { api, fetchImpl }));
 });
+
+const { createRepeatGuard } = require("../electron/hotkey-native.cjs");
+
+test("segurar o atalho dispara so uma vez (repeticoes seguidas sao ignoradas)", () => {
+  let t = 1000;
+  const allow = createRepeatGuard(450, () => t);
+  const results = [];
+  for (let i = 0; i < 20; i += 1) { results.push(allow("mute_mic")); t += 30; } // repeticao a cada 30 ms
+  assert.equal(results.filter(Boolean).length, 1);
+});
+
+test("depois de soltar e esperar, o atalho vale de novo", () => {
+  let t = 0;
+  const allow = createRepeatGuard(450, () => t);
+  assert.equal(allow("mute_mic"), true);
+  t += 600;
+  assert.equal(allow("mute_mic"), true);
+});
+
+test("acoes diferentes nao se bloqueiam", () => {
+  let t = 0;
+  const allow = createRepeatGuard(450, () => t);
+  assert.equal(allow("mute_mic"), true);
+  assert.equal(allow("toggle_voicechanger"), true);
+});

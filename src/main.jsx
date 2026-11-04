@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { AudioAssistant } from "./components/AudioAssistant.jsx";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
@@ -103,6 +104,7 @@ function App() {
   const [autoBootTried, setAutoBootTried] = useState(false);
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [chooseMicOnCloseOpen, setChooseMicOnCloseOpen] = useState(false);
+  const [audioAssistantOpen, setAudioAssistantOpen] = useState(false);
   const [bootError, setBootError] = useState(null);
   const [bootStatus, setBootStatus] = useState(null);
   const [bootElapsed, setBootElapsed] = useState(0);
@@ -1190,6 +1192,7 @@ function App() {
                     state={state}
                     call={call}
                     setToast={setToast}
+                    openAudioAssistant={() => setAudioAssistantOpen(true)}
                     selectedRecordDevices={selectedRecordDevices}
                     setSelectedRecordDevices={setSelectedRecordDevices}
                     setPage={setPage}
@@ -1236,11 +1239,23 @@ function App() {
           setDockMinimized={setDockMinimized}
           setSelectedSound={setSelectedSound}
           forcedPresetId={forcedPresetId}
+          setToast={setToast}
+          openAudioAssistant={() => setAudioAssistantOpen(true)}
         />
       </ErrorBoundary>
 
       {/* Modals */}
       <AnimatePresence>
+        {audioAssistantOpen && (
+          <AudioAssistant
+            state={state}
+            call={call}
+            updateControls={updateControls}
+            setPage={setPage}
+            setToast={setToast}
+            onClose={() => setAudioAssistantOpen(false)}
+          />
+        )}
         {chooseMicOnCloseOpen && (
           <ChooseMicOnCloseModal
             state={state}

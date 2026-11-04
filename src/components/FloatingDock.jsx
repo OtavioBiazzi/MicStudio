@@ -43,8 +43,14 @@ export function FloatingDock({
   dockMinimized,
   setDockMinimized,
   setSelectedSound,
-  forcedPresetId
+  forcedPresetId,
+  setToast,
+  openAudioAssistant
 }) {
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  // Avisa quando a voz caiu sozinha (ou nao conseguiu reconectar), em vez de ficar "OFF" em silencio.
+  const voiceTrouble = Boolean(state.voiceProblem) || (Boolean(state.voiceWanted) && !processingActive && !state.monitorOnly);
+  const openNotice = !voiceTrouble && !noticeDismissed && !processingActive && !state.monitorOnly;
   const togglePath = processingActive || state.virtualMode ? "/api/stop" : "/api/virtual/start";
   const [showMenu, setShowMenu] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
@@ -152,11 +158,56 @@ export function FloatingDock({
 
   return (
     <div className="bottomBar">
+      {(voiceTrouble || openNotice) && (
+        <div
+          role="alert"
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 10px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "max-content",
+            maxWidth: "min(560px, 92vw)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "9px 14px",
+            borderRadius: 12,
+            fontSize: 12,
+            lineHeight: 1.4,
+            color: "var(--text-primary)",
+            background: "rgba(40, 14, 20, 0.92)",
+            border: "1px solid var(--danger)",
+            backdropFilter: "blur(12px)"
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            {state.voiceProblem || "A voz está desligada: as pessoas ouvem seu microfone normal, sem efeito. Clique em Ligar voz para usar o voice changer."}
+          </span>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "4px 10px", fontSize: 11, whiteSpace: "nowrap" }}
+            onClick={() => call("/api/virtual/start").catch((e) => setToast?.(e.message))}
+          >
+            Ligar voz
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 10px", fontSize: 11, whiteSpace: "nowrap" }}
+            onClick={() => openAudioAssistant?.()}
+          >
+            Como resolver
+          </button>
+          {openNotice && (
+            <button className="btn btn-ghost" aria-label="Fechar aviso" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setNoticeDismissed(true)}>✕</button>
+          )}
+        </div>
+      )}
       <div className="floating-dock-inner">
         <div className="bbSection">
           <button
             className={`bbBtn toggle ${processingActive ? "on" : ""}`}
-            onClick={() => call(togglePath).catch(() => {})}
+            onClick={() => call(togglePath).catch((e) => setToast?.(`Não foi possível alterar a voz: ${e.message}`))}
             title="Ativar/Desativar Voice Changer"
           >
             <Microphone size={16} weight="bold" />

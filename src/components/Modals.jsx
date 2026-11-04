@@ -1452,6 +1452,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.5.2": `### Versão 1.5.2
+* Trocar microfone, saída ou fone em Configurações agora aparece na hora, sem precisar reiniciar o app.
+* Se a voz cair sozinha (microfone desconectado, driver), o app tenta reconectar automaticamente e avisa o motivo se não conseguir.
+* Novo assistente "Problemas de áudio?": verifica microfone, cabo virtual, voz, mudo e retorno em linguagem simples, com botões que resolvem e "Arrumar tudo automaticamente".
+* Ao abrir o app com a voz desligada, um aviso explica o que fazer.
+* O botão de voz do dock mostra o erro quando falha, em vez de falhar em silêncio.`,
   "v1.5.1": `### Versão 1.5.1
 * O botão de alto-falante do dock agora liga e desliga o retorno da própria voz. Antes, com o monitor da voz desligado e o do soundboard ligado, o clique desligava tudo e nunca ligava o retorno da voz.
 * Ao ligar o retorno com o volume em 0%, o volume volta para 100% em vez de ligar mudo.`,

@@ -1,21 +1,55 @@
+/* Tela de carregamento: marca com barras de onda animadas, brilho suave e etapas */
+.startupFrame { background: radial-gradient(900px 520px at 50% 38%, rgba(124, 77, 238, .16), transparent 70%), var(--bg-base); }
 .startupScreen { display: grid; place-items: center; overflow-y: auto; padding: 28px; min-height: 0; }
-.startupContent { width: 100%; max-width: 510px; }
-.startupMark { color: var(--purple); margin-bottom: 18px; }
-.startupEyebrow { display: block; color: var(--text-muted); font-size: 10px; }
-.startupContent h1 { font-size: 22px; line-height: 1.4; margin: 8px 0 14px; }
-.startupContent p { font-size: 13px; line-height: 1.7; color: var(--text-secondary); overflow-wrap: anywhere; }
-.startupSteps { list-style: none; display: grid; margin: 22px 0; }
-.startupSteps li { display: flex; align-items: center; gap: 8px; padding: 11px 0; color: var(--text-muted); border-bottom: 1px solid var(--border); font-size: 12px; }
+.startupContent { width: 100%; max-width: 460px; text-align: center; display: grid; justify-items: center; }
+
+.startupLogo { display: flex; align-items: center; justify-content: center; gap: 5px; height: 64px; margin-bottom: 22px; filter: drop-shadow(0 0 18px rgba(139, 92, 246, .55)); }
+.startupLogo i {
+  display: block; width: 6px; height: 14px; border-radius: 4px;
+  background: linear-gradient(180deg, #c4b5fd, #7c4dee);
+  animation: startupBar 1.1s ease-in-out infinite;
+}
+.startupLogo i:nth-child(1) { animation-delay: -.9s; }
+.startupLogo i:nth-child(2) { animation-delay: -.7s; }
+.startupLogo i:nth-child(3) { animation-delay: -.5s; }
+.startupLogo i:nth-child(4) { animation-delay: -.3s; }
+.startupLogo i:nth-child(5) { animation-delay: -.1s; }
+.startupLogo i:nth-child(6) { animation-delay: -.6s; }
+.startupLogo i:nth-child(7) { animation-delay: -.2s; }
+.startupLogo.failed { filter: none; }
+.startupLogo.failed i { animation: none; height: 10px; background: var(--danger); opacity: .8; }
+@keyframes startupBar { 0%, 100% { height: 12px; opacity: .55; } 50% { height: 56px; opacity: 1; } }
+
+.startupEyebrow { display: block; color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .28em; }
+.startupContent h1 { font-size: 21px; line-height: 1.35; margin: 10px 0 8px; font-weight: 800; letter-spacing: -.01em; }
+.startupContent p { font-size: 13px; line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; margin: 0; }
+
+.startupSteps {
+  list-style: none; display: grid; width: 100%; margin: 26px 0 20px; padding: 4px 14px; text-align: left;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--hairline);
+}
+.startupSteps li { display: flex; align-items: center; gap: 10px; padding: 11px 0; color: var(--text-muted); border-bottom: 1px solid var(--border); font-size: 12px; }
+.startupSteps li:last-child { border-bottom: 0; }
 .startupSteps .complete { color: var(--green); }
 .startupSteps .current { color: var(--text); }
+.startupSteps .current svg { animation: startupPulse 1.2s ease-in-out infinite; }
 .startupSteps .failed { color: var(--danger); }
 .startupSteps li > span { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-muted); }
-.startupProgress { height: 3px; overflow: hidden; background: var(--border); }
-.startupProgress span { display: block; height: 100%; width: 35%; background: var(--purple); animation: startupSweep 1.8s ease-in-out infinite alternate; }
-@keyframes startupSweep { to { transform: translateX(185%); } }
-.startupActions { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes startupPulse { 50% { opacity: .35; } }
+
+.startupProgress { width: 100%; height: 4px; overflow: hidden; background: var(--border); border-radius: 4px; }
+.startupProgress span {
+  display: block; height: 100%; width: 38%; border-radius: 4px;
+  background: linear-gradient(90deg, transparent, #a78bfa, transparent);
+  animation: startupSweep 1.6s ease-in-out infinite alternate;
+}
+@keyframes startupSweep { to { transform: translateX(165%); } }
+.startupActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .startupActions button:disabled { opacity: .5; cursor: wait; }
-.startupDetails { margin-top: 18px; color: var(--text-muted); font-size: 11px; }
+.startupDetails { margin-top: 18px; color: var(--text-muted); font-size: 11px; text-align: left; width: 100%; }
 .startupDetails summary { cursor: pointer; }
 .startupDetails pre { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 10px; max-height: 180px; overflow-y: auto; font-size: 10px; }
-@media (prefers-reduced-motion: reduce) { .startupProgress span { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .startupProgress span, .startupLogo i, .startupSteps .current svg { animation: none; }
+  .startupLogo i { height: 30px; }
+}

@@ -429,8 +429,10 @@ export function SoundboardPage({
                       title={isPlaying ? "Parar" : "Tocar"}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (isPlaying) call("/api/sounds/stop").catch(() => {});
-                        else call("/api/sounds/play", { id: sound.id }).catch((err) => setToast(err.message));
+                        if (isPlaying) {
+                          // Para so este som; os outros que estiverem tocando continuam.
+                          call("/api/sounds/stop", { playbackId: player.playbackId }).catch(() => {});
+                        } else call("/api/sounds/play", { id: sound.id }).catch((err) => setToast(err.message));
                       }}
                       onDoubleClick={(e) => e.stopPropagation()}
                     >
@@ -810,7 +812,8 @@ export function SoundboardQuickPanel({
 
   const togglePreview = () => {
     if (isPlaying) {
-      call("/api/sounds/stop").catch(() => {});
+      const mine = state.players?.find((p) => p.soundId === sound.id && p.state === "playing");
+      call("/api/sounds/stop", mine ? { playbackId: mine.playbackId } : {}).catch(() => {});
     } else {
       call("/api/sounds/play", { id: sound.id }).catch(() => {});
     }

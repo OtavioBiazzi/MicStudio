@@ -4,7 +4,7 @@ import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
   MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
-  Scissors, Heart, DotsThreeVertical, WarningCircle, SquaresFour
+  Scissors, Heart, DotsThreeVertical, WarningCircle, SquaresFour, Pause
 } from "@phosphor-icons/react";
 import { formatTime, formatLastUsed, filePathToUrl, copyTextToClipboard } from "../utils";
 import { AdvancedSoundEditorModal } from "./Modals";
@@ -37,6 +37,15 @@ export function SoundboardPage({
   const [editingSoundId, setEditingSoundId] = useState(null);
   const [sourceFilter, setSourceFilter] = useState("Todos");
   const [pendingImport, setPendingImport] = useState(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!addMenuOpen) return undefined;
+    const close = () => setAddMenuOpen(false);
+    // Registra depois do clique que abriu o menu, senao ele fecha na mesma hora.
+    const timer = setTimeout(() => window.addEventListener("click", close), 0);
+    return () => { clearTimeout(timer); window.removeEventListener("click", close); };
+  }, [addMenuOpen]);
 
   const sounds = state.sounds || [];
   const storageMB = state.storageUsed ? state.storageUsed / (1024 * 1024) : 0;
@@ -278,37 +287,46 @@ export function SoundboardPage({
             <WarningCircle size={16} /><span>Limite de Armazenamento Atingido ({storageMB.toFixed(1)} MB / {storageLimitMB} MB)</span>
           </div>
         )}
-      <div className="pageToolbar">
-        <div className="toolbarLeft">
-          <div className="searchBar" style={{ marginBottom: 0, flex: 1 }}>
-            <MagnifyingGlass size={16} className="searchIcon" />
-            <input placeholder="Buscar som..." value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
+      <div className="sbHeader">
+        <div className="sbTitle">
+          <h1>Soundboard</h1>
+          <span>{sounds.length} {sounds.length === 1 ? "som" : "sons"}</span>
         </div>
-        <div className="toolbarRight">
-          <div className="importButtonGroup">
-            <button className="btn btn-ghost" onClick={() => {
-              if (isLimitReached) {
-                setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
-                return;
-              }
-              setPromptState({
-                title: "Importar Link de Pacote",
-                value: "",
-                onConfirm: (url) => {
-                  if (url && url.trim()) {
-                    setToast("Baixando pacote da nuvem...");
-                    call("/api/sounds/import-cloud", { url: url.trim() }).catch(e => setToast("Erro: " + e.message));
-                  }
+        <div className="searchBar sbSearch">
+          <MagnifyingGlass size={16} className="searchIcon" />
+          <input placeholder="Buscar som..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <div className="sbActions">
+          <div className="sbMenuWrap" onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn-primary" onClick={() => setAddMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={addMenuOpen}>
+              <Plus size={14} weight="bold" /> Adicionar
+            </button>
+            {addMenuOpen && (
+              <div className="sbMenu" role="menu">
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); addSounds(); }}><UploadSimple size={15} /> Arquivos de áudio</button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); addFolders(); }}><FolderOpen size={15} /> Pasta inteira</button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); (() => {
+                if (isLimitReached) {
+                  setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
+                  return;
                 }
-              });
-            }} title="Importar pacote .mfsound através de um link (Catbox, etc)"><CloudArrowDown size={14} /> Importar Link</button>
-            <button className="btn btn-ghost" onClick={addSounds} title="Importar arquivos de áudio ou pacotes .mfsound"><UploadSimple size={14} /> Importar Arquivos</button>
-            <button className="btn btn-ghost" onClick={addFolders} title="Importar pasta contendo sons"><FolderOpen size={14} /> Importar Pasta</button>
+                setPromptState({
+                  title: "Importar Link de Pacote",
+                  value: "",
+                  onConfirm: (url) => {
+                    if (url && url.trim()) {
+                      setToast("Baixando pacote da nuvem...");
+                      call("/api/sounds/import-cloud", { url: url.trim() }).catch(e => setToast("Erro: " + e.message));
+                    }
+                  }
+                });
+              })(); }}><CloudArrowDown size={15} /> Link de pacote</button>
+              </div>
+            )}
           </div>
-          <button className="btn btn-ghost" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)} title="Abrir pasta onde os sons são gravados"><FolderOpen size={14} /> Abrir Pasta</button>
-          <button className="btn btn-ghost" title="Tocar som aleatório" aria-label="Tocar som aleatório" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={16} /></button>
-          <button className="btn btn-ghost" title="Parar todos os sons" aria-label="Parar todos os sons" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={16} /></button>
+          <button className="btn btn-ghost sbIcon" title="Tocar som aleatório" aria-label="Tocar som aleatório" onClick={() => call("/api/sounds/random").catch((e) => setToast(e.message))}><Shuffle size={16} /></button>
+          <button className="btn btn-ghost sbIcon" title="Parar todos os sons" aria-label="Parar todos os sons" onClick={() => call("/api/sounds/stop").catch(() => {})}><StopCircle size={16} /></button>
+          <button className="btn btn-ghost sbIcon" title="Abrir a pasta dos sons" aria-label="Abrir a pasta dos sons" onClick={() => window.micfudiddo?.openPath?.(state.folders?.sounds)}><FolderOpen size={16} /></button>
         </div>
       </div>
 
@@ -405,6 +423,19 @@ export function SoundboardPage({
                 >
                   <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
                     {sound.coverUrl ? <img src={sound.coverUrl} alt="" /> : <MusicNotes size={18} color={sound.color || "var(--purple)"} />}
+                    <button
+                      className="soundPlayBtn"
+                      aria-label={isPlaying ? `Parar ${sound.name}` : `Tocar ${sound.name}`}
+                      title={isPlaying ? "Parar" : "Tocar"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isPlaying) call("/api/sounds/stop").catch(() => {});
+                        else call("/api/sounds/play", { id: sound.id }).catch((err) => setToast(err.message));
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    >
+                      {isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}
+                    </button>
                   </div>
                   <div className="soundCardInfo">
                     <div className="soundName" title={sound.name}>{sound.name.replace(/\.[^/.]+$/, "")}</div>
@@ -726,14 +757,30 @@ export function SoundboardQuickPanel({
   const [volume, setVolume] = useState(sound.volume);
   const [loop, setLoop] = useState(!!sound.loop);
 
+  // Volume: o slider e local e fluido; o backend recebe so o valor mais recente (nao um POST por pixel)
+  // e respostas atrasadas nao puxam o botao de volta no meio do arrasto.
+  const volumeEditRef = React.useRef({ at: 0, timer: null });
+
   useEffect(() => {
     if (nameInputRef.current !== document.activeElement) {
       setName(sound.name);
     }
     setShortcut(sound.shortcut || "");
-    setVolume(sound.volume);
+    if (Date.now() - volumeEditRef.current.at > 600) setVolume(sound.volume);
     setLoop(!!sound.loop);
   }, [sound]);
+
+  useEffect(() => () => clearTimeout(volumeEditRef.current.timer), []);
+
+  const changeVolume = (val) => {
+    setVolume(val);
+    const edit = volumeEditRef.current;
+    edit.at = Date.now();
+    clearTimeout(edit.timer);
+    edit.timer = setTimeout(() => {
+      call("/api/sounds/update", { id: sound.id, volume: val }).catch((err) => setToast(err.message));
+    }, 90);
+  };
 
   const handleSaveField = (field, val) => {
     call("/api/sounds/update", { id: sound.id, [field]: val }).catch((err) => setToast(err.message));
@@ -901,13 +948,9 @@ export function SoundboardQuickPanel({
             <div className="panelSlider" style={{ marginBottom: 12 }}>
               <span className="sliderLabel">Volume</span>
               <input
-                type="range" min={0} max={1.5} step={0.05}
+                type="range" min={0} max={1.5} step={0.01}
                 value={volume}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setVolume(val);
-                  handleSaveField("volume", val);
-                }}
+                onChange={(e) => changeVolume(Number(e.target.value))}
               />
               <span className="sliderValue">{Math.round(volume * 100)}%</span>
             </div>

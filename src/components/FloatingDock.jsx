@@ -44,10 +44,13 @@ export function FloatingDock({
   setDockMinimized,
   setSelectedSound,
   forcedPresetId,
-  setToast
+  setToast,
+  openAudioAssistant
 }) {
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   // Avisa quando a voz caiu sozinha (ou nao conseguiu reconectar), em vez de ficar "OFF" em silencio.
   const voiceTrouble = Boolean(state.voiceProblem) || (Boolean(state.voiceWanted) && !processingActive && !state.monitorOnly);
+  const openNotice = !voiceTrouble && !noticeDismissed && !processingActive && !state.monitorOnly;
   const togglePath = processingActive || state.virtualMode ? "/api/stop" : "/api/virtual/start";
   const [showMenu, setShowMenu] = useState(false);
   const [showMixer, setShowMixer] = useState(false);
@@ -155,7 +158,7 @@ export function FloatingDock({
 
   return (
     <div className="bottomBar">
-      {voiceTrouble && (
+      {(voiceTrouble || openNotice) && (
         <div
           role="alert"
           style={{
@@ -179,7 +182,7 @@ export function FloatingDock({
           }}
         >
           <span style={{ flex: 1 }}>
-            {state.voiceProblem || "A voz está desligada. Ligue para usar o voice changer."}
+            {state.voiceProblem || "A voz está desligada: as pessoas ouvem seu microfone normal, sem efeito. Clique em Ligar voz para usar o voice changer."}
           </span>
           <button
             className="btn btn-primary"
@@ -188,6 +191,16 @@ export function FloatingDock({
           >
             Ligar voz
           </button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 10px", fontSize: 11, whiteSpace: "nowrap" }}
+            onClick={() => openAudioAssistant?.()}
+          >
+            Como resolver
+          </button>
+          {openNotice && (
+            <button className="btn btn-ghost" aria-label="Fechar aviso" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setNoticeDismissed(true)}>✕</button>
+          )}
         </div>
       )}
       <div className="floating-dock-inner">

@@ -79,6 +79,7 @@ export function ConfigPage({
   state,
   call,
   setToast,
+  openAudioAssistant,
   selectedRecordDevices,
   setSelectedRecordDevices,
   setPage,
@@ -334,6 +335,9 @@ export function ConfigPage({
                 <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                   <button className="btn btn-ghost" style={{ border: "1px solid var(--border)" }} onClick={() => call("/api/devices/refresh").then(() => setToast("Dispositivos atualizados!"))}>
                     <ArrowClockwise size={14} /> Atualizar lista de dispositivos
+                  </button>
+                  <button className="btn btn-primary" onClick={() => openAudioAssistant?.()}>
+                    🛠️ Problemas de áudio? Me ajude
                   </button>
                 </div>
               </div>

@@ -8,6 +8,9 @@ const { runHotkeyNatively } = require("./hotkey-native.cjs");
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
 const isDev = !app.isPackaged;
+// A pasta de dados do Electron (localStorage: favoritos, vozes customizadas, tema...) continua a mesma de antes do
+// renome para VozLab Studio. Sem isto, mudar o nome do produto criaria uma pasta nova e "perderia" esses dados.
+app.setPath("userData", path.join(app.getPath("appData"), "micfudiddo-studio"));
 let mainWindow;
 let ttsWidgetWindow;
 let tray;
@@ -37,13 +40,13 @@ function setBackendStatus(patch) {
 
 function getIconPath() {
   if (isDev) {
-    return path.join(ROOT, "assets", "micfudiddo.ico");
+    return path.join(ROOT, "assets", "vozlab.ico");
   }
   // In packaged app, try multiple locations
   const candidates = [
-    path.join(__dirname, "..", "assets", "micfudiddo.ico"),
-    path.join(process.resourcesPath, "assets", "micfudiddo.ico"),
-    path.join(ROOT, "assets", "micfudiddo.ico"),
+    path.join(__dirname, "..", "assets", "vozlab.ico"),
+    path.join(process.resourcesPath, "assets", "vozlab.ico"),
+    path.join(ROOT, "assets", "vozlab.ico"),
   ];
   const fs = require("fs");
   for (const candidate of candidates) {
@@ -538,7 +541,7 @@ function showMainWindow() {
 
 function notifyHotkey(body) {
   try {
-    if (Notification.isSupported()) new Notification({ title: "MicFudiddo Studio", body, silent: true }).show();
+    if (Notification.isSupported()) new Notification({ title: "VozLab Studio", body, silent: true }).show();
   } catch (_) {}
 }
 
@@ -587,7 +590,7 @@ function createWindow({ show = true, wake = false } = {}) {
     height: 860,
     minWidth: 1060,
     minHeight: 740,
-    title: "MicFudiddo Studio",
+    title: "VozLab Studio",
     backgroundColor: "#07111d",
     icon: getIconPath(),
     frame: false,
@@ -660,7 +663,7 @@ function createWindow({ show = true, wake = false } = {}) {
 
 function createTray() {
   tray = new Tray(getIconPath());
-  tray.setToolTip("MicFudiddo Studio");
+  tray.setToolTip("VozLab Studio");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Mostrar", click: () => showMainWindow() },
     {
@@ -681,7 +684,7 @@ ipcMain.handle("dialog:save-mfsound", async (_event, defaultName) => {
     title: "Exportar pacote de som (.mfsound)",
     defaultPath: defaultName || "som.mfsound",
     filters: [
-      { name: "MicFudiddo Sound Package", extensions: ["mfsound"] }
+      { name: "VozLab Sound Package", extensions: ["mfsound"] }
     ]
   });
   return result.canceled ? "" : result.filePath;
@@ -692,7 +695,7 @@ ipcMain.handle("dialog:open-mfsound", async () => {
     title: "Importar pacote .mfsound",
     properties: ["openFile", "multiSelections"],
     filters: [
-      { name: "MicFudiddo Sound Package", extensions: ["mfsound"] }
+      { name: "VozLab Sound Package", extensions: ["mfsound"] }
     ]
   });
   return result.canceled ? [] : result.filePaths;
@@ -896,7 +899,7 @@ ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
   
   return new Promise((resolve, reject) => {
     const tempDir = app.getPath("temp");
-    const installerPath = path.join(tempDir, "MicFudiddoStudioSetup.exe");
+    const installerPath = path.join(tempDir, "VozLabStudioSetup.exe");
     const file = fs.createWriteStream(installerPath);
     
     const download = (url) => {
@@ -988,7 +991,7 @@ function cleanOldVersion() {
   // 3. Limpar atalhos antigos específicos (Desktop e Start Menu)
   try {
     const desktopDir = app.getPath("desktop");
-    const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
+    const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk"];
     oldDesktopShortcuts.forEach((lnk) => {
       const lnkPath = path.join(desktopDir, lnk);
       if (fs.existsSync(lnkPath)) {
@@ -998,7 +1001,7 @@ function cleanOldVersion() {
 
     if (appData) {
       const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
-      const oldStartMenuShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk"];
+      const oldStartMenuShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk"];
       oldStartMenuShortcuts.forEach((lnk) => {
         const lnkPath = path.join(startMenuProgramsDir, lnk);
         if (fs.existsSync(lnkPath)) {
@@ -1013,12 +1016,12 @@ function cleanOldVersion() {
     // Não criar atalhos se estiver rodando em ambiente de desenvolvimento (isDev)
     if (!isDev) {
       const desktopDir = app.getPath("desktop");
-      const newDesktopShortcut = path.join(desktopDir, "MicFudiddo Studio.lnk");
+      const newDesktopShortcut = path.join(desktopDir, "VozLab Studio.lnk");
       
       const shortcutOptions = {
         target: app.getPath("exe"),
         workingDirectory: path.dirname(app.getPath("exe")),
-        description: "MicFudiddo Studio - modificador de voz e soundboard",
+        description: "VozLab Studio - modificador de voz e soundboard",
         icon: app.getPath("exe"),
         iconIndex: 0
       };
@@ -1032,7 +1035,7 @@ function cleanOldVersion() {
       // Gravar atalho no Menu Iniciar (deleta antes para evitar erro de arquivo existente)
       if (appData) {
         const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
-        const newStartMenuShortcut = path.join(startMenuProgramsDir, "MicFudiddo Studio.lnk");
+        const newStartMenuShortcut = path.join(startMenuProgramsDir, "VozLab Studio.lnk");
         if (fs.existsSync(newStartMenuShortcut)) {
           try { fs.unlinkSync(newStartMenuShortcut); } catch (_) {}
         }

@@ -108,7 +108,7 @@ export function buildReport(state, appVersion = "") {
   const name = (list, index) => (list || []).find((d) => d.index === index)?.name || "nenhum";
   const controls = state.controls || {};
   const lines = [
-    `MicFudiddo Studio ${appVersion}`.trim(),
+    `VozLab Studio ${appVersion}`.trim(),
     `Voz ligada: ${state.running && !state.monitorOnly ? "sim" : "nao"}`,
     `Microfone: ${name(state.devices?.inputs, state.selected?.input)}`,
     `Saida (cabo virtual): ${name(state.devices?.outputs, state.selected?.output)}`,

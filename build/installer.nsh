@@ -1,4 +1,4 @@
-; MicFudiddo Studio - Custom NSIS Installer Script
+; VozLab Studio - Custom NSIS Installer Script
 ; Handles VB-CABLE dependency check and automatic download/install
 
 !include "MUI2.nsh"
@@ -6,8 +6,8 @@
 
 ; ─── Process termination on init ───────────────────────────────
 !macro customInit
-  DetailPrint "Fechando instâncias ativas do MicFudiddo..."
-  nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe"'
+  DetailPrint "Fechando instâncias ativas do VozLab Studio..."
+  nsExec::ExecToStack 'cmd.exe /c taskkill /F /IM "MicFudiddoBackend.exe" /IM "MicFudiddo Studio.exe" /IM "VozLab Studio.exe"'
   Pop $0
   Pop $1
   
@@ -27,11 +27,13 @@
   Delete "$DESKTOP\Mic Fudido.lnk"
   Delete "$DESKTOP\MicFudiddo.lnk"
   Delete "$DESKTOP\MicFudiddo Studio.lnk"
+  Delete "$DESKTOP\VozLab Studio.lnk"
   
   ; Deletar atalhos antigos do Menu Iniciar
   Delete "$SMPROGRAMS\Mic Fudido.lnk"
   Delete "$SMPROGRAMS\MicFudiddo.lnk"
   Delete "$SMPROGRAMS\MicFudiddo Studio.lnk"
+  Delete "$SMPROGRAMS\VozLab Studio.lnk"
   Delete "$SMPROGRAMS\MicFudiddo\MicFudiddo Studio.lnk"
 !macroend
 

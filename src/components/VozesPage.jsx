@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { motion } from "framer-motion";
 import { useDragScroll } from "../useDragScroll";
 import {
   MagnifyingGlass, Plus, Trash, Star, Copy, X, DotsThreeVertical,
@@ -136,6 +135,14 @@ export function VozesPage({
     applyVoicePreset(voice);
   };
 
+  // Acoes estaveis para os cards memoizados (evita refazer ~95 cards a cada atualizacao de estado).
+  const voiceActionsRef = React.useRef({});
+  voiceActionsRef.current = {
+    select: (voice) => selectVoice(voice),
+    toggleFavorite: (voice) => toggleFavorite(voice.id),
+    openMenu: (event, voice) => setContextMenu({ x: event.clientX, y: event.clientY, voice })
+  };
+
   return (
     <>
       <h2 className="srOnly">Biblioteca de Vozes</h2>
@@ -241,16 +248,7 @@ export function VozesPage({
               voice={voice}
               isActive={activePreset?.id === voice.id}
               isFavorite={favorites.includes(voice.id)}
-              onSelect={() => selectVoice(voice)}
-              onEditOnly={() => selectVoice(voice)}
-              onToggleFavorite={() => toggleFavorite(voice.id)}
-              onContextMenu={(e) => {
-                setContextMenu({
-                  x: e.clientX,
-                  y: e.clientY,
-                  voice
-                });
-              }}
+              actions={voiceActionsRef}
             />
           ))}
           <div className="voiceCard createCard" onClick={() => setPage("voicelab")}>
@@ -429,11 +427,16 @@ export function VozesPage({
 }
 
 // --- VoiceCard ---
-export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, onToggleFavorite, onContextMenu }) {
+// Com `actions` (referencia estavel) o card e memoizado; sem ele (uso antigo, ex.: Favoritos) funciona como antes.
+export const VoiceCard = React.memo(function VoiceCard({ voice, isActive, isFavorite, actions, onSelect: onSelectProp, onEditOnly: onEditOnlyProp, onToggleFavorite: onToggleFavoriteProp, onContextMenu: onContextMenuProp }) {
   const image = getVoiceImage(voice.id);
   const VoiceIcon = newVoiceIcons[voice.id];
+  const onSelect = actions ? () => actions.current.select(voice) : onSelectProp;
+  const onEditOnly = actions ? undefined : onEditOnlyProp;
+  const onToggleFavorite = actions ? () => actions.current.toggleFavorite(voice) : onToggleFavoriteProp;
+  const onContextMenu = actions ? (e) => actions.current.openMenu(e, voice) : onContextMenuProp;
   return (
-    <motion.div
+    <div
       className={`voiceCard ${isActive ? "active" : ""}`}
       onClick={onSelect}
       onContextMenu={(e) => {
@@ -445,12 +448,10 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
           onEditOnly();
         }
       }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
     >
       <div className="cardImage">
         {image ? (
-          <img src={image} alt={voice.label} />
+          <img src={image} alt={voice.label} loading="lazy" decoding="async" />
         ) : (
           <>
             <div className="cardGradient" style={{ background: voice.gradient }} />
@@ -470,9 +471,13 @@ export function VoiceCard({ voice, isActive, isFavorite, onSelect, onEditOnly, o
         <div className="cardName">{voice.label}</div>
         <div className="cardDesc">{voice.description}</div>
       </div>
-    </motion.div>
+    </div>
   );
-}
+}, (previous, next) => {
+  // Cards com `actions` so refazem quando seus dados mudam; os sem `actions` sempre refazem (comportamento antigo).
+  if (!next.actions || previous.actions !== next.actions) return false;
+  return previous.voice === next.voice && previous.isActive === next.isActive && previous.isFavorite === next.isFavorite;
+});
 
 // --- VoiceSidePanel ---
 export function VoiceSidePanel({ voice, state, updateControls, updateEffects, onApplyPreset, onRestorePreset, call, isFavorite, onToggleFavorite, onClose, setToast }) {

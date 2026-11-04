@@ -77,7 +77,7 @@ export function ProfilesPage({ state, call, setToast, customVoices = [] }) {
       const list = Array.isArray(parsed) ? parsed : parsed.profiles;
       await run("/api/profiles/import", { profiles: list }, "Perfis importados.");
     } catch {
-      setToast("Esse arquivo não parece ser de perfis do MicFudiddo.");
+      setToast("Esse arquivo não parece ser de perfis do VozLab.");
     }
   };
 

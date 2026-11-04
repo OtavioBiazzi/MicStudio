@@ -155,7 +155,7 @@ function App() {
     return localStorage.getItem("micfudiddo.customAccentColor") || "#8B5CF6";
   });
   const [profileName, setProfileName] = useState(() => {
-    return localStorage.getItem("micfudiddo.profileName") || "MicFudido";
+    return localStorage.getItem("micfudiddo.profileName") || "VozLab";
   });
   const [profileSub, setProfileSub] = useState(() => {
     return localStorage.getItem("micfudiddo.profileSub") || "Plano Vitalício";
@@ -825,7 +825,7 @@ function App() {
         // Show the boot error only when the backend itself is unreachable.
       }
       if (active && !stateRef.current) {
-        setBootError("Não foi possível conectar ao backend. Verifique se outra instância do MicFudiddo está em execução ou se há um conflito de porta (38717).");
+        setBootError("Não foi possível conectar ao backend. Verifique se outra instância do VozLab Studio está em execução ou se há um conflito de porta (38717).");
       }
     }, 60000);
 

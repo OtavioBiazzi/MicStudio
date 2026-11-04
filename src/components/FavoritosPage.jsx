@@ -70,7 +70,7 @@ export function FavoritosPage({
                 onClick={() => call("/api/sounds/play", { id: sound.id }).catch(() => {})}
               >
                 <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
-                  {sound.coverUrl ? <img src={sound.coverUrl} alt="" /> : <MusicNotes size={18} />}
+                  {sound.coverUrl ? <img src={sound.coverUrl} alt="" loading="lazy" decoding="async" /> : <MusicNotes size={18} />}
                 </div>
                 <div className="soundName">{sound.name.replace(/\.[^/.]+$/, "")}</div>
                 <div className="soundCategory">

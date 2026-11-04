@@ -61,13 +61,13 @@ export function Sidebar({
             <circle cx="5" cy="12" r="1.5" fill="url(#lg1)" opacity="0.5"/>
             <circle cx="29" cy="12" r="1.5" fill="url(#lg2)" opacity="0.5"/>
             <defs>
-              <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#C4B5FD"/><stop offset="1" stopColor="#8B5CF6"/></linearGradient>
-              <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#A78BFA"/><stop offset="1" stopColor="#6D42D9"/></linearGradient>
+              <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop style={{ stopColor: "var(--logo-1a)" }}/><stop offset="1" style={{ stopColor: "var(--logo-1b)" }}/></linearGradient>
+              <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop style={{ stopColor: "var(--logo-2a)" }}/><stop offset="1" style={{ stopColor: "var(--logo-2b)" }}/></linearGradient>
             </defs>
           </svg>
         </div>
         <div className="logo-text">
-          <span className="brand-name">MicFudido</span>
+          <span className="brand-name">VozLab</span>
           <span className="brand-sub">STUDIO</span>
         </div>
       </div>

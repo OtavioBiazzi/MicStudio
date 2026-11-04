@@ -25,8 +25,8 @@ export function StartupScreen({ status, error, elapsed, onRetry }) {
           <div className={`startupLogo ${failed ? "failed" : ""}`} aria-hidden="true">
             <i /><i /><i /><i /><i /><i /><i />
           </div>
-          <span className="startupEyebrow">MICFUDIDDO STUDIO</span>
-          <h1>{failed ? "Falha ao iniciar o \u00e1udio" : slow ? "A inicializa\u00e7\u00e3o est\u00e1 demorando" : "Carregando MicFudido Studio..."}</h1>
+          <span className="startupEyebrow">VOZLAB STUDIO</span>
+          <h1>{failed ? "Falha ao iniciar o \u00e1udio" : slow ? "A inicializa\u00e7\u00e3o est\u00e1 demorando" : "Carregando VozLab Studio..."}</h1>
           <p role={failed ? "alert" : "status"}>{message}</p>
           <ol className="startupSteps">
             <li className="complete"><Check size={16} /> Interface pronta</li>

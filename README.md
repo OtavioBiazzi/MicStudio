@@ -1,4 +1,6 @@
-# MicFudiddo Studio
+# VozLab Studio
+
+> O app antes se chamava **MicFudiddo Studio**. Seus dados (sons, perfis, configurações) continuam nas mesmas pastas (`%APPDATA%\MicFudiddo`), então nada se perde na atualização.
 
 Aplicativo simples para Windows que captura o microfone, aplica ganho livre e pitch em tempo real, e envia o audio processado para um dispositivo de audio virtual. Ele tambem pode tocar a propria voz no fone quando o monitoramento estiver ligado.
 
@@ -6,11 +8,11 @@ Aplicativo simples para Windows que captura o microfone, aplica ganho livre e pi
 
 ## 📥 Como Baixar (Download Rápido)
 
-Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem precisar configurar nada:
+Para baixar a versão estável e pronta para uso do **VozLab Studio** sem precisar configurar nada:
 
 1. Vá para a seção de **[Releases (Lançamentos)](https://github.com/OtavioBiazzi/MicStudio/releases)** no topo direito desta página do GitHub.
 2. Localize a versão mais recente (marcada como **Latest**).
-3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `MicFudiddo Studio 2.0.0.exe`) para baixá-lo.
+3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `VozLab Studio Setup 2.1.0.exe`) para baixá-lo.
 4. Execute o arquivo baixado. O aplicativo será instalado automaticamente de forma portátil e os atalhos serão criados no seu Menu Iniciar para busca rápida!
 
 ---
@@ -28,7 +30,7 @@ Para baixar a versão estável e pronta para uso do **MicFudiddo Studio** sem pr
 - Tem soundboard local com upload de sons, lista persistente, volume, pitch, repeticoes e atalhos por som.
 - Tem gravador da voz processada que salva o audio final enviado ao Discord.
 - Tem gravador de audio do PC por WASAPI loopback, com selecao de uma ou mais fontes como JBL Quantum Game e JBL Quantum Chat quando o Windows disponibiliza esses endpoints.
-- Tem a interface classica em `customtkinter` e uma interface nova `MicFudiddo Studio` em Electron + React, com sidebar, icones, animacoes e soundboard mais visual.
+- Tem a interface classica em `customtkinter` e uma interface nova `VozLab Studio` em Electron + React, com sidebar, icones, animacoes e soundboard mais visual.
 - Ao abrir, salva o microfone padrao atual do Windows, define `CABLE Output` como microfone padrao e inicia o processamento automaticamente.
 - Ao clicar no X, o app continua rodando na bandeja do Windows. Para fechar de verdade, clique com o botao direito no icone da bandeja e escolha `Fechar`.
 - Ao fechar de verdade, para o processamento e restaura o microfone padrao anterior.
@@ -49,7 +51,7 @@ A alternativa estavel e:
 3. O app escreve o resultado em um dispositivo virtual, por exemplo `CABLE Input (VB-Audio Virtual Cable)`.
 4. O Discord usa o par de gravacao desse cabo, geralmente `CABLE Output`, como microfone.
 
-Assim o app nao precisa mexer em drivers existentes. Na pratica, voce seleciona o dispositivo virtual no Discord uma vez e depois usa o MicFudiddo para ligar/desligar, ajustar ganho, pitch e monitoramento.
+Assim o app nao precisa mexer em drivers existentes. Na pratica, voce seleciona o dispositivo virtual no Discord uma vez e depois usa o VozLab Studio para ligar/desligar, ajustar ganho, pitch e monitoramento.
 
 ## Como rodar
 
@@ -61,7 +63,7 @@ No PowerShell, dentro desta pasta:
 
 O script cria um ambiente virtual, instala as dependencias e abre o app.
 
-## MicFudiddo Studio
+## VozLab Studio
 
 A versao Studio usa Electron + React por cima do mesmo motor de audio em Python. Para rodar em modo desenvolvimento:
 
@@ -78,7 +80,7 @@ npm run build:studio
 O executavel fica em:
 
 ```text
-studio-release\MicFudiddo Studio 2.0.0.exe
+studio-release\VozLab Studio 2.1.0.exe
 ```
 
 Para colocar no Menu Iniciar e aparecer na busca do Windows:
@@ -90,7 +92,7 @@ Para colocar no Menu Iniciar e aparecer na busca do Windows:
 ## Como usar com Discord
 
 1. Instale um cabo virtual de audio, como VB-CABLE ou outro dispositivo virtual equivalente.
-2. Abra o MicFudiddo.
+2. Abra o VozLab Studio.
 3. Confirme se o microfone detectado e o Fifine.
 4. Em `Saida processada`, selecione `CABLE Input` ou outro dispositivo virtual de saida.
 5. No Discord, selecione o par de gravacao correspondente, normalmente `CABLE Output`.
@@ -98,7 +100,7 @@ Para colocar no Menu Iniciar e aparecer na busca do Windows:
 
 Depois disso, o Discord recebe o audio processado. O botao `Ouvir minha voz` e opcional e toca uma copia do audio no dispositivo de monitoramento.
 
-Na versao atual, o app tambem tenta automatizar essa etapa: quando abre, ele define `CABLE Output` como microfone padrao do Windows e inicia o processamento. Apps que usam o microfone padrao passam a receber o MicFudiddo sem voce trocar manualmente. Ao fechar de verdade pelo icone da bandeja, ele restaura o microfone padrao anterior.
+Na versao atual, o app tambem tenta automatizar essa etapa: quando abre, ele define `CABLE Output` como microfone padrao do Windows e inicia o processamento. Apps que usam o microfone padrao passam a receber o VozLab Studio sem voce trocar manualmente. Ao fechar de verdade pelo icone da bandeja, ele restaura o microfone padrao anterior.
 
 ## Soundboard
 
@@ -154,7 +156,7 @@ Isso copia o Studio para:
 %LOCALAPPDATA%\MicFudiddoStudio
 ```
 
-E cria atalhos no Menu Iniciar para aparecer na busca do Windows como `MicFudiddo Studio`, `Mic Fudido` e `MicFudiddo`.
+E cria atalhos no Menu Iniciar para aparecer na busca do Windows como `VozLab Studio` (antes chamado MicFudiddo).
 
 ## Observacoes de estabilidade
 

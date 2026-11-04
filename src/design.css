@@ -547,3 +547,51 @@ input[type=range] { touch-action: none; }
 .deviceHelp { padding: 12px 14px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); background: var(--cyan-soft); border: 1px solid rgba(165, 180, 252, .22); border-radius: var(--radius-md); }
 .deviceHelp b, .deviceHelp strong { color: var(--text); }
 .selectField .selectHint { display: block; margin: 2px 0 6px; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+
+
+/* =====================================================================
+   DESEMPENHO (FPS)
+   Listas grandes (Vozes, Soundboard, Explorar Sons) ficam leves:
+   - barrinhas dos cards so animam no hover/ativo e com transform (sem layout)
+   - sem filter/sombras por card em repouso
+   - dock e player sem backdrop-filter sobre a lista que rola
+   ===================================================================== */
+
+/* Vozes: barrinhas estaticas, animadas so com o mouse em cima (ou no card ativo) */
+.voiceCard .cardImage .cardWaveform span {
+  height: 12px;
+  height: calc(5px + 13px * sin(calc(var(--i) * .75)) * sin(calc(var(--i) * .75)));
+  transform-origin: bottom;
+  animation: none;
+  will-change: auto;
+}
+.voiceCard:hover .cardImage .cardWaveform span,
+.voiceCard.active .cardImage .cardWaveform span {
+  animation: waveBarFast .9s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -.06s);
+}
+@keyframes waveBarFast { from { transform: scaleY(.45); } to { transform: scaleY(1.2); } }
+.app-background .voiceCard .cardImage .cardWaveform span { animation: none !important; }
+
+.voiceCard .cardImage .cardEmoji { filter: none; text-shadow: 0 4px 12px rgba(0, 0, 0, .3); }
+
+/* (content-visibility foi testado e piorou o scroll nestas listas, entao nao e usado) */
+
+/* Sombras so quando importam (hover/ativo/tocando), nao em centenas de cards parados */
+.soundboardPage .soundCard { box-shadow: none !important; transition: border-color .12s ease, background-color .12s ease; }
+.soundboardPage .soundCard.active, .soundboardPage .soundCard.playing { box-shadow: 0 0 0 1px var(--purple-soft) !important; }
+.voiceCard { transition: border-color .12s ease, transform .12s ease; box-shadow: none; }
+.voiceCard:hover { box-shadow: none; transform: translateY(-2px) scale(1.01); }
+.voiceCard:active { transform: scale(.98); }
+.voiceCard.active { box-shadow: 0 0 0 1px var(--purple); }
+
+/* Dock e player: fundo quase opaco no lugar de desfoque (blur sobre conteudo rolando custa caro) */
+.floating-dock-inner { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(12, 12, 18, .96) !important; }
+.audioPlayerAnchor .audioPlayerFloat { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(12, 12, 18, .96); }
+.bottomBar div[style*="blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+
+/* Logo do app: segue a cor do tema (as variaveis --logo-* sao trocadas junto com o tema de cores) */
+
+/* Logo da barra lateral: as ondas de sempre; as cores vem de variaveis para o tema poder trocar */
+:root { --logo-1a: #C4B5FD; --logo-1b: #8B5CF6; --logo-2a: #A78BFA; --logo-2b: #6D42D9; }

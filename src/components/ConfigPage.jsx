@@ -998,7 +998,7 @@ export function ConfigPage({
                   <span>Inicialização e Fechamento</span>
                 </div>
                 <div className="settingCardDesc">
-                  Configure o comportamento do MicFudiddo ao ser aberto ou quando você clicar para fechar a tela.
+                  Configure o comportamento do VozLab Studio ao ser aberto ou quando você clicar para fechar a tela.
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1018,7 +1018,7 @@ export function ConfigPage({
 
                   <ToggleSetting
                     label="Abrir junto com o Windows"
-                    description="Inicia o MicFudiddo depois de entrar no Windows. Vem desativado por padrão."
+                    description="Inicia o VozLab Studio depois de entrar no Windows. Vem desativado por padrão."
                     checked={state.settings?.launchAtStartup === true}
                     onChange={async (enabled) => {
                       await call("/api/settings", { launchAtStartup: enabled });

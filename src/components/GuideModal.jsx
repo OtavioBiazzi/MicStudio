@@ -3,8 +3,8 @@ import { VB_CABLE_URL } from "../audioChecks.js";
 
 const FIRST_STEPS = [
   { title: "1. Instale o cabo virtual", text: "O VB-CABLE leva sua voz modificada até o Discord ou jogo. Baixe, instale, reinicie o PC e abra o app de novo. Se já instalou, pode pular.", link: { label: "Baixar VB-CABLE", href: VB_CABLE_URL } },
-  { title: "2. Escolha seu microfone", text: "Em Configurações → Áudio, escolha o microfone que você usa de verdade." },
-  { title: "3. Escolha seu fone", text: "Na mesma tela, escolha seu fone ou caixa de som em \"Fone de Ouvido / Auto-falante\". É por ele que você se ouve." },
+  { title: "2. Escolha o microfone e o CABLE Input", text: "Em Configurações → Áudio: no campo 1, seu microfone de verdade. No campo 2, escolha \"CABLE Input (VB-Audio Virtual Cable)\", que é por onde a sua voz modificada sai." },
+  { title: "3. Escolha seu fone", text: "No campo 3, escolha seu fone ou caixa de som. É por ele que você se ouve. Não use o CABLE aqui." },
   { title: "4. Ligue a voz", text: "Clique em \"VOZ OFF\" no dock (a barra flutuante) para virar \"VOZ ON\". Depois escolha uma voz na aba Vozes." },
   { title: "5. Ouça sua voz", text: "Clique no ícone de alto-falante do dock para se ouvir. Se algo não funcionar, use \"Problemas de áudio?\" em Configurações." }
 ];

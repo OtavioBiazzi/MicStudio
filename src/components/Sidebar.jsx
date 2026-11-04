@@ -7,6 +7,7 @@ import {
   Star,
   Flask,
   GearSix,
+  UserSwitch,
   Waveform
 } from "@phosphor-icons/react";
 
@@ -16,7 +17,8 @@ const sections = [
     pages: [
       { id: "vozes", label: "Vozes", icon: MicrophoneStage },
       { id: "soundboard", label: "Soundboard", icon: MusicNotes },
-      { id: "voicelab", label: "Voice Lab", icon: Flask }
+      { id: "voicelab", label: "Voice Lab", icon: Flask },
+      { id: "perfis", label: "Perfis", icon: UserSwitch }
     ]
   },
   {

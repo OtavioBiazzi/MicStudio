@@ -307,23 +307,31 @@ export function ConfigPage({
                   </div>
                 )}
 
+                <div className="deviceHelp">
+                  <strong>Como escolher:</strong> o app pega o seu <b>microfone</b>, aplica a voz e envia para o <b>CABLE Input</b>.
+                  No Discord, jogo ou OBS você escolhe o <b>CABLE Output</b> como microfone. O seu <b>fone</b> serve só para você se ouvir.
+                </div>
+
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <SelectField
-                    label="Microfone (Dispositivo de Entrada)"
+                    label="1. Seu microfone"
+                    hint="O microfone que você usa de verdade para falar (ex.: Fifine, headset)."
                     value={state.selected?.input}
                     items={state.devices?.inputs || []}
                     onChange={(v) => changeDevice("input", v)}
                     disabled={Boolean(deviceChanging)}
                   />
                   <SelectField
-                    label="Cabo Virtual (VB-CABLE / Saída de Áudio)"
+                    label="2. Saída da voz: escolha o CABLE Input"
+                    hint="Escolha &quot;CABLE Input (VB-Audio Virtual Cable)&quot;. É por aqui que a sua voz modificada sai para os outros programas."
                     value={state.selected?.output}
                     items={state.devices?.outputs || []}
                     onChange={(v) => changeDevice("output", v)}
                     disabled={Boolean(deviceChanging)}
                   />
                   <SelectField
-                    label="Fone de Ouvido / Auto-falante (Para você se ouvir / Monitoramento)"
+                    label="3. Seu fone ou caixa de som (para você se ouvir)"
+                    hint="Onde você escuta a sua própria voz e o soundboard. Não use o CABLE aqui."
                     value={state.selected?.monitor}
                     items={state.devices?.outputs || []}
                     onChange={(v) => changeDevice("monitor", v)}
@@ -1358,10 +1366,11 @@ export function StatusLine({ label, value, active }) {
 }
 
 // --- SelectField ---
-export function SelectField({ label, value, items, onChange, allowNone, disabled = false }) {
+export function SelectField({ label, hint, value, items, onChange, allowNone, disabled = false }) {
   return (
     <div className="selectField">
       <label>{label}</label>
+      {hint && <small className="selectHint">{hint}</small>}
       <select disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}>
         {allowNone && <option value="">Nenhum</option>}
         {(items || []).map((item) => (

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { AudioAssistant } from "./components/AudioAssistant.jsx";
 import { GuideModal } from "./components/GuideModal.jsx";
+import { ProfilesPage } from "./components/ProfilesPage.jsx";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import "./styles.css";
@@ -88,7 +89,7 @@ function App() {
   const [state, setState] = useState(null);
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem("micfudiddo.page") || "vozes";
-    const validPages = ["vozes", "soundboard", "online_library", "favoritos", "voicelab", "config"];
+    const validPages = ["vozes", "soundboard", "online_library", "favoritos", "voicelab", "perfis", "config"];
     return validPages.includes(saved) ? saved : "vozes";
   });
   const [selectedSound, setSelectedSound] = useState(null);
@@ -899,6 +900,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!state?.profileNotice) return;
+    setToast(state.profileNotice);
+    callSilent("/api/profiles/notice-dismiss").catch(() => {});
+  }, [state?.profileNotice]);
+
+  useEffect(() => {
     if (!state?.voiceNotice) return;
     setToast(state.voiceNotice);
     callSilent("/api/voice/notice-dismiss").catch(() => {});
@@ -1213,6 +1220,11 @@ function App() {
                     customVoices={customVoices}
                     activePreset={activePreset}
                   />
+                </ErrorBoundary>
+              )}
+              {page === "perfis" && (
+                <ErrorBoundary>
+                  <ProfilesPage state={state} call={call} setToast={setToast} customVoices={customVoices} />
                 </ErrorBoundary>
               )}
               {page === "voicelab" && (

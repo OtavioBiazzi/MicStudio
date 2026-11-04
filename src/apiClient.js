@@ -1,4 +1,6 @@
-export const API = "http://127.0.0.1:38717";
+// Em desenvolvimento, ?api=http://127.0.0.1:PORTA aponta a interface para outro backend (testes isolados).
+const devApiOverride = import.meta.env?.DEV ? new URLSearchParams(globalThis.location?.search || "").get("api") : "";
+export const API = devApiOverride || "http://127.0.0.1:38717";
 
 export async function postAPI(path, body = {}) {
   const res = await fetch(`${API}${path}`, {

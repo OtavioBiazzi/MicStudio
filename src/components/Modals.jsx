@@ -1463,6 +1463,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v1.8.0": `### Versão 1.8.0
+* Nova aba Perfis: salve a voz, os efeitos, os volumes e, se quiser, o microfone e o fone, e aplique com um clique.
+* Cada perfil pode ter um atalho próprio e trocar sozinho quando um programa abrir em primeiro plano (Discord, um jogo, OBS). O botão "Detectar o programa que eu abrir" descobre o nome do programa para você.
+* Perfis podem ser atualizados com o estado atual, exportados e importados (com validação do arquivo).
+* Configurações de áudio explicadas passo a passo: seu microfone, o CABLE Input como saída da voz e o fone para você se ouvir. O guia de primeiros passos também foi atualizado.`,
   "v1.7.1": `### Versão 1.7.1
 * A voz agora abre ligada e sem filtro (Sem efeito) por padrão, e o aviso de "voz desligada" não aparece mais ao abrir. A opção continua em Configurações ("Ligar a voz ao abrir o app") para quem preferir ligar manualmente.`,
   "v1.7.0": `### Versão 1.7.0

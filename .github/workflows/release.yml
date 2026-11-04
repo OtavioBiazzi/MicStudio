@@ -52,6 +52,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            studio-release/MicFudiddo Studio*.exe
+            studio-release/VozLab Studio*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

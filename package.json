@@ -1,8 +1,8 @@
 {
   "name": "micfudiddo-studio",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "MicFudiddo Studio Electron UI",
+  "description": "VozLab Studio - modificador de voz e soundboard",
   "main": "electron/main.cjs",
   "scripts": {
     "test": "node --test tests/voice-state.test.mjs tests/backend-status.test.cjs tests/onboarding.test.cjs tests/ui-policy.test.mjs && .venv\\Scripts\\python.exe -m unittest discover -s tests -q",
@@ -32,7 +32,7 @@
   "build": {
     "beforePack": "build/validate-backend.cjs",
     "appId": "com.micfudiddo.studio",
-    "productName": "MicFudiddo Studio",
+    "productName": "VozLab Studio",
     "directories": {
       "output": "studio-release"
     },
@@ -49,23 +49,23 @@
       }
     ],
     "win": {
-      "icon": "assets/micfudiddo.ico",
+      "icon": "assets/vozlab.ico",
       "target": [
         "nsis",
         "portable"
       ],
       "extraFiles": [
         {
-          "from": "assets/micfudiddo.ico",
-          "to": "resources/assets/micfudiddo.ico"
+          "from": "assets/vozlab.ico",
+          "to": "resources/assets/vozlab.ico"
         }
       ]
     },
     "nsis": {
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
-      "shortcutName": "MicFudiddo Studio",
-      "uninstallDisplayName": "MicFudiddo Studio",
+      "shortcutName": "VozLab Studio",
+      "uninstallDisplayName": "VozLab Studio",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "runAfterFinish": true,

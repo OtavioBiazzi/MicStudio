@@ -1464,7 +1464,7 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 
 const LOCAL_CHANGELOGS = {
   "v2.1.0": `### Versão 2.1.0
-* O app agora se chama VozLab Studio, com ícone novo (microfone roxo e verde-limão com ondas). Seus sons, perfis, favoritos e configurações continuam exatamente onde estavam.
+* O app agora se chama VozLab Studio, com ícone novo (microfone violeta com ondas). Seus sons, perfis, favoritos e configurações continuam exatamente onde estavam.
 * Muito mais fluido: a aba Vozes foi de cerca de 29 para 140 quadros por segundo na rolagem (as 1.316 barrinhas animadas dos cards agora só se mexem com o mouse em cima), o Soundboard foi de 70 para 106 e o Explorar Sons de 110 para 126. As atualizações periódicas deixaram de travar a tela.
 * Cards de voz e de som são atualizados só quando mudam, e o dock e o player não usam mais desfoque sobre a lista que rola.`,
   "v2.0.0": `### Versão 2.0.0

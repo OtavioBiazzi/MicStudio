@@ -1,6 +1,6 @@
 {
   "name": "micfudiddo-studio",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "private": true,
   "description": "VozLab Studio - modificador de voz e soundboard",
   "main": "electron/main.cjs",
@@ -32,7 +32,7 @@
   "build": {
     "beforePack": "build/validate-backend.cjs",
     "appId": "com.micfudiddo.studio",
-    "productName": "VozLab Studio",
+    "productName": "VozLab",
     "directories": {
       "output": "studio-release"
     },
@@ -64,8 +64,8 @@
     "nsis": {
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
-      "shortcutName": "VozLab Studio",
-      "uninstallDisplayName": "VozLab Studio",
+      "shortcutName": "VozLab",
+      "uninstallDisplayName": "VozLab",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "runAfterFinish": true,

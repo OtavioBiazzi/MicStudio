@@ -1538,6 +1538,16 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.4.0": `### Versão 2.4.0
+
+**Nome no Windows: VozLab**
+- Na pesquisa do Windows, no Menu Iniciar, no atalho da Área de Trabalho e em "Aplicativos instalados" o app agora aparece só como **VozLab**. Dentro do app continua **VozLab Studio**.
+- Os atalhos antigos ("VozLab Studio", "MicFudiddo") são trocados sozinhos. Seus sons, perfis e configurações não mudam.
+
+**Atualizações sob controle**
+- O app só procura versão nova quando você abre ele (padrão) ou quando clica em **Procurar atualização** em Configurações. Nunca fica procurando em loop.
+- Novo interruptor em Configurações para desligar a busca ao abrir.
+`,
   "v2.3.1": `### Versão 2.3.1
 * Editor de som reorganizado: a forma de onda e o player ficam sempre visíveis no topo, e embaixo há abas simples: Som (volume, tom, velocidade, fades), Efeitos, Como toca e Detalhes (nome, pasta, atalho, capa e para onde o som vai).
 * Efeitos agrupados por finalidade (espaço e eco, timbre, vozes e estilos, limpeza), com contador de efeitos ligados na aba e botão "Desligar todos".

@@ -993,7 +993,7 @@ function cleanOldVersion() {
   // 3. Limpar atalhos antigos específicos (Desktop e Start Menu)
   try {
     const desktopDir = app.getPath("desktop");
-    const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk"];
+    const oldDesktopShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk", "VozLab Studio.lnk"];
     oldDesktopShortcuts.forEach((lnk) => {
       const lnkPath = path.join(desktopDir, lnk);
       if (fs.existsSync(lnkPath)) {
@@ -1003,7 +1003,7 @@ function cleanOldVersion() {
 
     if (appData) {
       const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
-      const oldStartMenuShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk"];
+      const oldStartMenuShortcuts = ["Mic Fudido.lnk", "MicFudiddo.lnk", "MicFudiddo Studio.lnk", "VozLab Studio.lnk"];
       oldStartMenuShortcuts.forEach((lnk) => {
         const lnkPath = path.join(startMenuProgramsDir, lnk);
         if (fs.existsSync(lnkPath)) {
@@ -1018,7 +1018,7 @@ function cleanOldVersion() {
     // Não criar atalhos se estiver rodando em ambiente de desenvolvimento (isDev)
     if (!isDev) {
       const desktopDir = app.getPath("desktop");
-      const newDesktopShortcut = path.join(desktopDir, "VozLab Studio.lnk");
+      const newDesktopShortcut = path.join(desktopDir, "VozLab.lnk");
       
       const shortcutOptions = {
         target: app.getPath("exe"),
@@ -1037,7 +1037,7 @@ function cleanOldVersion() {
       // Gravar atalho no Menu Iniciar (deleta antes para evitar erro de arquivo existente)
       if (appData) {
         const startMenuProgramsDir = path.join(appData, "Microsoft\\Windows\\Start Menu\\Programs");
-        const newStartMenuShortcut = path.join(startMenuProgramsDir, "VozLab Studio.lnk");
+        const newStartMenuShortcut = path.join(startMenuProgramsDir, "VozLab.lnk");
         if (fs.existsSync(newStartMenuShortcut)) {
           try { fs.unlinkSync(newStartMenuShortcut); } catch (_) {}
         }

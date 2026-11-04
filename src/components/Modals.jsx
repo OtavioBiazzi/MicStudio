@@ -1463,6 +1463,9 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.0.0": `### Versão 2.0.0
+* Abertura mais rápida: os dispositivos de áudio agora são consultados em paralelo com o carregamento da biblioteca (a criação do estado caiu de cerca de 1,0 s para 0,3 s nos testes), o Electron inicia o servidor de áudio antes de criar a janela e a interface confirma o servidor mais cedo.
+* Código reorganizado por dentro: TTS, clipes, importação do YouTube/TikTok, sons online e perfis agora ficam em módulos próprios, o que facilita as próximas versões. Nada muda para quem usa.`,
   "v1.8.0": `### Versão 1.8.0
 * Nova aba Perfis: salve a voz, os efeitos, os volumes e, se quiser, o microfone e o fone, e aplique com um clique.
 * Cada perfil pode ter um atalho próprio e trocar sozinho quando um programa abrir em primeiro plano (Discord, um jogo, OBS). O botão "Detectar o programa que eu abrir" descobre o nome do programa para você.

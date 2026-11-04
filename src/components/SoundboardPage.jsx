@@ -12,6 +12,66 @@ import { AdvancedSoundEditorModal, YoutubeImportModal, TTSModal } from "./Modals
 import { ContextMenu } from "./ContextMenu";
 import "./soundboard.css";
 
+// Card de som: memoizado. So re-renderiza quando o proprio som, o estado de tocar/favorito/ativo muda,
+// e nao a cada atualizacao do estado global (antes eram ~270 cards refeitos por ciclo).
+const SoundCard = React.memo(function SoundCard({ sound, isActive, isPlaying, playbackId, isFav, actions }) {
+  const act = () => actions.current;
+  return (
+    <div
+      className={`soundCard ${isActive ? "active" : ""} ${isPlaying ? "playing" : ""}`}
+      tabIndex={0}
+      aria-label={sound.name}
+      onClick={() => act().setSelectedSound(sound.id)}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && ["Enter", " "].includes(e.key)) { e.preventDefault(); act().setSelectedSound(sound.id); }
+      }}
+      onDoubleClick={() => {
+        act().call("/api/sounds/play", { id: sound.id }).catch((e) => act().setToast(e.message));
+      }}
+      onContextMenu={(e) => { e.preventDefault(); act().setContextMenu({ x: e.clientX, y: e.clientY, sound }); }}
+    >
+      <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
+        {sound.coverUrl ? <img src={sound.coverUrl} alt="" loading="lazy" decoding="async" /> : <MusicNotes size={18} color={sound.color || "var(--purple)"} />}
+        <button
+          className="soundPlayBtn"
+          aria-label={isPlaying ? `Parar ${sound.name}` : `Tocar ${sound.name}`}
+          title={isPlaying ? "Parar" : "Tocar"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isPlaying) {
+              // Para so este som; os outros que estiverem tocando continuam.
+              act().call("/api/sounds/stop", { playbackId }).catch(() => {});
+            } else act().call("/api/sounds/play", { id: sound.id }).catch((err) => act().setToast(err.message));
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}
+        </button>
+      </div>
+      <div className="soundCardInfo">
+        <div className="soundName" title={sound.name}>{sound.name.replace(/\.[^/.]+$/, "")}</div>
+        <div className="soundCategory">{formatTime(sound.duration)} • {sound.plays || 0} plays</div>
+        {sound.shortcut && <span className="soundCardShortcut"><Keyboard size={10} /> {sound.shortcut}</span>}
+      </div>
+      <div className="soundCardActions" onDoubleClick={(e) => e.stopPropagation()}>
+        <button className={`soundcard-fav-btn ${isFav ? "favorited" : ""}`}
+          title={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+          aria-label={`${isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${sound.name}`}
+          onClick={(e) => { e.stopPropagation(); act().toggleSoundboardFavorite(sound.id); }}>
+          <Heart size={16} weight={isFav ? "fill" : "regular"} />
+        </button>
+        <button title="Mais opções" aria-label={`Mais opções: ${sound.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            act().setContextMenu({ x: rect.left, y: rect.bottom, sound });
+          }}><DotsThreeVertical size={16} weight="bold" /></button>
+        {isPlaying && <Play size={12} weight="fill" className="soundPlayingIcon" aria-label="Tocando" />}
+      </div>
+    </div>
+  );
+});
+
 export function SoundboardPage({
   state,
   call,
@@ -40,6 +100,9 @@ export function SoundboardPage({
   const [pendingImport, setPendingImport] = useState(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const pillsRef = useDragScroll();
+  // Referencia estavel com as acoes mais recentes: os cards memoizados usam isto em vez de receber funcoes novas a cada render.
+  const actionsRef = React.useRef({});
+  actionsRef.current = { call, setToast, setSelectedSound, setContextMenu, toggleSoundboardFavorite };
   const [showYoutubeModal, setShowYoutubeModal] = useState(false);
   const [showTTSModal, setShowTTSModal] = useState(false);
 
@@ -410,62 +473,16 @@ export function SoundboardPage({
             {!filtered.length && <div className="soundboardEmpty"><MusicNotes size={32} weight="duotone" /><p>{query ? "Nenhum som encontrado" : "Nenhum som nesta aba"}</p></div>}
             {filtered.map((sound) => {
               const player = playerBySound[sound.id];
-              const isPlaying = player?.state === "playing";
-              const isFav = soundboardFavorites.includes(sound.id);
               return (
-                <div
+                <SoundCard
                   key={sound.id}
-                  className={`soundCard ${selected?.id === sound.id && selectedSound !== null ? "active" : ""} ${isPlaying ? "playing" : ""}`}
-                  tabIndex={0}
-                  aria-label={sound.name}
-                  onClick={() => { setSelectedSound(sound.id); }}
-                  onKeyDown={(e) => {
-                    if (e.target === e.currentTarget && ["Enter", " "].includes(e.key)) { e.preventDefault(); setSelectedSound(sound.id); }
-                  }}
-                  onDoubleClick={() => {
-                    call("/api/sounds/play", { id: sound.id }).catch((e) => setToast(e.message));
-                  }}
-                  onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, sound }); }}
-                >
-                  <div className="soundCover" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 20%, var(--bg-card-secondary))` }}>
-                    {sound.coverUrl ? <img src={sound.coverUrl} alt="" /> : <MusicNotes size={18} color={sound.color || "var(--purple)"} />}
-                    <button
-                      className="soundPlayBtn"
-                      aria-label={isPlaying ? `Parar ${sound.name}` : `Tocar ${sound.name}`}
-                      title={isPlaying ? "Parar" : "Tocar"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isPlaying) {
-                          // Para so este som; os outros que estiverem tocando continuam.
-                          call("/api/sounds/stop", { playbackId: player.playbackId }).catch(() => {});
-                        } else call("/api/sounds/play", { id: sound.id }).catch((err) => setToast(err.message));
-                      }}
-                      onDoubleClick={(e) => e.stopPropagation()}
-                    >
-                      {isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}
-                    </button>
-                  </div>
-                  <div className="soundCardInfo">
-                    <div className="soundName" title={sound.name}>{sound.name.replace(/\.[^/.]+$/, "")}</div>
-                    <div className="soundCategory">{formatTime(sound.duration)} • {sound.plays || 0} plays</div>
-                    {sound.shortcut && <span className="soundCardShortcut"><Keyboard size={10} /> {sound.shortcut}</span>}
-                  </div>
-                  <div className="soundCardActions" onDoubleClick={(e) => e.stopPropagation()}>
-                    <button className={`soundcard-fav-btn ${isFav ? "favorited" : ""}`}
-                      title={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-                      aria-label={`${isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}: ${sound.name}`}
-                      onClick={(e) => { e.stopPropagation(); toggleSoundboardFavorite(sound.id); }}>
-                      <Heart size={16} weight={isFav ? "fill" : "regular"} />
-                    </button>
-                    <button title="Mais opções" aria-label={`Mais opções: ${sound.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setContextMenu({ x: rect.left, y: rect.bottom, sound });
-                      }}><DotsThreeVertical size={16} weight="bold" /></button>
-                    {isPlaying && <Play size={12} weight="fill" className="soundPlayingIcon" aria-label="Tocando" />}
-                  </div>
-                </div>
+                  sound={sound}
+                  isActive={selected?.id === sound.id && selectedSound !== null}
+                  isPlaying={player?.state === "playing"}
+                  playbackId={player?.playbackId || ""}
+                  isFav={soundboardFavorites.includes(sound.id)}
+                  actions={actionsRef}
+                />
               );
             })}
           </div>
@@ -884,7 +901,7 @@ export function SoundboardQuickPanel({
 
       <div className="panelImage" style={{ background: `color-mix(in srgb, ${sound.color || "#8B5CF6"} 15%, var(--bg-card-secondary))` }}>
         {sound.coverUrl ? (
-          <img src={sound.coverUrl} alt="" />
+          <img src={sound.coverUrl} alt="" loading="lazy" decoding="async" />
         ) : (
           <MusicNotes size={64} color={sound.color || "var(--purple)"} />
         )}

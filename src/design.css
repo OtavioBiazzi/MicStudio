@@ -833,3 +833,16 @@ input[type=range] { touch-action: none; }
 
 .exMeta { flex-wrap: wrap; row-gap: 2px; gap: 4px 10px; }
 .exMeta span { white-space: nowrap; }
+
+
+/* ===== Editor de som: cartao "Como este som toca" ===== */
+.editorOptions { display: flex; flex-direction: column; gap: 4px; padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.optTitle { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.optSelectRow { display: grid; gap: 6px; }
+.optSelectRow select { width: 100%; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font: inherit; font-size: 12px; outline: none; }
+.optSelectRow select:focus { border-color: rgba(var(--accent-rgb), .6); }
+.optModeDesc { margin: 2px 0 8px; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+.optRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.optText { display: grid; gap: 2px; min-width: 0; }
+.optLabel { font-size: 12px; font-weight: 700; color: var(--text); }
+.optDesc { font-size: 11px; line-height: 1.4; color: var(--text-muted); }

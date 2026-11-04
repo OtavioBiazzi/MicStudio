@@ -431,6 +431,7 @@ DEFAULT_APP_SETTINGS = {
     "launchAtStartup": False,
     "restoreOnDisable": True,
     "minimizeToTray": True,
+    "freeMemoryInTray": True,
     "allowMultipleSounds": False,
     "shortcutMuteMic": "",
     "shortcutToggleBypass": "",

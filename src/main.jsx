@@ -858,7 +858,9 @@ function App() {
   useEffect(() => {
     if (!state || autoBootTried) return;
     setAutoBootTried(true);
-    if (state.settings?.autoStartVirtual && !state.running && !state.virtualMode) {
+    // Janela acordada da bandeja nao e uma abertura do app: nao religa a voz que voce desligou.
+    const wokenFromTray = new URLSearchParams(window.location.search).has("wake");
+    if (!wokenFromTray && state.settings?.autoStartVirtual && !state.running && !state.virtualMode) {
       call("/api/virtual/start").catch((e) => setToast(e.message));
     }
   }, [state, autoBootTried]);

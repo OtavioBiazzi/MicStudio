@@ -78,6 +78,8 @@ class VoiceWatchdogTests(unittest.TestCase):
         state.voice_problem = ""
         state._voice_recover_failures = 0
         state.monitor_only_active = False
+        state.selected_input_name = "Mic A"
+        state.voice_notice = ""
         state.status = ""
         state.engine = SimpleNamespace(running=running)
         state.refresh_devices = lambda: None
@@ -90,6 +92,18 @@ class VoiceWatchdogTests(unittest.TestCase):
         state.recover_voice_if_needed()
         self.assertEqual(started, [1])
         self.assertEqual(state.voice_problem, "")
+
+    def test_notifies_when_microphone_changed(self):
+        state = self.make()
+
+        def refresh():
+            state.selected_input_name = "Mic B"
+
+        state.refresh_devices = refresh
+        state.start = lambda: None
+        state.recover_voice_if_needed()
+        self.assertIn("Mic A", state.voice_notice)
+        self.assertIn("Mic B", state.voice_notice)
 
     def test_does_nothing_when_user_turned_voice_off(self):
         state = self.make()

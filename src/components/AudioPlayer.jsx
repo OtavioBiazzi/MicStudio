@@ -86,22 +86,8 @@ export function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSou
   if (players.length === 0) return null;
 
   return (
-    <div className="audioPlayerSection pinned" style={{
-      width: "100%",
-      position: "sticky",
-      top: 0,
-      zIndex: 100,
-      background: "rgba(11, 17, 26, 0.85)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      boxShadow: "0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(139, 92, 246, 0.25)",
-      border: "1px solid rgba(139, 92, 246, 0.3)",
-      borderRadius: "var(--radius-md)",
-      padding: "12px 24px",
-      marginLeft: "-8px",
-      marginRight: "-8px",
-      marginBottom: 16
-    }}>
+    <div className="audioPlayerAnchor">
+    <div className="audioPlayerFloat">
 
       <div className={`audioPlayersContainer ${players.length === 1 ? "single-player" : ""}`}>
         {players.map((p) => {
@@ -210,6 +196,7 @@ export function AudioPlayer({ state, selected, call, pinnedSoundId, setPinnedSou
           );
         })}
       </div>
+    </div>
     </div>
   );
 }

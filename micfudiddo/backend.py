@@ -1023,6 +1023,7 @@ class AppState:
         # A voz foi ligada pelo usuario e deve continuar ligada; o vigia religa se o audio cair.
         self.voice_wanted = False
         self.voice_problem = ""
+        self.voice_notice = ""
         self._voice_recover_failures = 0
         self.status = "Backend pronto"
         self.hotkey_handles = []
@@ -1915,11 +1916,17 @@ class AppState:
         if self._voice_recover_failures >= 5:
             return
         try:
+            previous_mic = self.selected_input_name
             self.refresh_devices()
             self.start()
             self.voice_problem = ""
             self._voice_recover_failures = 0
             self.status = "Voz reconectada automaticamente"
+            if previous_mic and self.selected_input_name and previous_mic != self.selected_input_name:
+                self.voice_notice = (
+                    f"O microfone \"{previous_mic}\" não está disponível. "
+                    f"Troquei automaticamente para \"{self.selected_input_name}\"."
+                )
         except Exception as exc:
             self._voice_recover_failures += 1
             self.voice_problem = (
@@ -2586,6 +2593,7 @@ class AppState:
             "monitorOnly": self.monitor_only_active,
             "voiceWanted": self.voice_wanted,
             "voiceProblem": self.voice_problem,
+            "voiceNotice": self.voice_notice,
             "sampleRate": self.engine.sample_rate,
             "blockSize": self.engine.block_size,
             "level": self.engine.last_level,
@@ -2965,6 +2973,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, 500)
 
     def _route_post(self, path: str, data: dict):
+        if path == "/api/voice/notice-dismiss":
+            STATE.voice_notice = ""
+            return STATE.runtime_snapshot()
         if path == "/api/devices/refresh":
             STATE.refresh_devices()
             STATE.refresh_record_devices()

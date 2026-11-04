@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useDragScroll } from "../useDragScroll";
 import {
   MagnifyingGlass, Plus, Trash, Star, Copy, X, DotsThreeVertical,
   CaretUp, CaretDown, ArrowClockwise, Microphone, PencilSimpleLine,
@@ -55,6 +56,7 @@ export function VozesPage({
   activePreset,
   setToast
 }) {
+  const pillsRef = useDragScroll();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas");
   const [contextMenu, setContextMenu] = useState(null);
@@ -220,7 +222,7 @@ export function VozesPage({
         </div>
       </div>
 
-      <div className="categoryPills">
+      <div className="categoryPills" ref={pillsRef}>
         {categories.map((cat) => (
           <button key={cat} className={category === cat ? "active" : ""} onClick={() => setCategory(cat)}>
             {cat}

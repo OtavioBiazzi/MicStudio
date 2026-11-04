@@ -868,8 +868,33 @@ function App() {
     guideCheckedRef.current = true;
     let seen = true;
     try { seen = localStorage.getItem("micfudiddo.guideSeen") === "1"; } catch { /* sem storage */ }
-    if (!seen) setGuideTab("first");
+    if (seen) return;
+    // Marca como visto assim que decide: nunca reaparece, nem apos atualizar o app.
+    try { localStorage.setItem("micfudiddo.guideSeen", "1"); } catch { /* sem storage */ }
+    // Quem ja usa o app (tem sons ou ja tocou algo) nao precisa do guia.
+    const existingUser = (state.sounds?.length || 0) > 0 || (state.totalPlayCount || 0) > 0;
+    if (!existingUser) setGuideTab("first");
   }, [state]);
+
+  // Arrastar um slider nao pode selecionar texto da pagina (isso travava o ajuste).
+  useEffect(() => {
+    const start = (event) => {
+      if (event.target instanceof HTMLInputElement && event.target.type === "range") {
+        document.body.classList.add("draggingSlider");
+      }
+    };
+    const end = () => document.body.classList.remove("draggingSlider");
+    window.addEventListener("pointerdown", start, true);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+    window.addEventListener("blur", end);
+    return () => {
+      window.removeEventListener("pointerdown", start, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      window.removeEventListener("blur", end);
+    };
+  }, []);
 
   useEffect(() => {
     if (!state?.voiceNotice) return;

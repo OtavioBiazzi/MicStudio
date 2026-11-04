@@ -961,7 +961,11 @@ def render_sound_for_playback(
 
     speed = _sanitize_speed(speed)
     if abs(speed - 1.0) > 0.0001:
-        y = resample_by_ratio(y, speed)
+        if _sanitize_pitch_mode(pitch_mode) == "resample":
+            # Modo "fita": acelerar tambem deixa mais agudo, como um disco ou fita.
+            y = resample_by_ratio(y, speed)
+        else:
+            y = time_stretch_preserve_pitch(y, speed, int(sample_rate))
 
     if normalize:
         y = normalize_peak(y)
@@ -1082,6 +1086,22 @@ def resample_by_ratio(samples: np.ndarray, ratio: float) -> np.ndarray:
     right = np.minimum(left + 1, samples.size - 1)
     frac = indexes - left
     return ((samples[left] * (1.0 - frac)) + (samples[right] * frac)).astype(np.float32)
+
+
+def time_stretch_preserve_pitch(samples: np.ndarray, speed: float, sample_rate: int) -> np.ndarray:
+    """Muda a velocidade (e a duracao) mantendo o tom original."""
+    import math
+
+    block = np.asarray(samples, dtype=np.float32).reshape(-1)
+    if block.size < 2 or speed <= 0.0 or abs(speed - 1.0) < 0.0001:
+        return block.copy()
+    faster = resample_by_ratio(block, speed)  # duracao /speed, tom *speed
+    correction = -12.0 * math.log2(speed)  # semitons para voltar ao tom original
+    while abs(correction) > 0.0001:
+        step = max(-12.0, min(12.0, correction))
+        faster = pitch_shift_preserve_duration(faster, step, sample_rate)
+        correction -= step
+    return faster.astype(np.float32, copy=False)
 
 
 def pitch_shift_preserve_duration(samples: np.ndarray, semitones: float, sample_rate: int) -> np.ndarray:

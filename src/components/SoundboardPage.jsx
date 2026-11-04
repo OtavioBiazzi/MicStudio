@@ -4,10 +4,11 @@ import {
   MagnifyingGlass, Plus, Trash, UploadSimple, FolderOpen, Shuffle, StopCircle,
   Record, Play, Star, FadersHorizontal, Copy, SlidersHorizontal, Export, Sparkle,
   MusicNotes, Keyboard, ArrowClockwise, X, CloudArrowDown, CloudArrowUp, DownloadSimple,
-  Scissors, Heart, DotsThreeVertical, WarningCircle, SquaresFour, Pause
+  Scissors, Heart, DotsThreeVertical, WarningCircle, SquaresFour, Pause, PencilSimple, LinkSimple, Clipboard, Tabs, YoutubeLogo, Microphone
 } from "@phosphor-icons/react";
+import { useDragScroll } from "../useDragScroll";
 import { formatTime, formatLastUsed, filePathToUrl, copyTextToClipboard } from "../utils";
-import { AdvancedSoundEditorModal } from "./Modals";
+import { AdvancedSoundEditorModal, YoutubeImportModal, TTSModal } from "./Modals";
 import { ContextMenu } from "./ContextMenu";
 import "./soundboard.css";
 
@@ -38,6 +39,9 @@ export function SoundboardPage({
   const [sourceFilter, setSourceFilter] = useState("Todos");
   const [pendingImport, setPendingImport] = useState(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const pillsRef = useDragScroll();
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
+  const [showTTSModal, setShowTTSModal] = useState(false);
 
   useEffect(() => {
     if (!addMenuOpen) return undefined;
@@ -305,6 +309,8 @@ export function SoundboardPage({
               <div className="sbMenu" role="menu">
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); addSounds(); }}><UploadSimple size={15} /> Arquivos de áudio</button>
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); addFolders(); }}><FolderOpen size={15} /> Pasta inteira</button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setShowYoutubeModal(true); }}><YoutubeLogo size={15} /> YouTube ou TikTok</button>
+                <button role="menuitem" onClick={() => { setAddMenuOpen(false); setShowTTSModal(true); }}><Microphone size={15} /> Texto para voz (TTS)</button>
                 <button role="menuitem" onClick={() => { setAddMenuOpen(false); (() => {
                 if (isLimitReached) {
                   setToast?.("Limite de armazenamento do Soundboard atingido! Aumente o limite nas configurações para importar mais sons.");
@@ -372,7 +378,7 @@ export function SoundboardPage({
       </div>
 
       <div className="soundboardFilters">
-      <div className="categoryPills" aria-label="Abas do Soundboard">
+      <div className="categoryPills" ref={pillsRef} aria-label="Abas do Soundboard">
         {categories.map((cat) => (
           <button key={cat} className={category === cat ? "active" : ""} onClick={() => setCategory(cat)}>
             {cat === "Todos" ? <SquaresFour size={14} /> : cat === "Favoritos" ? <Heart size={14} /> : <MusicNotes size={14} />}
@@ -479,6 +485,13 @@ export function SoundboardPage({
         )}
       </div>
 
+      {showYoutubeModal && (
+        <YoutubeImportModal onClose={() => setShowYoutubeModal(false)} call={call} setToast={setToast} state={state} />
+      )}
+      {showTTSModal && (
+        <TTSModal onClose={() => setShowTTSModal(false)} call={call} setToast={setToast} settings={state.settings} />
+      )}
+
       <AnimatePresence>
         {editingSoundId && (
           <AdvancedSoundEditorModal
@@ -509,8 +522,16 @@ export function SoundboardPage({
               <Play size={14} /> Tocar
             </button>
             <button onClick={() => { setEditingSoundId(contextMenu.sound.id); setContextMenu(null); }}>
-              <FadersHorizontal size={14} /> Editar Som
+              <FadersHorizontal size={14} /> Editar som (velocidade, tom e efeitos)
             </button>
+            <button onClick={() => {
+              toggleSoundboardFavorite(contextMenu.sound.id);
+              setContextMenu(null);
+            }}>
+              <Heart size={14} weight={soundboardFavorites.includes(contextMenu.sound.id) ? "fill" : "regular"} />
+              {soundboardFavorites.includes(contextMenu.sound.id) ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+            </button>
+            <div className="menuSep" role="separator" />
             <button onClick={async () => {
               try {
                 const s = contextMenu.sound;
@@ -545,7 +566,7 @@ export function SoundboardPage({
               }
               setContextMenu(null);
             }}>
-              <Copy size={14} /> Duplicar
+              <Copy size={14} /> Duplicar som
             </button>
             <button onClick={() => {
               const currentSound = contextMenu.sound;
@@ -564,35 +585,29 @@ export function SoundboardPage({
                 }
               });
             }}>
-              <SlidersHorizontal size={14} /> Renomear
-            </button>
-            <button onClick={() => {
-              toggleSoundboardFavorite(contextMenu.sound.id);
-              setContextMenu(null);
-            }}>
-              <Star size={14} weight={soundboardFavorites.includes(contextMenu.sound.id) ? "fill" : "regular"} />
-              {soundboardFavorites.includes(contextMenu.sound.id) ? "Desfavoritar" : "Favoritar"}
+              <PencilSimple size={14} /> Renomear
             </button>
             <button onClick={() => {
               const currentSound = contextMenu.sound;
               setContextMenu(null);
               setMoveCategorySoundId(currentSound.id);
             }}>
-              <FolderOpen size={14} /> Mover arquivo para pasta
+              <FolderOpen size={14} /> Mover o arquivo para outra pasta
             </button>
             <button onClick={() => {
               const currentSound = contextMenu.sound;
               setContextMenu(null);
               organizeSoundTabs(currentSound);
             }}>
-              <FolderOpen size={14} /> Organizar em abas
+              <Tabs size={14} /> Escolher abas do soundboard
             </button>
             <button onClick={() => {
               window.micfudiddo?.showItemInFolder?.(contextMenu.sound.path);
               setContextMenu(null);
             }}>
-              <FolderOpen size={14} /> Ver Som na Pasta
+              <FolderOpen size={14} /> Mostrar no Explorador
             </button>
+            <div className="menuSep" role="separator" />
             <button onClick={() => {
               const s = contextMenu.sound;
               const a = document.createElement("a");
@@ -602,7 +617,7 @@ export function SoundboardPage({
               setToast("Exportando som...");
               setContextMenu(null);
             }}>
-              <Export size={14} /> Exportar
+              <Export size={14} /> Salvar cópia do áudio
             </button>
             <button onClick={async () => {
               const s = contextMenu.sound;
@@ -618,7 +633,7 @@ export function SoundboardPage({
                 }
               }
             }}>
-              <DownloadSimple size={14} /> Exportar como .mfsound
+              <DownloadSimple size={14} /> Exportar pacote (.mfsound)
             </button>
             <button onClick={() => {
               const s = contextMenu.sound;
@@ -642,7 +657,7 @@ export function SoundboardPage({
                 }
               }).catch(e => setToast("Erro ao fazer upload: " + e.message));
             }}>
-              <CloudArrowUp size={14} /> Copiar Link de Compartilhamento
+              <LinkSimple size={14} /> Gerar link para compartilhar
             </button>
             <button onClick={() => {
               copyTextToClipboard(contextMenu.sound.path)
@@ -650,10 +665,11 @@ export function SoundboardPage({
                 .catch((err) => setToast("Erro ao copiar: " + err.message));
               setContextMenu(null);
             }}>
-              <Sparkle size={14} /> Compartilhar (Copiar Path)
+              <Clipboard size={14} /> Copiar caminho do arquivo
             </button>
+            <div className="menuSep" role="separator" />
             <button className="danger" onClick={() => { deleteSounds([contextMenu.sound.id]); setContextMenu(null); }}>
-              <Trash size={14} /> Excluir
+              <Trash size={14} /> Excluir som
             </button>
           </ContextMenu>
       )}

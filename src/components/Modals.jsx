@@ -408,7 +408,7 @@ export function MoveCategoryModal({ soundId, state, call, onClose, setToast, cus
                   fontSize: 12,
                   fontWeight: sound.category === c.name ? 700 : 500,
                   color: sound.category === c.name ? "var(--purple)" : "var(--text)",
-                  background: sound.category === c.name ? "rgba(139, 92, 246, 0.1)" : "transparent",
+                  background: sound.category === c.name ? "rgba(var(--accent-rgb),  0.1)" : "transparent",
                   transition: "var(--transition)"
                 }}
                 className="category-row-hover"
@@ -455,177 +455,204 @@ export function MoveCategoryModal({ soundId, state, call, onClose, setToast, cus
   );
 }
 
+// --- Perfil do usuario ---
+// Reduz a foto para um quadrado pequeno (JPEG): fotos grandes estouravam o armazenamento local e quebravam o salvamento.
+function resizeAvatar(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith("image/")) {
+      reject(new Error("Escolha um arquivo de imagem (PNG, JPG ou WEBP)."));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const side = Math.min(image.naturalWidth, image.naturalHeight);
+      const sx = (image.naturalWidth - side) / 2;
+      const sy = (image.naturalHeight - side) / 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      canvas.getContext("2d").drawImage(image, sx, sy, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.88));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Não consegui abrir essa imagem."));
+    };
+    image.src = url;
+  });
+}
+
+function ProfileAvatar({ image, position = 50, size = 72 }) {
+  return (
+    <div className="profile-avatar" style={{ width: size, height: size, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", flexShrink: 0 }}>
+      {image ? (
+        <img src={image} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${position}%` }} />
+      ) : (
+        <Waveform size={Math.round(size * 0.46)} weight="fill" color="#fff" />
+      )}
+    </div>
+  );
+}
+
 // --- UserProfileModal ---
-export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profilePlan, profileImage, profileImagePosition, profileBio, profileReadme }) {
+export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profilePlan, profileImage, profileImagePosition, profileBio, profileReadme, stats }) {
+  const items = stats ? [
+    ["Sons", stats.sounds],
+    ["Reproduções", stats.plays],
+    ["Vozes favoritas", stats.favoriteVoices],
+    ["Sons favoritos", stats.favoriteSounds],
+    ["Vozes criadas", stats.customVoices],
+    ["Perfis de áudio", stats.profiles]
+  ] : [];
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
         className="modalContent profileViewModal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 540, width: "90%", padding: 24 }}
-        initial={{ scale: 0.9, opacity: 0 }}
+        style={{ maxWidth: 560, width: "92%", padding: 24 }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>👤 Perfil do Usuário</h3>
-          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
-        </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 16, borderBottom: "1px solid var(--border)", paddingBottom: 16 }}>
-          <div className="profile-avatar" style={{ width: 72, height: 72, fontSize: 32, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", flexShrink: 0 }}>
-            {profileImage ? (
-              <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
-            ) : (
-              <Waveform size={32} weight="fill" color="#fff" />
-            )}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <h2 style={{ fontSize: 18, margin: 0, fontWeight: 800, color: "var(--text)" }}>{profileName}</h2>
-              {profilePlan && <span className="pro-badge" style={{ display: "inline-block", padding: "1px 6px", fontSize: 9, fontWeight: 800, color: "var(--purple)", background: "var(--purple-soft)", borderRadius: "var(--radius-full)" }}>{profilePlan}</span>}
+        <div className="profileViewHead">
+          <ProfileAvatar image={profileImage} position={profileImagePosition} size={84} />
+          <div className="profileViewWho">
+            <div className="profileViewName">
+              <h2>{profileName}</h2>
+              {profilePlan && <span className="pro-badge">{profilePlan}</span>}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600, marginTop: 2 }}>{profileSub}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontStyle: "italic" }}>{profileBio}</div>
+            {profileSub && <div className="profileViewSub">{profileSub}</div>}
+            {profileBio && <div className="profileViewBio">{profileBio}</div>}
           </div>
-          <button className="btn btn-ghost" onClick={onEdit} style={{ padding: "6px 12px", fontSize: 11, alignSelf: "flex-start", gap: 4 }}>
-            <Pencil size={12} /> Editar
-          </button>
+          <div className="profileViewButtons">
+            <button className="btn btn-ghost" onClick={onEdit}><Pencil size={13} /> Editar</button>
+            <button className="closeBtn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+          </div>
         </div>
-        <div className="readme-container" style={{ background: "rgba(0,0,0,0.2)", padding: 16, borderRadius: "var(--radius-md)", border: "1px solid var(--border)", maxHeight: 300, overflowY: "auto", fontSize: 12, lineHeight: 1.6 }}>
-          {renderMarkdown(profileReadme)}
+
+        {items.length > 0 && (
+          <div className="profileStats">
+            {items.map(([label, value]) => (
+              <div key={label} className="profileStat">
+                <strong>{Number(value || 0).toLocaleString("pt-BR")}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="readme-container profileReadme">
+          {profileReadme && profileReadme.trim()
+            ? renderMarkdown(profileReadme)
+            : <p className="profileReadmeEmpty">Você ainda não escreveu nada sobre você. Clique em Editar para criar a sua página.</p>}
         </div>
       </motion.div>
     </div>
   );
 }
 
+const README_TEMPLATE = "# Sobre mim\n\nEscreva aqui quem você é, o que faz com o VozLab Studio e quais são suas vozes favoritas.\n\n### Minhas vozes favoritas\n- **Voz 1**: para que serve\n- **Voz 2**: para que serve\n\n> Dica: use **negrito**, *itálico* e listas com `-`.";
+
 // --- EditProfileModal ---
 export function EditProfileModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profilePlan, setProfilePlan, profileImage, setProfileImage, profileImagePosition, setProfileImagePosition, profileBio, setProfileBio, profileReadme, setProfileReadme }) {
   const fileInputRef = useRef(null);
+  const [readmeMode, setReadmeMode] = useState("edit");
+  const [avatarError, setAvatarError] = useState("");
 
-  const handleAvatarChange = (e) => {
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setProfileImage(event.target.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setAvatarError("");
+      setProfileImage(await resizeAvatar(file));
+      setProfileImagePosition("50");
+    } catch (error) {
+      setAvatarError(error.message);
+    }
   };
+
+  const field = (label, value, setValue, { max, placeholder, hint } = {}) => (
+    <div className="labField">
+      <label>{label}{max ? <span className="fieldCount">{String(value || "").length}/{max}</span> : null}</label>
+      <input type="text" value={value} maxLength={max} placeholder={placeholder} onChange={(e) => setValue(e.target.value)} />
+      {hint && <small className="selectHint">{hint}</small>}
+    </div>
+  );
 
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
         className="modalContent accountModal editProfileModal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 480, width: "90%" }}
-        initial={{ scale: 0.9, opacity: 0 }}
+        style={{ maxWidth: 520, width: "92%" }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
         <div className="modalHeader">
-          <h3>👤 Editar Perfil</h3>
-          <button className="closeBtn" onClick={onClose}><X size={18} /></button>
+          <h3>Editar perfil</h3>
+          <button className="closeBtn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
         </div>
-        <div className="modalBody" style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "60vh", overflowY: "auto", paddingRight: 4 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, alignSelf: "center", flexDirection: "column", marginBottom: 4 }}>
-            <div className="profile-avatar" style={{ width: 72, height: 72, fontSize: 28, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
-              {profileImage ? (
-                <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
-              ) : (
-                <Waveform size={32} weight="fill" color="#fff" />
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="manage-btn" onClick={() => fileInputRef.current?.click()} style={{ width: "auto", padding: "4px 10px" }}>
-                Carregar Foto
-              </button>
-              {profileImage && (
-                <button className="manage-btn" onClick={() => setProfileImage("")} style={{ width: "auto", padding: "4px 10px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}>
-                  Remover
-                </button>
-              )}
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={handleAvatarChange}
-            />
-            {profileImage && (
-              <div style={{ width: "100%", minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-muted)" }}>
-                  <span>Ajuste Vertical</span>
-                  <span>{profileImagePosition}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={profileImagePosition}
-                  onChange={(e) => setProfileImagePosition(e.target.value)}
-                  style={{ width: "100%", height: 3, cursor: "pointer" }}
-                />
+
+        <div className="modalBody" style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "64vh", overflowY: "auto", paddingRight: 4 }}>
+          <div className="profileEditPreview">
+            <ProfileAvatar image={profileImage} position={profileImagePosition} size={64} />
+            <div className="profileEditPreviewText">
+              <div className="profileViewName">
+                <strong>{profileName || "Seu nome"}</strong>
+                {profilePlan && <span className="pro-badge">{profilePlan}</span>}
               </div>
+              <span>{profileSub || "Seu subtítulo"}</span>
+            </div>
+            <div className="profileEditPhotoButtons">
+              <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>Trocar foto</button>
+              {profileImage && <button className="btn btn-ghost danger" onClick={() => setProfileImage("")}>Remover</button>}
+            </div>
+            <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
+          </div>
+          {avatarError && <small style={{ color: "var(--danger)" }}>{avatarError}</small>}
+          {profileImage && (
+            <div className="labField">
+              <label>Posição da foto <span className="fieldCount">{profileImagePosition}%</span></label>
+              <input type="range" min="0" max="100" value={profileImagePosition} onChange={(e) => setProfileImagePosition(e.target.value)} />
+            </div>
+          )}
+
+          {field("Nome", profileName, setProfileName, { max: 24, placeholder: "Como você quer ser chamado" })}
+          {field("Subtítulo", profileSub, setProfileSub, { max: 40, placeholder: "Ex.: Streamer de fim de semana" })}
+          {field("Selo (deixe vazio para ocultar)", profilePlan, setProfilePlan, { max: 12, placeholder: "Ex.: PRO, VIP" })}
+          {field("Frase curta", profileBio, setProfileBio, { max: 90, placeholder: "Uma linha sobre você" })}
+
+          <div className="labField">
+            <label>
+              Sobre mim (aceita Markdown)
+              <span className="readmeTabs">
+                <button className={readmeMode === "edit" ? "active" : ""} onClick={() => setReadmeMode("edit")}>Escrever</button>
+                <button className={readmeMode === "preview" ? "active" : ""} onClick={() => setReadmeMode("preview")}>Prévia</button>
+              </span>
+            </label>
+            {readmeMode === "edit" ? (
+              <>
+                <textarea rows={7} value={profileReadme} maxLength={4000} onChange={(e) => setProfileReadme(e.target.value)} placeholder="Escreva sobre você..." />
+                <div className="readmeActions">
+                  <button className="btn btn-ghost" onClick={() => setProfileReadme(README_TEMPLATE)}>Usar modelo</button>
+                  <span className="fieldCount">{String(profileReadme || "").length}/4000</span>
+                </div>
+              </>
+            ) : (
+              <div className="readme-container profileReadme">{renderMarkdown(profileReadme || "")}</div>
             )}
           </div>
-
-          <div className="labField">
-            <label>Nome do Perfil</label>
-            <input
-              type="text"
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
-            />
-          </div>
-
-          <div className="labField">
-            <label>Subtítulo / Descrição</label>
-            <input
-              type="text"
-              value={profileSub}
-              onChange={(e) => setProfileSub(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
-            />
-          </div>
-
-          <div className="labField">
-            <label>Nome do Plano (Deixe vazio para ocultar)</label>
-            <input
-              type="text"
-              placeholder="Ex: PRO, VIP, VIP PRO"
-              value={profilePlan}
-              onChange={(e) => setProfilePlan(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
-            />
-          </div>
-
-          <div className="labField">
-            <label>Biografia / Descrição Curta</label>
-            <input
-              type="text"
-              value={profileBio}
-              onChange={(e) => setProfileBio(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12 }}
-            />
-          </div>
-
-          <div className="labField">
-            <label>Página Pessoal README (Suporta Markdown)</label>
-            <textarea
-              rows={4}
-              value={profileReadme}
-              onChange={(e) => setProfileReadme(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontFamily: "monospace", fontSize: 11, resize: "vertical" }}
-            />
-          </div>
         </div>
-        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-          <button className="btn btn-primary" onClick={onClose} style={{ padding: "6px 16px", fontSize: 12 }}>Salvar Alterações</button>
+
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 16 }}>
+          <small style={{ color: "var(--text-muted)" }}>As alterações são salvas na hora.</small>
+          <button className="btn btn-primary" onClick={onClose} style={{ padding: "6px 18px", fontSize: 12 }}>Pronto</button>
         </div>
       </motion.div>
     </div>
@@ -1463,6 +1490,13 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.2.0": `### Versão 2.2.0
+* Temas de verdade: ao trocar a cor (Rubi Carmim, Ouro Âmbar, etc.), botões, destaques, brilhos, bordas e o logo mudam junto. O texto sobre botões claros fica escuro para continuar legível.
+* Configurações refeitas do zero: menu lateral agrupado, uma coluna de leitura, cada opção com texto curto explicando o que faz, e as opções técnicas escondidas em "Avançado". Cada seção tem "Restaurar padrão".
+* Redução de ruído (Noise Gate) refeita: agora usa um gate de verdade, com tempo de ataque, espera e liberação. Antes ela cortava a onda a cada cruzamento por zero e distorcia até a voz alta.
+* Favoritos agora mostra também os sons favoritos (o coração do Soundboard), e "Tocados recentemente" só lista o que foi tocado de fato.
+* Perfil do usuário melhorado: estatísticas (sons, reproduções, favoritos, perfis), prévia ao vivo na edição, contadores de caracteres, aba de prévia do "Sobre mim", modelo pronto e foto redimensionada automaticamente (fotos grandes podiam quebrar o salvamento).
+* Correções: o botão "Restaurar padrão" da Aparência e o da aba Atalhos gravavam valores errados ou não funcionavam; textos da manutenção agora dizem exatamente o que cada botão faz (ele não apaga seus sons); a opacidade da barra flutuante voltou a funcionar; botões do Explorar Sons ganharam nomes para leitores de tela.`,
   "v2.1.0": `### Versão 2.1.0
 * O app agora se chama VozLab Studio, com ícone novo (microfone violeta com ondas). Seus sons, perfis, favoritos e configurações continuam exatamente onde estavam.
 * Muito mais fluido: a aba Vozes foi de cerca de 29 para 140 quadros por segundo na rolagem (as 1.316 barrinhas animadas dos cards agora só se mexem com o mouse em cima), o Soundboard foi de 70 para 106 e o Explorar Sons de 110 para 126. As atualizações periódicas deixaram de travar a tela.
@@ -2213,7 +2247,7 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
                 const isNew = isNewer(release.tag_name);
                 const isCurrent = release.tag_name.replace(/^v/, "") === currentVersion.replace(/^v/, "");
                 return (
-                  <div key={release.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 14, background: isCurrent ? "rgba(139, 92, 246, 0.04)" : "rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div key={release.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 14, background: isCurrent ? "rgba(var(--accent-rgb),  0.04)" : "rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 14, fontWeight: 800, color: isCurrent ? "var(--purple)" : "var(--text)" }}>{release.tag_name}</span>

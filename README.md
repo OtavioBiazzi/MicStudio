@@ -12,7 +12,7 @@ Para baixar a versão estável e pronta para uso do **VozLab Studio** sem precis
 
 1. Vá para a seção de **[Releases (Lançamentos)](https://github.com/OtavioBiazzi/MicStudio/releases)** no topo direito desta página do GitHub.
 2. Localize a versão mais recente (marcada como **Latest**).
-3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `VozLab Studio Setup 2.1.0.exe`) para baixá-lo.
+3. Na seção de **Assets** da release, clique no arquivo `.exe` (ex: `VozLab Studio Setup 2.2.0.exe`) para baixá-lo.
 4. Execute o arquivo baixado. O aplicativo será instalado automaticamente de forma portátil e os atalhos serão criados no seu Menu Iniciar para busca rápida!
 
 ---
@@ -80,7 +80,7 @@ npm run build:studio
 O executavel fica em:
 
 ```text
-studio-release\VozLab Studio 2.1.0.exe
+studio-release\VozLab Studio 2.2.0.exe
 ```
 
 Para colocar no Menu Iniciar e aparecer na busca do Windows:

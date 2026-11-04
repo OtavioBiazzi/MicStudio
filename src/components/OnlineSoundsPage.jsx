@@ -463,7 +463,7 @@ export function OnlineSoundsPage({ state, call, setToast, soundboardFavorites, t
               return (
                 <div key={sound.id} className="online-sound-card">
                   <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <button className={`play-btn ${isPlaying ? "playing" : ""}`} onClick={() => handlePlayPreview(sound)}>
+                    <button className={`play-btn ${isPlaying ? "playing" : ""}`} aria-label={isPlaying ? `Parar prévia: ${sound.name}` : `Ouvir prévia: ${sound.name}`} title={isPlaying ? "Parar prévia" : "Ouvir prévia"} onClick={() => handlePlayPreview(sound)}>
                       {isPlaying ? <PauseCircle size={20} weight="fill" /> : <Play size={20} weight="fill" />}
                     </button>
                     

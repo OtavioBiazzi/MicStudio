@@ -14,7 +14,7 @@ import "./soundboard.css";
 
 // Card de som: memoizado. So re-renderiza quando o proprio som, o estado de tocar/favorito/ativo muda,
 // e nao a cada atualizacao do estado global (antes eram ~270 cards refeitos por ciclo).
-const SoundCard = React.memo(function SoundCard({ sound, isActive, isPlaying, playbackId, isFav, actions }) {
+export const SoundCard = React.memo(function SoundCard({ sound, isActive, isPlaying, playbackId, isFav, actions }) {
   const act = () => actions.current;
   return (
     <div

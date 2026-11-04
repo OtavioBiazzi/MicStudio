@@ -179,6 +179,9 @@ class EffectsSettings:
 class VoiceEffectsProcessor:
     def __init__(self, sample_rate: int) -> None:
         self.sample_rate = int(sample_rate)
+        self._gate_open = False
+        self._gate_gain = 0.0
+        self._gate_hold_left = 0
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
         self.wobble_phase = 0.0
@@ -247,6 +250,9 @@ class VoiceEffectsProcessor:
         self._drum_sample_index = 0
 
     def reset(self) -> None:
+        self._gate_open = False
+        self._gate_gain = 0.0
+        self._gate_hold_left = 0
         self.robot_phase = 0.0
         self.tremolo_phase = 0.0
         self.wobble_phase = 0.0
@@ -547,12 +553,53 @@ class VoiceEffectsProcessor:
         self.tremolo_phase = (self.tremolo_phase + samples.size * phase_step) % (2.0 * math.pi)
         return (samples * lfo.astype(np.float32)).astype(np.float32, copy=False)
 
+    # Noise gate de verdade: mede o nivel (RMS) em janelas de ~5 ms, abre/fecha com histerese, segura aberto por
+    # um tempo e muda o ganho com rampas suaves. Assim a voz passa limpa e so o ruido de fundo e cortado.
+    # (A versao antiga multiplicava cada amostra pelo proprio nivel: cortava a onda a cada cruzamento por zero
+    # e gerava chiado e distorcao ate na voz alta.)
+    GATE_WINDOW_MS = 5.0
+    GATE_ATTACK_MS = 4.0
+    GATE_RELEASE_MS = 110.0
+    GATE_HOLD_MS = 160.0
+    GATE_FLOOR = 0.02  # -34 dB: reduz o ruido sem "morrer" de vez, o que soa mais natural
+    GATE_HYSTERESIS = 0.6
+
     def _noise_gate(self, samples: np.ndarray, threshold: float) -> np.ndarray:
-        if threshold <= 0.0:
+        if threshold <= 0.0 or samples.size == 0:
             return samples.copy()
-        magnitude = np.abs(samples)
-        open_ratio = np.clip((magnitude - (threshold * 0.45)) / max(threshold * 0.75, 1e-6), 0.0, 1.0)
-        return (samples * open_ratio.astype(np.float32)).astype(np.float32, copy=False)
+        sample_rate = float(self.sample_rate)
+        window = max(16, int(sample_rate * self.GATE_WINDOW_MS / 1000.0))
+        hold_samples = int(sample_rate * self.GATE_HOLD_MS / 1000.0)
+        open_level = float(threshold) * 0.35  # o controle vai de 0 a 40%: abre com RMS ate ~0,14
+        close_level = open_level * self.GATE_HYSTERESIS
+        floor = self.GATE_FLOOR
+
+        out = np.empty_like(samples, dtype=np.float32)
+        gain = self._gate_gain
+        is_open = self._gate_open
+        hold_left = self._gate_hold_left
+        for start in range(0, samples.size, window):
+            chunk = samples[start:start + window]
+            n = chunk.size
+            level = float(np.sqrt(np.mean(chunk * chunk))) if n else 0.0
+            if level >= open_level:
+                is_open = True
+                hold_left = hold_samples
+            elif level < close_level:
+                if hold_left > 0:
+                    hold_left -= n
+                else:
+                    is_open = False
+            target = 1.0 if is_open else floor
+            tau_ms = self.GATE_ATTACK_MS if target > gain else self.GATE_RELEASE_MS
+            coefficient = 1.0 - math.exp(-n / (sample_rate * tau_ms / 1000.0))
+            next_gain = gain + (target - gain) * coefficient
+            out[start:start + n] = chunk * np.linspace(gain, next_gain, n, endpoint=False, dtype=np.float32)
+            gain = next_gain
+        self._gate_gain = gain
+        self._gate_open = is_open
+        self._gate_hold_left = hold_left
+        return out
 
     def _equalizer(self, samples: np.ndarray, tone: float) -> np.ndarray:
         if samples.size < 5:

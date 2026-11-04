@@ -1042,6 +1042,7 @@ const EXTRA_FX_KEYS = [
 
 export function AdvancedSoundEditorModal({ state, selected, onClose, call, setToast, onDelete, soundboardFavorites, toggleSoundboardFavorite }) {
   const [draft, setDraft] = useState({});
+  const [editorTab, setEditorTab] = useState("som");
   const [startSec, setStartSec] = useState(0);
   const [endSec, setEndSec] = useState("");
 
@@ -1304,6 +1305,21 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
     }
   };
 
+  const extraActive = Object.entries(extraFx).filter(([key, value]) => key.endsWith("_enabled") && value).length;
+  const activeEffects = [reverbEnabled, echoEnabled, delayEnabled, distEnabled, gateEnabled, reverseEnabled, robotEnabled, eqEnabled, compressorEnabled].filter(Boolean).length + extraActive;
+  const turnOffAllEffects = () => {
+    setReverbEnabled(false); setEchoEnabled(false); setDelayEnabled(false); setDistEnabled(false);
+    setGateEnabled(false); setReverseEnabled(false); setRobotEnabled(false); setEqEnabled(false); setCompressorEnabled(false);
+    setExtraFx((prev) => Object.fromEntries(Object.entries(prev).map(([key, value]) => [key, key.endsWith("_enabled") ? false : value])));
+  };
+  const durationTotal = Number(selected.duration || 6);
+  const EDITOR_TABS = [
+    { id: "som", label: "Som" },
+    { id: "efeitos", label: "Efeitos", badge: activeEffects },
+    { id: "toca", label: "Como toca" },
+    { id: "detalhes", label: "Detalhes" }
+  ];
+
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
@@ -1319,52 +1335,15 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
           <button className="close-btn" onClick={onClose}><X size={18} /></button>
         </div>
 
-        <div className="sound-modal-body">
-          {/* Left panel: File Identity */}
-          <div className="sound-modal-left">
-            <div className="sound-modal-cover-box" style={{ background: `color-mix(in srgb, ${selected.color || "#8B5CF6"} 15%, var(--bg-card-secondary))` }}>
-              {draft.coverUrl || selected.coverUrl ? (
-                <img src={draft.coverUrl || selected.coverUrl} alt="" />
-              ) : (
-                <MusicNotes size={42} color={selected.color || "var(--purple)"} />
-              )}
-              <div className="sound-modal-cover-overlay" onClick={chooseCover}>
-                <span style={{ fontSize: 11, fontWeight: 700 }}>ESCOLHER CAPA</span>
-              </div>
-            </div>
-
-            <div className="labField">
-              <label>Nome do Som</label>
-              <input type="text" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            </div>
-
-            <div className="labField">
-              <label>Categoria / Pasta</label>
-              <input type="text" value={draft.category || ""} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
-            </div>
-
-            <div className="labField">
-              <label>Atalho de Teclado</label>
-              <input type="text" value={draft.shortcut || ""} onChange={(e) => setDraft({ ...draft, shortcut: e.target.value })} placeholder="Ex: Ctrl+Alt+1" />
-            </div>
-
-            <div className="labField">
-              <label>Rota de Saída</label>
-              <select value={draft.output_route || "both"} onChange={(e) => setDraft({ ...draft, output_route: e.target.value })}>
-                {soundOutputRoutes.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Right panel: Sliders, Waveform, FX */}
-          <div className="sound-modal-right">
-            {/* Professional Waveform */}
+        <div className="editorLayout">
+          {/* Sempre visivel: forma de onda e player */}
+          <div className="editorStage">
             <WaveformVisualizer
               soundId={selected.id}
               path={selected.path}
               start={startSec}
               end={endSec}
-              duration={selected.duration || 6.0}
+              duration={durationTotal}
               onUpdateTrim={(s, e) => { setStartSec(s); setEndSec(e); }}
               previewPlaying={Boolean(isCurrentlyPlaying)}
               previewBase={Number(state?.player?.current || 0)}
@@ -1379,49 +1358,103 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                 <span>Início</span>
                 <input type="number" min="0" step="0.05" value={Number(startSec).toFixed(2)}
                   onChange={(e) => {
-                    const limit = endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec);
-                    const next = Math.max(0, Math.min(Number(e.target.value) || 0, limit - 0.05));
-                    setStartSec(next);
+                    const limit = endSec === "" || endSec == null ? durationTotal : Number(endSec);
+                    setStartSec(Math.max(0, Math.min(Number(e.target.value) || 0, limit - 0.05)));
                   }} />
                 <em>s</em>
               </label>
               <label className="editorTime">
                 <span>Fim</span>
-                <input type="number" min="0" step="0.05" value={(endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)).toFixed(2)}
-                  onChange={(e) => {
-                    const total = Number(selected.duration || 6);
-                    setEndSec(Math.min(total, Math.max(Number(startSec) + 0.05, Number(e.target.value) || total)));
-                  }} />
+                <input type="number" min="0" step="0.05" value={(endSec === "" || endSec == null ? durationTotal : Number(endSec)).toFixed(2)}
+                  onChange={(e) => setEndSec(Math.min(durationTotal, Math.max(Number(startSec) + 0.05, Number(e.target.value) || durationTotal)))} />
                 <em>s</em>
               </label>
               <span className="editorSelection">
-                Seleção: <strong>{Math.max(0, (endSec === "" || endSec == null ? Number(selected.duration || 6) : Number(endSec)) - Number(startSec)).toFixed(2)}s</strong> de {Number(selected.duration || 6).toFixed(2)}s
+                Seleção: <strong>{Math.max(0, (endSec === "" || endSec == null ? durationTotal : Number(endSec)) - Number(startSec)).toFixed(2)}s</strong> de {durationTotal.toFixed(2)}s
               </span>
-              <button className="btn btn-ghost" onClick={() => { setStartSec(0); setEndSec(Number(selected.duration || 6)); }}>Zerar corte</button>
+              <button className="btn btn-ghost" onClick={() => { setStartSec(0); setEndSec(durationTotal); }}>Zerar corte</button>
             </div>
+          </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
-              {/* Sliders Grid */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <Slider label="Volume Geral / Ganho" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
-                <Slider label="Tom (Pitch)" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
-                <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Tom e velocidade</span>
-                  <select
-                    value={draft.pitch_mode || "preserve"}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, pitch_mode: e.target.value }))}
-                    style={{ padding: "5px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", color: "var(--text)", fontSize: 11 }}
-                  >
-                    <option value="preserve">Independentes (acelera sem ficar agudo)</option>
-                    <option value="resample">Juntos (efeito fita: acelera e fica agudo)</option>
-                  </select>
-                </div>
-                <Slider label="Fade In" value={draft.fade_in_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_in_ms: v }))} />
-                <Slider label="Fade Out" value={draft.fade_out_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_out_ms: v }))} />
+          <div className="editorTabs" role="tablist" aria-label="Seções do editor">
+            {EDITOR_TABS.map((tab) => (
+              <button key={tab.id} role="tab" aria-selected={editorTab === tab.id} className={editorTab === tab.id ? "active" : ""} onClick={() => setEditorTab(tab.id)}>
+                {tab.label}
+                {tab.badge > 0 && <em>{tab.badge}</em>}
+              </button>
+            ))}
+          </div>
+
+          <div className="editorPanel">
+            {/* ---------- SOM ---------- */}
+            {editorTab === "som" && (
+              <div className="editorGrid">
+                <section className="editorCard">
+                  <div className="optTitle">Volume, tom e velocidade</div>
+                  <Slider label="Volume" value={draft.volume ?? 1.0} min={0} max={10} suffix="x" quadratic={true} onChange={(v) => setDraft((prev) => ({ ...prev, volume: v }))} />
+                  <Slider label="Tom" value={draft.pitch_semitones ?? 0} min={-12} max={12} step={1} suffix="st" onChange={(v) => setDraft((prev) => ({ ...prev, pitch_semitones: v }))} />
+                  <Slider label="Velocidade" value={draft.speed ?? 1.0} min={0.25} max={4.0} step={0.05} suffix="x" onChange={(v) => setDraft((prev) => ({ ...prev, speed: v }))} />
+                  <label className="optSelectRow">
+                    <span className="optLabel">Ao mudar a velocidade</span>
+                    <select value={draft.pitch_mode || "preserve"} onChange={(e) => setDraft((prev) => ({ ...prev, pitch_mode: e.target.value }))}>
+                      <option value="preserve">O tom continua igual (voz natural)</option>
+                      <option value="resample">O tom muda junto (efeito fita ou disco)</option>
+                    </select>
+                  </label>
+                </section>
+                <section className="editorCard">
+                  <div className="optTitle">Entrada e saída suaves</div>
+                  <Slider label="Aparecer devagar (fade in)" value={draft.fade_in_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_in_ms: v }))} />
+                  <Slider label="Sumir devagar (fade out)" value={draft.fade_out_ms ?? 0} min={0} max={5000} step={50} suffix="ms" onChange={(v) => setDraft((prev) => ({ ...prev, fade_out_ms: v }))} />
+                  <OptionRow label="Igualar o volume" desc="Deixa o som num volume parecido com os outros, sem ficar baixo nem estourar." checked={draft.normalize} onChange={(v) => setDraft({ ...draft, normalize: v })} />
+                </section>
               </div>
+            )}
 
-              {/* Behavior & Options */}
+            {/* ---------- EFEITOS ---------- */}
+            {editorTab === "efeitos" && (
+              <div className="editorEffects">
+                <div className="editorEffectsBar">
+                  <span><strong>{activeEffects}</strong> {activeEffects === 1 ? "efeito ligado" : "efeitos ligados"}. Ligue a chave para usar e arraste para ajustar a força.</span>
+                  <button className="btn btn-ghost" onClick={turnOffAllEffects} disabled={activeEffects === 0}>Desligar todos</button>
+                </div>
+                <div className="editorGrid">
+                  <section className="editorCard">
+                    <div className="optTitle">Espaço e eco</div>
+                    <EffectSliderRow label="Reverb" enabled={reverbEnabled} value={reverbMix * 100} min={0} max={90} suffix="%" onToggle={() => setReverbEnabled(!reverbEnabled)} onChange={(v) => setReverbMix(v / 100)} />
+                    <EffectSliderRow label="Eco curto" enabled={echoEnabled} value={echoMix * 100} min={0} max={90} suffix="%" onToggle={() => setEchoEnabled(!echoEnabled)} onChange={(v) => setEchoMix(v / 100)} />
+                    <EffectSliderRow label="Delay" enabled={delayEnabled} value={delayMix * 100} min={0} max={90} suffix="%" onToggle={() => setDelayEnabled(!delayEnabled)} onChange={(v) => setDelayMix(v / 100)} />
+                    <EffectSliderRow label="Fantasma" enabled={!!extraFx.ghost_enabled} value={extraValue("ghost_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("ghost")} onChange={(v) => setExtraAmount("ghost_mix", v / 100)} />
+                  </section>
+                  <section className="editorCard">
+                    <div className="optTitle">Timbre</div>
+                    <EffectSliderRow label="Equalizador (graves ↔ agudos)" enabled={eqEnabled} value={eqTone * 100} min={0} max={100} suffix="%" onToggle={() => setEqEnabled(!eqEnabled)} onChange={(v) => setEqTone(v / 100)} />
+                    <EffectSliderRow label="Compressor" enabled={compressorEnabled} value={compressorAmount * 100} min={0} max={100} suffix="%" onToggle={() => setCompressorEnabled(!compressorEnabled)} onChange={(v) => setCompressorAmount(v / 100)} />
+                    <EffectSliderRow label="Distorção" enabled={distEnabled} value={distDrive} min={1} max={100} suffix="x" onToggle={() => setDistEnabled(!distEnabled)} onChange={(v) => setDistDrive(v)} />
+                    <EffectSliderRow label="Chorus" enabled={!!extraFx.chorus_enabled} value={extraValue("chorus_mix", 0.28) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("chorus")} onChange={(v) => setExtraAmount("chorus_mix", v / 100)} />
+                    <EffectSliderRow label="Flanger" enabled={!!extraFx.flanger_enabled} value={extraValue("flanger_mix", 0.24) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("flanger")} onChange={(v) => setExtraAmount("flanger_mix", v / 100)} />
+                  </section>
+                  <section className="editorCard">
+                    <div className="optTitle">Vozes e estilos</div>
+                    <EffectSliderRow label="Robô" enabled={robotEnabled} value={robotRate} min={5} max={120} suffix="Hz" onToggle={() => setRobotEnabled(!robotEnabled)} onChange={(v) => setRobotRate(v)} />
+                    <EffectSliderRow label="Telefone" enabled={!!extraFx.telephone_enabled} value={extraValue("telephone_mix", 0.8) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("telephone")} onChange={(v) => setExtraAmount("telephone_mix", v / 100)} />
+                    <EffectSliderRow label="Rádio" enabled={!!extraFx.radio_enabled} value={extraValue("radio_mix", 0.7) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("radio")} onChange={(v) => setExtraAmount("radio_mix", v / 100)} />
+                    <EffectSliderRow label="Sussurro" enabled={!!extraFx.whisper_enabled} value={extraValue("whisper_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("whisper")} onChange={(v) => setExtraAmount("whisper_mix", v / 100)} />
+                    <EffectSliderRow label="Tremolo" enabled={!!extraFx.tremolo_enabled} value={extraValue("tremolo_rate_hz", 8)} min={1} max={20} suffix="Hz" onToggle={() => toggleExtra("tremolo")} onChange={(v) => setExtraAmount("tremolo_rate_hz", v)} />
+                    <EffectSliderRow label="Wobble" enabled={!!extraFx.wobble_enabled} value={extraValue("wobble_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("wobble")} onChange={(v) => setExtraAmount("wobble_mix", v / 100)} />
+                    <EffectSliderRow label="Tocar ao contrário" enabled={reverseEnabled} value={reverseMix * 100} min={0} max={100} suffix="%" onToggle={() => setReverseEnabled(!reverseEnabled)} onChange={(v) => setReverseMix(v / 100)} />
+                  </section>
+                  <section className="editorCard">
+                    <div className="optTitle">Limpeza</div>
+                    <EffectSliderRow label="Redução de ruído" enabled={gateEnabled} value={gateThreshold * 100} min={0} max={40} suffix="%" onToggle={() => setGateEnabled(!gateEnabled)} onChange={(v) => setGateThreshold(v / 100)} />
+                    <p className="optModeDesc">Abaixa o chiado e o barulho de fundo nos trechos mais baixos do som.</p>
+                  </section>
+                </div>
+              </div>
+            )}
+
+            {/* ---------- COMO TOCA ---------- */}
+            {editorTab === "toca" && (
               <div className="editorOptions">
                 <div className="optTitle">Como este som toca</div>
                 <label className="optSelectRow">
@@ -1433,121 +1466,70 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
                 <p className="optModeDesc">{(playbackModes.find((m) => m.value === (draft.playback_mode || "restart")) || playbackModes[0]).desc}</p>
 
                 <OptionRow label="Repetir em loop" desc="O som toca de novo sem parar até você interromper." checked={draft.loop} onChange={(v) => setDraft({ ...draft, loop: v })} />
-                <OptionRow label="Igualar o volume" desc="Normaliza o som para ele não ficar baixo nem estourar." checked={draft.normalize} onChange={(v) => setDraft({ ...draft, normalize: v })} />
                 <OptionRow label="Calar a minha voz" desc="Sua voz não vai para o Discord enquanto este som toca." checked={draft.block_voice} onChange={(v) => setDraft({ ...draft, block_voice: v })} />
                 <OptionRow label="Parar os outros sons" desc="Ao tocar este, os outros sons são interrompidos." checked={draft.stop_other_sounds} onChange={(v) => setDraft({ ...draft, stop_other_sounds: v })} />
                 <OptionRow label="Silenciar os outros sons" desc="Os outros sons ficam mudos enquanto este toca." checked={draft.mute_other_sounds} onChange={(v) => setDraft({ ...draft, mute_other_sounds: v })} />
                 {selected.isClip && (
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: "var(--purple)", textTransform: "uppercase" }}>Canais do Clipe</span>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
-                      <input type="checkbox" checked={draft.clipVoiceEnabled !== undefined ? !!draft.clipVoiceEnabled : !!selected.clipVoiceEnabled} onChange={(e) => setDraft({ ...draft, clipVoiceEnabled: e.target.checked })} /> Incluir Minha Voz
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer" }}>
-                      <input type="checkbox" checked={draft.clipPcEnabled !== undefined ? !!draft.clipPcEnabled : !!selected.clipPcEnabled} onChange={(e) => setDraft({ ...draft, clipPcEnabled: e.target.checked })} /> Incluir Áudio do PC / Jogo
-                    </label>
-                  </div>
+                  <>
+                    <div className="optTitle" style={{ marginTop: 14 }}>Canais do clipe</div>
+                    <OptionRow label="Incluir a minha voz" checked={draft.clipVoiceEnabled !== undefined ? !!draft.clipVoiceEnabled : !!selected.clipVoiceEnabled} onChange={(v) => setDraft({ ...draft, clipVoiceEnabled: v })} />
+                    <OptionRow label="Incluir o áudio do PC ou do jogo" checked={draft.clipPcEnabled !== undefined ? !!draft.clipPcEnabled : !!selected.clipPcEnabled} onChange={(v) => setDraft({ ...draft, clipPcEnabled: v })} />
+                  </>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Premium FX Grid inside Modal */}
-            <div style={{ borderTop: "1px solid var(--border)", marginTop: 14, paddingTop: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <Sparkle size={14} color="var(--purple)" />
-                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text-secondary)" }}>EFEITOS EMBUTIDOS NO ÁUDIO</span>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <EffectSliderRow label="Reverb" enabled={reverbEnabled} value={reverbMix * 100} min={0} max={90} suffix="%" onToggle={() => setReverbEnabled(!reverbEnabled)} onChange={(v) => setReverbMix(v / 100)} />
-                  <EffectSliderRow label="Eco Curto" enabled={echoEnabled} value={echoMix * 100} min={0} max={90} suffix="%" onToggle={() => setEchoEnabled(!echoEnabled)} onChange={(v) => setEchoMix(v / 100)} />
-                  <EffectSliderRow label="Delay" enabled={delayEnabled} value={delayMix * 100} min={0} max={90} suffix="%" onToggle={() => setDelayEnabled(!delayEnabled)} onChange={(v) => setDelayMix(v / 100)} />
+            {/* ---------- DETALHES ---------- */}
+            {editorTab === "detalhes" && (
+              <div className="editorDetails">
+                <div className="sound-modal-cover-box" style={{ background: `color-mix(in srgb, ${selected.color || "#8B5CF6"} 15%, var(--bg-card-secondary))` }}>
+                  {draft.coverUrl || selected.coverUrl ? (
+                    <img src={draft.coverUrl || selected.coverUrl} alt="" />
+                  ) : (
+                    <MusicNotes size={42} color={selected.color || "var(--purple)"} />
+                  )}
+                  <div className="sound-modal-cover-overlay" onClick={chooseCover}>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>Escolher capa</span>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <EffectSliderRow label="Distorção (Gain Boost)" enabled={distEnabled} value={distDrive} min={1} max={100} suffix="x" onToggle={() => setDistEnabled(!distEnabled)} onChange={(v) => setDistDrive(v)} />
-                  <EffectSliderRow label="Noise Reduction" enabled={gateEnabled} value={gateThreshold * 100} min={0} max={40} suffix="%" onToggle={() => setGateEnabled(!gateEnabled)} onChange={(v) => setGateThreshold(v / 100)} />
-                  <EffectSliderRow label="Reverse Audio" enabled={reverseEnabled} value={reverseMix * 100} min={0} max={100} suffix="%" onToggle={() => setReverseEnabled(!reverseEnabled)} onChange={(v) => setReverseMix(v / 100)} />
-                </div>
-              </div>
-
-              <div style={{ fontSize: 10, fontWeight: 800, color: "var(--text-muted)", letterSpacing: ".08em", margin: "14px 0 8px" }}>COR E TIMBRE</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <EffectSliderRow label="Robô" enabled={robotEnabled} value={robotRate} min={5} max={120} suffix="Hz" onToggle={() => setRobotEnabled(!robotEnabled)} onChange={(v) => setRobotRate(v)} />
-                  <EffectSliderRow label="Equalizador (graves ↔ agudos)" enabled={eqEnabled} value={eqTone * 100} min={0} max={100} suffix="%" onToggle={() => setEqEnabled(!eqEnabled)} onChange={(v) => setEqTone(v / 100)} />
-                  <EffectSliderRow label="Compressor" enabled={compressorEnabled} value={compressorAmount * 100} min={0} max={100} suffix="%" onToggle={() => setCompressorEnabled(!compressorEnabled)} onChange={(v) => setCompressorAmount(v / 100)} />
-                  <EffectSliderRow label="Chorus" enabled={!!extraFx.chorus_enabled} value={extraValue("chorus_mix", 0.28) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("chorus")} onChange={(v) => setExtraAmount("chorus_mix", v / 100)} />
-                  <EffectSliderRow label="Flanger" enabled={!!extraFx.flanger_enabled} value={extraValue("flanger_mix", 0.24) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("flanger")} onChange={(v) => setExtraAmount("flanger_mix", v / 100)} />
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <EffectSliderRow label="Fantasma" enabled={!!extraFx.ghost_enabled} value={extraValue("ghost_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("ghost")} onChange={(v) => setExtraAmount("ghost_mix", v / 100)} />
-                  <EffectSliderRow label="Telefone" enabled={!!extraFx.telephone_enabled} value={extraValue("telephone_mix", 0.8) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("telephone")} onChange={(v) => setExtraAmount("telephone_mix", v / 100)} />
-                  <EffectSliderRow label="Rádio" enabled={!!extraFx.radio_enabled} value={extraValue("radio_mix", 0.7) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("radio")} onChange={(v) => setExtraAmount("radio_mix", v / 100)} />
-                  <EffectSliderRow label="Sussurro" enabled={!!extraFx.whisper_enabled} value={extraValue("whisper_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("whisper")} onChange={(v) => setExtraAmount("whisper_mix", v / 100)} />
-                  <EffectSliderRow label="Tremolo" enabled={!!extraFx.tremolo_enabled} value={extraValue("tremolo_rate_hz", 8)} min={1} max={20} suffix="Hz" onToggle={() => toggleExtra("tremolo")} onChange={(v) => setExtraAmount("tremolo_rate_hz", v)} />
-                  <EffectSliderRow label="Wobble" enabled={!!extraFx.wobble_enabled} value={extraValue("wobble_mix", 0.35) * 100} min={0} max={100} suffix="%" onToggle={() => toggleExtra("wobble")} onChange={(v) => setExtraAmount("wobble_mix", v / 100)} />
+                <div className="editorDetailsFields">
+                  <div className="labField">
+                    <label>Nome do som</label>
+                    <input type="text" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                  </div>
+                  <div className="labField">
+                    <label>Categoria ou pasta</label>
+                    <input type="text" value={draft.category || ""} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
+                  </div>
+                  <div className="labField">
+                    <label>Atalho de teclado</label>
+                    <input type="text" value={draft.shortcut || ""} onChange={(e) => setDraft({ ...draft, shortcut: e.target.value })} placeholder="Ex.: Ctrl+Alt+1" />
+                  </div>
+                  <div className="labField">
+                    <label>Para onde o som vai</label>
+                    <select value={draft.output_route || "both"} onChange={(e) => setDraft({ ...draft, output_route: e.target.value })}>
+                      {soundOutputRoutes.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         <div className="sound-modal-footer">
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-danger" onClick={onDelete} style={{ background: "none", border: "1px solid var(--danger-soft)" }}><Trash size={14} /> Remover Som</button>
-            <button className="btn btn-ghost" onClick={handleRestore}><ArrowClockwise size={14} /> Restaurar Padrões</button>
+            <button className="btn btn-ghost footerDanger" onClick={onDelete}><Trash size={14} /> Remover som</button>
+            <button className="btn btn-ghost" onClick={handleRestore} title="Volta volume, tom, velocidade e efeitos ao normal (ainda não salva)"><ArrowClockwise size={14} /> Restaurar padrões</button>
             {selected.hasOriginal && (
-              <button
-                className="btn btn-ghost"
-                onClick={handleRestoreOriginalFile}
-                style={{
-                  border: "1px solid var(--danger-soft)",
-                  color: "var(--danger)"
-                }}
-              >
-                <ArrowCounterClockwise size={14} /> Restaurar Original
+              <button className="btn btn-ghost footerDanger" onClick={handleRestoreOriginalFile} title="Devolve o arquivo de áudio original, desfazendo cortes salvos">
+                <ArrowCounterClockwise size={14} /> Restaurar original
               </button>
             )}
-            <button
-              className="btn btn-danger"
-              onClick={activateAllAtMax}
-              style={{
-                background: "transparent",
-                border: "1px solid var(--danger-soft)",
-                color: "var(--danger)",
-                fontWeight: 700
-              }}
-              title="Liga tudo no máximo só para testar o limite. Fica bem alto."
-            >
-              Tudo no máximo
-            </button>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn btn-primary"
-              onClick={isCurrentlyPlaying ? handleStopPreview : handlePreview}
-              style={{
-                background: isCurrentlyPlaying
-                  ? "linear-gradient(135deg, var(--danger-glow), var(--danger-soft))"
-                  : "linear-gradient(135deg, var(--danger), var(--danger-dim))",
-                border: isCurrentlyPlaying ? "1px solid var(--danger)" : "1px solid var(--cyan)",
-                color: isCurrentlyPlaying ? "var(--danger)" : "var(--cyan)",
-                textShadow: isCurrentlyPlaying ? "0 0 4px var(--danger-glow)" : "0 0 4px var(--cyan-glow)"
-              }}
-            >
-              {isCurrentlyPlaying ? (
-                <>
-                  <StopCircle size={14} weight="fill" /> Parar Prévia
-                </>
-              ) : (
-                <>
-                  <Play size={14} weight="bold" /> Ouvir Prévia
-                </>
-              )}
-            </button>
-            <button className="btn btn-ghost" onClick={() => handleSave(false)}>Salvar como Cópia</button>
-            <button className="btn btn-primary" onClick={() => handleSave(true)} style={{ background: "linear-gradient(135deg, var(--purple), var(--purple-dim))" }}>Substituir Original</button>
+            <button className="btn btn-ghost" onClick={() => handleSave(false)} title="Cria um som novo com estas alterações e mantém o atual como está">Salvar como cópia</button>
+            <button className="btn btn-primary" onClick={() => handleSave(true)} title="Aplica as alterações neste som">Salvar alterações</button>
           </div>
         </div>
       </motion.div>
@@ -1556,6 +1538,11 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.3.1": `### Versão 2.3.1
+* Editor de som reorganizado: a forma de onda e o player ficam sempre visíveis no topo, e embaixo há abas simples: Som (volume, tom, velocidade, fades), Efeitos, Como toca e Detalhes (nome, pasta, atalho, capa e para onde o som vai).
+* Efeitos agrupados por finalidade (espaço e eco, timbre, vozes e estilos, limpeza), com contador de efeitos ligados na aba e botão "Desligar todos".
+* Rodapé mais limpo: saiu o botão "Tudo no máximo" e o "Ouvir prévia" repetido (o player do topo já faz isso). Os botões de salvar ganharam explicação ao passar o mouse.
+* Textos em português simples no lugar de termos técnicos em inglês.`,
   "v2.3.0": `### Versão 2.3.0
 * Editor de som corrigido: a forma de onda e o corte tinham ficado esmagados (altura zero) depois dos efeitos novos. Agora aparecem de novo, com player de verdade: botão para ouvir a seleção, cabeça de reprodução em movimento, campos de início e fim, "zerar corte" e as cores do tema. O emoji do título saiu.
 * Atalhos de segurar e de apertar corrigidos: segurar a tecla de um som não reinicia mais dezenas de vezes por segundo, o modo "segurar para repetir" agora toca enquanto a tecla está apertada e para ao soltar, e o glitch não fica mais preso se o evento de soltar se perder. Segurar um atalho global (mutar, ligar a voz) também não alterna sem parar.

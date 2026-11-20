@@ -507,16 +507,15 @@ export function FloatingDock({
   );
 }
 
-// Atalho do dock para "Compartilhar tela"; fica vermelho piscando enquanto voce transmite ou assiste.
+// Atalho do dock para as salas; fica vermelho piscando enquanto voce compartilha a tela.
 function DockShareButton({ setPage }) {
   const share = useScreenShare();
-  const live = share.mode !== "idle";
-  const title = share.mode === "hosting"
-    ? `Transmitindo${share.hosting?.viewers?.length ? ` para ${share.hosting.viewers.length}` : ""}`
-    : share.mode === "idle" ? "Compartilhar tela" : "Assistindo uma tela";
+  const inRoom = share.phase !== "lobby";
+  const live = Boolean(share.share);
+  const title = live ? `Ao vivo na ${share.room?.name || "sala"}` : inRoom ? `Na ${share.room?.name || "sala"}` : "Salas (compartilhar tela)";
   return (
-    <button className={`bbBtn icon-only dockShareBtn ${live ? "live" : ""}`} onClick={() => setPage("tela")} title={title} aria-label={title}>
-      <Screencast size={16} weight={live ? "fill" : "regular"} />
+    <button className={`bbBtn icon-only dockShareBtn ${live ? "live" : inRoom ? "inroom" : ""}`} onClick={() => setPage("tela")} title={title} aria-label={title}>
+      <Screencast size={16} weight={inRoom ? "fill" : "regular"} />
     </button>
   );
 }

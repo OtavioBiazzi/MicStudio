@@ -599,7 +599,7 @@ export function ConfigPage({
               {hotkey("Ligar/desligar o retorno do soundboard", "shortcutToggleSoundboard", "O que você ouve no fone; não muda o que os outros ouvem.")}
               {hotkey("Disparar o glitch sob comando", "shortcutCommandGlitch")}
               {hotkey("Abrir o widget de texto para voz", "shortcutFocusTtsWidget")}
-              {hotkey("Começar/parar a transmissão de tela", "shortcutToggleScreenShare", "Usa a última tela e qualidade escolhidas em Compartilhar Tela.")}
+              {hotkey("Compartilhar/parar a tela na sala", "shortcutToggleScreenShare", "Se você não estiver numa sala, entra na Sala da galera. Usa a última tela e qualidade escolhidas.")}
             </Section>
 
             <Section icon={Record} title="Gravação" desc="Aperte uma vez para começar e outra para parar.">

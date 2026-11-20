@@ -1256,7 +1256,7 @@ function App() {
               )}
               {page === "tela" && (
                 <ErrorBoundary>
-                  <ScreenSharePage profileName={profileName} setToast={setToast} />
+                  <ScreenSharePage setToast={setToast} />
                 </ErrorBoundary>
               )}
               {page === "perfis" && (

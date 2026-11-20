@@ -1,26 +1,30 @@
-// Compartilhar tela entre amigos na mesma rede (Radmin VPN, Hamachi, ZeroTier, Tailscale ou a rede de casa).
+// Salas de compartilhar tela, no estilo do Discord, entre amigos na mesma rede (Radmin VPN, Hamachi, ZeroTier,
+// Tailscale ou a rede de casa). Nao existe servidor nosso: quem entra primeiro numa sala vira o host e este processo
+// abre um "hub" pequeno (HTTP + WebSocket). Todos, inclusive o proprio host, conversam pelo hub: lista de quem esta
+// na sala, chat, quem esta ao vivo e a sinalizacao WebRTC. O video vai direto de um PC para o outro.
 //
-// Nao existe servidor nosso: quem transmite abre uma "sala" (um servidor HTTP pequeno nesta maquina) e quem assiste
-// manda um pedido direto para o IP dele. O pedido leva a oferta WebRTC; quem transmite aceita ou recusa na tela e a
-// resposta volta no mesmo pedido. Depois disso o video vai direto de um PC para o outro (WebRTC, sem passar por aqui).
+// A sala e anunciada na rede por broadcast UDP; quem esta na aba ve as salas sozinho.
 
 const http = require("http");
 const dgram = require("dgram");
 const os = require("os");
 const crypto = require("crypto");
+const { WebSocketServer } = require("ws");
 
 const DEFAULT_PORT = 47920;
 const DISCOVERY_PORT = 47921;
-const BEACON_PREFIX = "VOZLAB-SALA1 ";
+const PATH_PREFIX = "/vozlab";
+const WS_PATH = `${PATH_PREFIX}/ws`;
+const BEACON_PREFIX = "VOZLAB-SALA2 ";
 const BEACON_INTERVAL_MS = 2000;
 const ROOM_EXPIRE_MS = 7000;
-const PATH_PREFIX = "/vozlab/tela";
-const MAX_BODY_BYTES = 256 * 1024;
-const MAX_PENDING = 3;
-const DECISION_TIMEOUT_MS = 60_000;
+const MAX_MESSAGE_BYTES = 256 * 1024;
+const HELLO_TIMEOUT_MS = 6000;
+const PING_INTERVAL_MS = 15000;
+const CHAT_HISTORY = 60;
 
 function cleanText(value, max = 40) {
-  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max);
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
 function codesMatch(expected, given) {
@@ -29,127 +33,13 @@ function codesMatch(expected, given) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function sendJson(res, status, body) {
-  const data = JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "content-length": Buffer.byteLength(data) });
-  res.end(data);
+function normalizeAddress(address) {
+  return String(address || "").replace(/^::ffff:/, "");
 }
 
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    req.on("data", (chunk) => {
-      size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
-        reject(Object.assign(new Error("pedido grande demais"), { status: 413 }));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
-      } catch {
-        reject(Object.assign(new Error("pedido invalido"), { status: 400 }));
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-// room: { name, code, version, busy(), viewers(), maxViewers } ; onJoinRequest({ id, name, offer, address }) -> Promise<{ accepted, answer?, reason? }>
-function createRoomServer({ room, onJoinRequest, decisionTimeoutMs = DECISION_TIMEOUT_MS }) {
-  const pending = new Map();
-
-  const server = http.createServer(async (req, res) => {
-    const url = (req.url || "").split("?")[0];
-    try {
-      if (req.method === "GET" && url === `${PATH_PREFIX}/sala`) {
-        sendJson(res, 200, {
-          app: "vozlab",
-          name: room.name || "Sala",
-          needsCode: Boolean(room.code),
-          busy: Boolean(room.busy?.()),
-          viewers: Number(room.viewers?.() || 0),
-          maxViewers: Number(room.maxViewers || 1),
-          version: room.version || ""
-        });
-        return;
-      }
-      if (req.method === "POST" && url === `${PATH_PREFIX}/entrar`) {
-        const body = await readJson(req);
-        if (room.code && !codesMatch(room.code, body.code)) {
-          sendJson(res, 403, { reason: "Código da sala errado." });
-          return;
-        }
-        if (room.busy?.()) {
-          sendJson(res, 409, { reason: "A sala está cheia." });
-          return;
-        }
-        if (pending.size >= MAX_PENDING) {
-          sendJson(res, 429, { reason: "Muitos pedidos ao mesmo tempo. Tente de novo em alguns segundos." });
-          return;
-        }
-        const offer = body.offer;
-        if (!offer || offer.type !== "offer" || typeof offer.sdp !== "string" || !offer.sdp.startsWith("v=")) {
-          sendJson(res, 400, { reason: "Pedido sem a oferta de vídeo." });
-          return;
-        }
-        const id = crypto.randomUUID();
-        const request = { id, name: cleanText(body.name) || "Alguém", clientId: cleanText(body.clientId, 64), offer: { type: "offer", sdp: offer.sdp }, address: cleanText(req.socket.remoteAddress, 64).replace(/^::ffff:/, "") };
-        let finished = false;
-        const decision = new Promise((resolve) => {
-          const timer = setTimeout(() => resolve({ accepted: false, reason: "Quem está transmitindo não respondeu a tempo." }), decisionTimeoutMs);
-          pending.set(id, { resolve: (value) => { clearTimeout(timer); resolve(value); } });
-        });
-        req.on("close", () => {
-          if (!finished && !res.writableEnded) pending.get(id)?.resolve({ accepted: false, reason: "cancelado", cancelled: true });
-        });
-        Promise.resolve(onJoinRequest(request)).catch(() => pending.get(id)?.resolve({ accepted: false, reason: "Erro ao abrir o pedido." }));
-        const result = await decision;
-        finished = true;
-        pending.delete(id);
-        if (result.cancelled || res.writableEnded) return;
-        if (result.accepted && result.answer?.sdp) sendJson(res, 200, { answer: { type: "answer", sdp: result.answer.sdp } });
-        else sendJson(res, 403, { reason: result.reason || "Quem está transmitindo recusou." });
-        return;
-      }
-      sendJson(res, 404, { reason: "não encontrado" });
-    } catch (error) {
-      if (!res.headersSent) sendJson(res, error.status || 500, { reason: error.message || "erro" });
-    }
-  });
-
-  return {
-    server,
-    listen(port = DEFAULT_PORT, host = "0.0.0.0") {
-      return new Promise((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(port, host, () => {
-          server.off("error", reject);
-          resolve(server.address().port);
-        });
-      });
-    },
-    // Resposta de quem transmite para um pedido; false se o pedido ja tinha acabado.
-    decide(id, decision) {
-      const entry = pending.get(id);
-      if (!entry) return false;
-      entry.resolve(decision);
-      return true;
-    },
-    pendingCount: () => pending.size,
-    close() {
-      for (const entry of pending.values()) entry.resolve({ accepted: false, reason: "A sala foi fechada." });
-      pending.clear();
-      return new Promise((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections?.();
-      });
-    }
-  };
+function isLoopback(address) {
+  const value = normalizeAddress(address);
+  return value === "127.0.0.1" || value === "::1" || value === "localhost";
 }
 
 // Enderecos IPv4 desta maquina, com o do Radmin (26.x.x.x) primeiro.
@@ -180,13 +70,246 @@ function isValidHost(value) {
   return /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i.test(text);
 }
 
-function request(host, port, method, pathName, body, timeoutMs) {
+function cleanRoomId(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40);
+}
+
+function sendJson(res, status, body) {
+  const data = JSON.stringify(body);
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "content-length": Buffer.byteLength(data) });
+  res.end(data);
+}
+
+function publicMember(member) {
+  return {
+    id: member.id,
+    name: member.name,
+    clientId: member.clientId,
+    address: member.address,
+    joinedAt: member.joinedAt,
+    isHost: member.isHost,
+    live: member.live
+  };
+}
+
+function cleanLive(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    title: cleanText(value.title, 60) || "Tela",
+    quality: cleanText(value.quality, 12),
+    audio: Boolean(value.audio)
+  };
+}
+
+// room: { id, name, password, hostName, since } ; hostAddress(): IP deste PC na rede (para os outros acharem o host)
+function createRoomHub({ room, maxMembers = 10, hostAddress = () => localAddresses()[0]?.address || "", version = "" }) {
+  const info = {
+    id: cleanRoomId(room.id) || "sala",
+    name: cleanText(room.name) || "Sala",
+    password: String(room.password || "").slice(0, 32),
+    hostName: cleanText(room.hostName) || "Host",
+    since: Number(room.since) || Date.now()
+  };
+  const members = new Map();
+  const chat = [];
+  let closingSent = false;
+
+  const list = () => [...members.values()].sort((a, b) => a.joinedAt - b.joinedAt);
+  const summary = () => ({
+    roomId: info.id,
+    name: info.name,
+    hostName: info.hostName,
+    hasPassword: Boolean(info.password),
+    members: members.size,
+    live: list().filter((member) => member.live).length,
+    since: info.since,
+    names: list().slice(0, 6).map((member) => member.name)
+  });
+
+  const send = (member, message) => {
+    if (member?.ws?.readyState === 1) {
+      try { member.ws.send(JSON.stringify(message)); } catch (_) {}
+    }
+  };
+  const broadcast = (message, exceptId) => {
+    for (const member of members.values()) if (member.id !== exceptId) send(member, message);
+  };
+
+  const server = http.createServer((req, res) => {
+    const url = (req.url || "").split("?")[0];
+    if (req.method === "GET" && url === `${PATH_PREFIX}/sala`) {
+      sendJson(res, 200, { app: "vozlab", kind: "sala", version, ...summary() });
+      return;
+    }
+    sendJson(res, 404, { reason: "não encontrado" });
+  });
+
+  const wss = new WebSocketServer({ server, path: WS_PATH, maxPayload: MAX_MESSAGE_BYTES });
+
+  wss.on("connection", (ws, req) => {
+    const remote = normalizeAddress(req.socket.remoteAddress);
+    const local = isLoopback(remote);
+    let member = null;
+    ws.isAlive = true;
+    ws.on("pong", () => { ws.isAlive = true; });
+    const helloTimer = setTimeout(() => { if (!member) ws.close(4000, "sem hello"); }, HELLO_TIMEOUT_MS);
+
+    ws.on("message", (raw) => {
+      let message;
+      try { message = JSON.parse(raw.toString("utf8")); } catch { return; }
+      if (!message || typeof message.t !== "string") return;
+
+      if (!member) {
+        if (message.t !== "hello") return;
+        clearTimeout(helloTimer);
+        if (info.password && !local && !codesMatch(info.password, message.password)) {
+          ws.send(JSON.stringify({ t: "error", code: "password", reason: "Senha da sala errada." }));
+          ws.close(4001, "senha");
+          return;
+        }
+        const clientId = cleanText(message.clientId, 64);
+        const previous = clientId ? list().find((item) => item.clientId === clientId) : null;
+        if (previous) {
+          // A mesma pessoa voltou (a conexao antiga caiu): a nova substitui sem duplicar.
+          members.delete(previous.id);
+          try { previous.ws.close(4002, "substituido"); } catch (_) {}
+          broadcast({ t: "leave", id: previous.id, replaced: true });
+        }
+        if (members.size >= maxMembers) {
+          ws.send(JSON.stringify({ t: "error", code: "full", reason: "A sala está cheia." }));
+          ws.close(4003, "cheia");
+          return;
+        }
+        const isHost = local && !list().some((item) => item.isHost);
+        member = {
+          id: crypto.randomUUID(),
+          ws,
+          name: cleanText(message.name) || "Amigo",
+          clientId,
+          address: local ? hostAddress() : remote,
+          joinedAt: Date.now(),
+          isHost,
+          live: null
+        };
+        members.set(member.id, member);
+        send(member, {
+          t: "welcome",
+          you: member.id,
+          room: { id: info.id, name: info.name, hasPassword: Boolean(info.password), since: info.since },
+          members: list().map(publicMember),
+          chat: chat.slice(-CHAT_HISTORY)
+        });
+        broadcast({ t: "join", member: publicMember(member) }, member.id);
+        return;
+      }
+
+      switch (message.t) {
+        case "chat": {
+          const text = String(message.text ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, 500);
+          if (!text) return;
+          const entry = { id: crypto.randomUUID(), from: member.id, name: member.name, text, at: Date.now() };
+          chat.push(entry);
+          if (chat.length > CHAT_HISTORY) chat.shift();
+          broadcast({ t: "chat", message: entry });
+          return;
+        }
+        case "state": {
+          member.live = cleanLive(message.live);
+          broadcast({ t: "member", member: publicMember(member) });
+          return;
+        }
+        case "signal": {
+          const target = members.get(String(message.to || ""));
+          if (!target || target.id === member.id) return;
+          send(target, { t: "signal", from: member.id, data: message.data });
+          return;
+        }
+        case "kick": {
+          if (!member.isHost) return;
+          const target = members.get(String(message.id || ""));
+          if (!target || target.id === member.id) return;
+          send(target, { t: "kicked", reason: `${member.name} tirou você da sala.` });
+          members.delete(target.id);
+          try { target.ws.close(4004, "expulso"); } catch (_) {}
+          broadcast({ t: "leave", id: target.id, kicked: true });
+          return;
+        }
+        case "closing": {
+          if (member.isHost) announceClosing();
+          return;
+        }
+        case "moveto": {
+          // Duas pessoas abriram a mesma sala ao mesmo tempo: o host desta manda todos para a outra.
+          const address = normalizeAddress(message.address);
+          if (member.isHost && isValidHost(address)) {
+            closingSent = true;
+            broadcast({ t: "moveto", address, port: Number(message.port) || DEFAULT_PORT });
+          }
+          return;
+        }
+        default:
+      }
+    });
+
+    ws.on("close", () => {
+      clearTimeout(helloTimer);
+      if (member && members.get(member.id) === member) {
+        members.delete(member.id);
+        broadcast({ t: "leave", id: member.id });
+      }
+    });
+    ws.on("error", () => {});
+  });
+
+  const pingTimer = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.isAlive === false) { client.terminate(); continue; }
+      client.isAlive = false;
+      try { client.ping(); } catch (_) {}
+    }
+  }, PING_INTERVAL_MS);
+
+  // O host vai sair: avisa quem assume (o mais antigo na sala) para a sala continuar.
+  function announceClosing() {
+    if (closingSent) return;
+    closingSent = true;
+    const next = list().find((item) => !item.isHost);
+    broadcast({ t: "closing", nextId: next?.id || "", nextAddress: next?.address || "" });
+  }
+
+  return {
+    info,
+    server,
+    summary,
+    members: () => list().map(publicMember),
+    listen(port = DEFAULT_PORT, host = "0.0.0.0") {
+      return new Promise((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(port, host, () => {
+          server.off("error", reject);
+          resolve(server.address().port);
+        });
+      });
+    },
+    close({ announce = true } = {}) {
+      if (announce) announceClosing();
+      clearInterval(pingTimer);
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          for (const client of wss.clients) { try { client.close(1001, "sala fechada"); } catch (_) {} }
+          wss.close(() => {});
+          server.close(() => resolve());
+          server.closeAllConnections?.();
+        }, announce ? 120 : 0);
+      });
+    }
+  };
+}
+
+// ---------- consultar uma sala pelo IP ----------
+function request(host, port, pathName, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const data = body ? JSON.stringify(body) : null;
-    const req = http.request({
-      host, port, method, path: `${PATH_PREFIX}/${pathName}`, timeout: timeoutMs,
-      headers: data ? { "content-type": "application/json", "content-length": Buffer.byteLength(data) } : {}
-    }, (res) => {
+    const req = http.request({ host, port, method: "GET", path: `${PATH_PREFIX}/${pathName}`, timeout: timeoutMs }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("end", () => {
@@ -197,51 +320,43 @@ function request(host, port, method, pathName, body, timeoutMs) {
     });
     req.on("timeout", () => req.destroy(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" })));
     req.on("error", reject);
-    if (data) req.write(data);
     req.end();
   });
 }
 
 function friendlyNetworkError(error) {
   const code = error?.code || "";
-  if (code === "ECONNREFUSED") return "Essa pessoa não está transmitindo agora.";
+  if (code === "ECONNREFUSED" || code === "ECONNRESET") return "Não tem sala aberta nesse PC agora.";
   if (code === "ETIMEDOUT" || code === "EHOSTUNREACH" || code === "ENETUNREACH") return "Não consegui chegar nesse IP. Confira se vocês estão na mesma rede do Radmin.";
   return "Não consegui conectar nesse IP.";
+}
+
+function roomFromBody(body) {
+  return {
+    roomId: cleanRoomId(body.roomId),
+    name: cleanText(body.name) || "Sala",
+    hostName: cleanText(body.hostName) || "",
+    hasPassword: Boolean(body.hasPassword),
+    members: Number(body.members) || 0,
+    live: Number(body.live) || 0,
+    since: Number(body.since) || 0,
+    names: Array.isArray(body.names) ? body.names.slice(0, 6).map((name) => cleanText(name)).filter(Boolean) : []
+  };
 }
 
 async function probeRoom(host, port = DEFAULT_PORT, timeoutMs = 2500) {
   if (!isValidHost(host)) return { online: false, reason: "IP inválido." };
   try {
-    const res = await request(String(host).trim(), port, "GET", "sala", null, timeoutMs);
-    if (res.status !== 200 || res.body?.app !== "vozlab") return { online: false, reason: "Não é uma sala do VozLab." };
-    return {
-      online: true,
-      name: cleanText(res.body.name) || "Sala",
-      needsCode: Boolean(res.body.needsCode),
-      busy: Boolean(res.body.busy),
-      viewers: Number(res.body.viewers || 0),
-      maxViewers: Number(res.body.maxViewers || 1)
-    };
+    const res = await request(String(host).trim(), port, "sala", timeoutMs);
+    if (res.status !== 200 || res.body?.app !== "vozlab" || res.body?.kind !== "sala") return { online: false, reason: "Não é uma sala do VozLab (ou é uma versão antiga)." };
+    return { online: true, host: String(host).trim(), port, ...roomFromBody(res.body) };
   } catch (error) {
     return { online: false, reason: friendlyNetworkError(error) };
   }
 }
 
-async function joinRoom({ host, port = DEFAULT_PORT, name, code, clientId, offer }, timeoutMs = DECISION_TIMEOUT_MS + 15_000) {
-  if (!isValidHost(host)) throw new Error("IP inválido.");
-  let res;
-  try {
-    res = await request(String(host).trim(), port, "POST", "entrar", { name: cleanText(name), code: cleanText(code, 24), clientId: cleanText(clientId, 64), offer }, timeoutMs);
-  } catch (error) {
-    throw new Error(friendlyNetworkError(error));
-  }
-  if (res.status === 200 && res.body?.answer?.sdp) return { type: "answer", sdp: res.body.answer.sdp };
-  throw new Error(res.body?.reason || "Não deu para entrar na sala.");
-}
-
-
-// ---------- Descoberta de salas na rede ----------
-// Quem transmite avisa a rede (broadcast UDP) a cada 2 s; quem esta na aba Assistir escuta e mostra as salas.
+// ---------- descoberta de salas na rede ----------
+// O host avisa a rede (broadcast UDP) a cada 2 s; quem esta na aba escuta e mostra as salas.
 // O Radmin VPN repassa broadcast como uma rede de casa, por isso a sala do amigo aparece sozinha.
 function ipToInt(ip) {
   return ip.split(".").reduce((acc, part) => ((acc << 8) | (Number(part) & 255)) >>> 0, 0);
@@ -265,38 +380,30 @@ function broadcastAddresses(interfaces = os.networkInterfaces()) {
 }
 
 function encodeBeacon(info) {
-  return Buffer.from(BEACON_PREFIX + JSON.stringify({
-    name: cleanText(info.name) || "Sala",
-    port: Number(info.port) || DEFAULT_PORT,
-    needsCode: Boolean(info.needsCode),
-    viewers: Number(info.viewers || 0),
-    maxViewers: Number(info.maxViewers || 1)
-  }));
+  return Buffer.from(BEACON_PREFIX + JSON.stringify({ port: Number(info.port) || DEFAULT_PORT, ...roomFromBody(info) }));
 }
 
 function decodeBeacon(buffer) {
   const text = buffer.toString("utf8");
-  if (!text.startsWith(BEACON_PREFIX) || text.length > 2048) return null;
+  if (!text.startsWith(BEACON_PREFIX) || text.length > 4096) return null;
   try {
     const data = JSON.parse(text.slice(BEACON_PREFIX.length));
-    return {
-      name: cleanText(data.name) || "Sala",
-      port: Number.isInteger(data.port) && data.port > 0 && data.port < 65536 ? data.port : DEFAULT_PORT,
-      needsCode: Boolean(data.needsCode),
-      viewers: Number(data.viewers) || 0,
-      maxViewers: Number(data.maxViewers) || 1
-    };
+    const room = roomFromBody(data);
+    if (!room.roomId) return null;
+    return { port: Number.isInteger(data.port) && data.port > 0 && data.port < 65536 ? data.port : DEFAULT_PORT, ...room };
   } catch {
     return null;
   }
 }
 
-// getInfo() -> { name, port, needsCode, viewers, maxViewers }
+// getInfo() -> { port, roomId, name, hostName, hasPassword, members, live, since, names }
 function createBeacon(getInfo, { port = DISCOVERY_PORT, intervalMs = BEACON_INTERVAL_MS, targets = broadcastAddresses } = {}) {
   const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
   let timer = null;
+  let closed = false;
   socket.on("error", () => {});
   const send = () => {
+    if (closed) return;
     const message = encodeBeacon(getInfo());
     for (const address of targets()) socket.send(message, port, address, () => {});
   };
@@ -308,21 +415,23 @@ function createBeacon(getInfo, { port = DISCOVERY_PORT, intervalMs = BEACON_INTE
   return {
     sendNow: send,
     stop() {
+      closed = true;
       clearInterval(timer);
       try { socket.close(); } catch (_) {}
     }
   };
 }
 
-// onRooms(list) e chamado quando a lista muda. ownAddresses: IPs desta maquina (a propria sala nao aparece).
+// onRooms(list) e chamado quando a lista muda. ownAddresses: IPs desta maquina (a propria sala vem marcada "own").
 function createDiscovery(onRooms, { port = DISCOVERY_PORT, ownAddresses = () => localAddresses().map((item) => item.address), expireMs = ROOM_EXPIRE_MS } = {}) {
   const rooms = new Map();
   const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
   let lastSignature = "";
+  const current = () => [...rooms.values()].map(({ seenAt, ...room }) => room).sort((a, b) => a.name.localeCompare(b.name));
   const publish = () => {
     const now = Date.now();
-    for (const [host, room] of rooms) if (now - room.seenAt > expireMs) rooms.delete(host);
-    const list = [...rooms.values()].map(({ seenAt, ...room }) => room).sort((a, b) => a.name.localeCompare(b.name));
+    for (const [key, room] of rooms) if (now - room.seenAt > expireMs) rooms.delete(key);
+    const list = current();
     const signature = JSON.stringify(list);
     if (signature !== lastSignature) {
       lastSignature = signature;
@@ -333,17 +442,15 @@ function createDiscovery(onRooms, { port = DISCOVERY_PORT, ownAddresses = () => 
   socket.on("message", (buffer, rinfo) => {
     const info = decodeBeacon(buffer);
     if (!info) return;
-    const host = String(rinfo.address || "").replace(/^::ffff:/, "");
-    if (ownAddresses().includes(host)) return;
-    rooms.set(host, { host, ...info, seenAt: Date.now() });
+    const host = normalizeAddress(rinfo.address);
+    const own = ownAddresses().includes(host) || isLoopback(host);
+    rooms.set(`${host}:${info.port}`, { host, own, ...info, seenAt: Date.now() });
     publish();
   });
-  let bound = false;
-  socket.bind(port, () => { bound = true; });
+  socket.bind(port, () => {});
   const timer = setInterval(publish, 1500);
   return {
-    isBound: () => bound,
-    rooms: () => [...rooms.values()],
+    rooms: current,
     stop() {
       clearInterval(timer);
       try { socket.close(); } catch (_) {}
@@ -352,6 +459,6 @@ function createDiscovery(onRooms, { port = DISCOVERY_PORT, ownAddresses = () => 
 }
 
 module.exports = {
-  DEFAULT_PORT, DISCOVERY_PORT, createRoomServer, localAddresses, probeRoom, joinRoom, isValidHost, codesMatch,
+  DEFAULT_PORT, DISCOVERY_PORT, WS_PATH, createRoomHub, localAddresses, probeRoom, isValidHost, codesMatch, cleanRoomId,
   broadcastAddresses, encodeBeacon, decodeBeacon, createBeacon, createDiscovery
 };

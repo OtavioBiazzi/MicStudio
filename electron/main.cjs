@@ -383,7 +383,7 @@ async function refreshSoundHotkeys() {
       shortcutRecordCombo: "Gravar Combo",
       shortcutClip: "Salvar Clipe Retroativo",
       shortcutFocusTtsWidget: "Focar Digitação (Widget TTS)",
-      shortcutToggleScreenShare: "Começar/parar transmissão de tela"
+      shortcutToggleScreenShare: "Compartilhar/parar tela na sala"
     };
 
     for (const [settingsKey, actionName] of Object.entries(GLOBAL_SHORTCUT_MAP)) {
@@ -1102,22 +1102,22 @@ ipcMain.handle("backend:retry", async () => {
 });
 ipcMain.handle("backend:open-logs", () => shell.openPath(path.join(app.getPath("userData"), "logs")));
 
-// ---------- Compartilhar tela ----------
+// ---------- Compartilhar tela (salas) ----------
 let screenBeacon = null; // aviso UDP da sala para a rede
-let screenDiscovery = null; // escuta das salas da rede (aba Assistir)
-let screenStatus = { mode: "idle", viewers: 0, label: "" };
+let screenDiscovery = null; // escuta das salas da rede
+let screenStatus = { mode: "idle", live: false, roomName: "", members: 0 };
 let pendingScreenCommand = null; // atalho apertado com a janela dormindo
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
-async function closeScreenRoom() {
+async function closeScreenRoom({ announce = true } = {}) {
   const room = screenRoom;
   screenRoom = null;
   screenBeacon?.stop();
   screenBeacon = null;
-  if (room) await room.close().catch(() => {});
+  if (room) await room.close({ announce }).catch(() => {});
 }
 
 function stopScreenDiscovery() {
@@ -1137,13 +1137,12 @@ function sendScreenCommand(command) {
 function refreshTrayForScreenShare() {
   if (!tray || tray.isDestroyed?.()) return;
   const items = [{ label: "Mostrar", click: () => showMainWindow() }];
-  if (screenStatus.mode === "hosting") {
-    tray.setToolTip(screenStatus.viewers ? `VozLab - transmitindo para ${screenStatus.viewers}` : "VozLab - transmitindo a tela");
-    items.push({ label: screenStatus.viewers ? `Transmitindo para ${screenStatus.viewers}` : "Transmitindo (ninguém assistindo)", enabled: false });
-    items.push({ label: "Parar transmissão", click: () => sendScreenCommand({ type: "stop" }) });
-  } else if (screenStatus.mode === "watching") {
-    tray.setToolTip(`VozLab - assistindo ${screenStatus.label || ""}`.trim());
-    items.push({ label: "Sair da sala", click: () => sendScreenCommand({ type: "stop" }) });
+  if (screenStatus.mode === "room") {
+    const who = screenStatus.members > 1 ? `${screenStatus.members} pessoas` : "só você";
+    tray.setToolTip(`VozLab - ${screenStatus.live ? "ao vivo em" : "na sala"} ${screenStatus.roomName} (${who})`);
+    items.push({ label: `${screenStatus.roomName} · ${who}`, enabled: false });
+    if (screenStatus.live) items.push({ label: "Parar de compartilhar a tela", click: () => sendScreenCommand({ type: "stop-share" }) });
+    items.push({ label: "Sair da sala", click: () => sendScreenCommand({ type: "leave" }) });
   } else {
     tray.setToolTip("VozLab Studio");
   }
@@ -1173,88 +1172,42 @@ ipcMain.handle("screen:sources", async () => {
 
 ipcMain.handle("screen:addresses", () => screenShare.localAddresses());
 
+// Abre a sala neste PC (quem entra primeiro vira o host).
 ipcMain.handle("screen:host-start", async (_event, options = {}) => {
-  await closeScreenRoom();
-  const maxViewers = Math.max(1, Math.min(8, Number(options.maxViewers) || 4));
-  const roomState = { viewers: 0, maxViewers };
-  const roomInfo = {
-    name: String(options.name || "Sala").slice(0, 40),
-    code: String(options.code || "").slice(0, 24),
-    version: app.getVersion(),
-    maxViewers,
-    busy: () => roomState.viewers >= roomState.maxViewers,
-    viewers: () => roomState.viewers
-  };
-  const room = screenShare.createRoomServer({
-    room: roomInfo,
-    onJoinRequest: (request) => {
-      sendToRenderer("screen:join-request", request);
-      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-        try {
-          if (Notification.isSupported()) {
-            const note = new Notification({ title: "VozLab", body: `${request.name} quer assistir sua tela.`, silent: false });
-            note.on("click", () => showMainWindow());
-            note.show();
-          }
-        } catch (_) {}
-      }
-    }
+  await closeScreenRoom({ announce: false });
+  const hub = screenShare.createRoomHub({
+    room: {
+      id: options.roomId,
+      name: options.name,
+      password: options.password,
+      hostName: options.hostName,
+      since: options.since
+    },
+    version: app.getVersion()
   });
-  room.state = roomState;
   try {
-    const port = await room.listen(screenShare.DEFAULT_PORT);
-    screenRoom = room;
+    const port = await hub.listen(screenShare.DEFAULT_PORT);
+    screenRoom = hub;
     try {
-      screenBeacon = screenShare.createBeacon(() => ({
-        name: roomInfo.name,
-        port,
-        needsCode: Boolean(roomInfo.code),
-        viewers: roomState.viewers,
-        maxViewers: roomState.maxViewers
-      }));
+      screenBeacon = screenShare.createBeacon(() => ({ port, ...hub.summary() }));
     } catch (_) {
       screenBeacon = null; // sem aviso na rede: os amigos ainda entram pelo IP
     }
     return { ok: true, port, addresses: screenShare.localAddresses() };
   } catch (error) {
-    await room.close().catch(() => {});
+    await hub.close({ announce: false }).catch(() => {});
     const reason = error?.code === "EADDRINUSE" ? "A porta 47920 já está em uso. Feche outro VozLab aberto e tente de novo." : "Não consegui abrir a sala.";
     return { ok: false, reason };
   }
 });
 
-ipcMain.handle("screen:host-stop", () => closeScreenRoom());
-
-ipcMain.handle("screen:host-viewers", (_event, count) => {
-  if (!screenRoom?.state) return;
-  const next = Math.max(0, Number(count) || 0);
-  if (next === screenRoom.state.viewers) return;
-  screenRoom.state.viewers = next;
-  screenBeacon?.sendNow();
-});
-
-ipcMain.handle("screen:decide", (_event, payload = {}) => {
-  if (!screenRoom) return false;
-  return screenRoom.decide(String(payload.id || ""), {
-    accepted: Boolean(payload.accepted),
-    answer: payload.answer,
-    reason: payload.reason
-  });
-});
+ipcMain.handle("screen:host-stop", (_event, options = {}) => closeScreenRoom({ announce: options.announce !== false }));
 
 ipcMain.handle("screen:probe", (_event, host) => screenShare.probeRoom(host));
 
-ipcMain.handle("screen:join", async (_event, payload = {}) => {
-  try {
-    return { ok: true, answer: await screenShare.joinRoom(payload) };
-  } catch (error) {
-    return { ok: false, reason: error.message };
-  }
-});
-
 ipcMain.handle("screen:discover-start", () => {
   if (screenDiscovery) {
-    sendToRenderer("screen:rooms", screenDiscovery.rooms().map(({ seenAt, ...room }) => room));
+    sendToRenderer("screen:rooms", screenDiscovery.rooms());
     return true;
   }
   try {
@@ -1269,8 +1222,13 @@ ipcMain.handle("screen:discover-start", () => {
 ipcMain.handle("screen:discover-stop", () => stopScreenDiscovery());
 
 ipcMain.handle("screen:status", (_event, status = {}) => {
-  const mode = ["hosting", "watching"].includes(status.mode) ? status.mode : "idle";
-  screenStatus = { mode, viewers: Math.max(0, Number(status.viewers) || 0), label: String(status.label || "").slice(0, 60) };
+  const mode = status.mode === "room" ? "room" : "idle";
+  screenStatus = {
+    mode,
+    live: Boolean(status.live),
+    roomName: String(status.roomName || "").slice(0, 40),
+    members: Math.max(0, Number(status.members) || 0)
+  };
   screenShareActive = mode !== "idle";
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.setBackgroundThrottling(!screenShareActive);
   if (screenShareActive) clearTimeout(uiSleepTimer);
@@ -1287,7 +1245,11 @@ ipcMain.handle("screen:take-command", () => {
 ipcMain.handle("screen:notify", (_event, body) => {
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) return;
   try {
-    if (Notification.isSupported()) new Notification({ title: "VozLab", body: String(body || "").slice(0, 200), silent: true }).show();
+    if (Notification.isSupported()) {
+      const note = new Notification({ title: "VozLab", body: String(body || "").slice(0, 200), silent: true });
+      note.on("click", () => showMainWindow());
+      note.show();
+    }
   } catch (_) {}
 });
 

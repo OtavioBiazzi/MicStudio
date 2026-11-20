@@ -57,21 +57,13 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     sources: () => ipcRenderer.invoke("screen:sources"),
     addresses: () => ipcRenderer.invoke("screen:addresses"),
     hostStart: (options) => ipcRenderer.invoke("screen:host-start", options),
-    hostStop: () => ipcRenderer.invoke("screen:host-stop"),
-    setViewers: (count) => ipcRenderer.invoke("screen:host-viewers", count),
-    decide: (payload) => ipcRenderer.invoke("screen:decide", payload),
+    hostStop: (options) => ipcRenderer.invoke("screen:host-stop", options),
     probe: (host) => ipcRenderer.invoke("screen:probe", host),
-    join: (payload) => ipcRenderer.invoke("screen:join", payload),
     discoverStart: () => ipcRenderer.invoke("screen:discover-start"),
     discoverStop: () => ipcRenderer.invoke("screen:discover-stop"),
     setStatus: (status) => ipcRenderer.invoke("screen:status", status),
     takeCommand: () => ipcRenderer.invoke("screen:take-command"),
     notify: (body) => ipcRenderer.invoke("screen:notify", body),
-    onJoinRequest: (callback) => {
-      const listener = (_event, request) => callback?.(request);
-      ipcRenderer.on("screen:join-request", listener);
-      return () => ipcRenderer.removeListener("screen:join-request", listener);
-    },
     onRooms: (callback) => {
       const listener = (_event, rooms) => callback?.(rooms);
       ipcRenderer.on("screen:rooms", listener);

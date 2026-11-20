@@ -27,7 +27,7 @@ const sections = [
     pages: [
       { id: "online_library", label: "Explorar Sons", icon: Broadcast },
       { id: "favoritos", label: "Favoritos", icon: Star },
-      { id: "tela", label: "Compartilhar Tela", icon: Screencast }
+      { id: "tela", label: "Salas", icon: Screencast }
     ]
   },
   {

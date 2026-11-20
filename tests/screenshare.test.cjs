@@ -295,3 +295,97 @@ test("a sala aparece sozinha para quem procura na rede", async () => {
     discovery.stop();
   }
 });
+
+const TINY_JPEG = "data:image/jpeg;base64," + Buffer.from("foto").toString("base64");
+const TINY_MP3 = "data:audio/mpeg;base64," + Buffer.from("som").toString("base64");
+
+test("o perfil de cada um aparece na sala e muda na hora", async () => {
+  const { hub, port } = await openHub();
+  try {
+    const ana = await connect(port, { name: "Ana", clientId: "a", profile: { avatar: TINY_JPEG, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink", lixo: "x" } });
+    const welcome = await ana.next("welcome");
+    assert.deepEqual(welcome.members[0].profile, { avatar: TINY_JPEG, avatarPosition: 50, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink" });
+    const bruno = await connect(port, { name: "Bruno", clientId: "b", profile: { avatar: "javascript:alert(1)", color: "nao-existe" } });
+    const seen = await bruno.next("welcome");
+    const brunoProfile = seen.members.find((m) => m.name === "Bruno").profile;
+    assert.equal(brunoProfile.avatar, "", "foto que nao e imagem e descartada");
+    assert.equal(brunoProfile.color, "violet");
+    ana.send({ t: "profile", profile: { status: "Ausente", color: "gold" } });
+    const update = await bruno.next("member", (m) => m.member.name === "Ana");
+    assert.equal(update.member.profile.status, "Ausente");
+    assert.equal(update.member.profile.color, "gold");
+    ana.close(); bruno.close();
+  } finally {
+    await hub.close({ announce: false });
+  }
+});
+
+test("imagem e som no chat chegam para todos; arquivo invalido e barrado", async () => {
+  const { hub, port } = await openHub();
+  try {
+    const ana = await connect(port, { name: "Ana", clientId: "a" });
+    await ana.next("welcome");
+    const bruno = await connect(port, { name: "Bruno", clientId: "b" });
+    await bruno.next("welcome");
+    ana.send({ t: "chat", text: "olha", attachment: { kind: "image", name: "print.jpg", data: TINY_JPEG, width: 10, height: 5 } });
+    const image = await bruno.next("chat");
+    assert.equal(image.message.attachment.kind, "image");
+    assert.equal(image.message.attachment.data, TINY_JPEG);
+    assert.equal(image.message.text, "olha");
+    ana.send({ t: "chat", attachment: { kind: "sound", name: "risada", data: TINY_MP3, duration: 2.5 } });
+    const sound = await bruno.next("chat", (m) => m.message.attachment?.kind === "sound");
+    assert.equal(sound.message.attachment.name, "risada");
+    assert.equal(sound.message.attachment.duration, 2.5);
+    ana.send({ t: "chat", attachment: { kind: "image", data: "data:text/html;base64,PGI+" } });
+    ana.send({ t: "chat", attachment: { kind: "sound", data: TINY_JPEG } });
+    await wait(120);
+    assert.equal(bruno.inbox.filter((m) => m.t === "chat").length, 2, "arquivos que nao sao imagem/som nao passam");
+    // quem entra depois ve o historico com os anexos
+    const caio = await connect(port, { name: "Caio", clientId: "c" });
+    const late = await caio.next("welcome");
+    assert.equal(late.chat.filter((m) => m.attachment).length, 2);
+    ana.close(); bruno.close(); caio.close();
+  } finally {
+    await hub.close({ announce: false });
+  }
+});
+
+test("reacoes vao para todos e emoji estranho nao passa", async () => {
+  const { hub, port } = await openHub();
+  try {
+    const ana = await connect(port, { name: "Ana", clientId: "a" });
+    const anaId = (await ana.next("welcome")).you;
+    const bruno = await connect(port, { name: "Bruno", clientId: "b" });
+    await bruno.next("welcome");
+    ana.send({ t: "react", emoji: "🔥" });
+    const reaction = await bruno.next("react");
+    assert.equal(reaction.emoji, "🔥");
+    assert.equal(reaction.from, anaId);
+    await wait(300);
+    ana.send({ t: "react", emoji: "<script>" });
+    await wait(120);
+    assert.equal(bruno.inbox.filter((m) => m.t === "react").length, 1);
+    ana.close(); bruno.close();
+  } finally {
+    await hub.close({ announce: false });
+  }
+});
+
+test("som de entrada toca para quem ja esta na sala", async () => {
+  const { hub, port } = await openHub();
+  try {
+    const ana = await connect(port, { name: "Ana", clientId: "a" });
+    await ana.next("welcome");
+    const bruno = await connect(port, { name: "Bruno", clientId: "b", entrySound: { name: "tchan", data: TINY_MP3 } });
+    const brunoId = (await bruno.next("welcome")).you;
+    const entry = await ana.next("entry");
+    assert.equal(entry.from, brunoId);
+    assert.equal(entry.sound.name, "tchan");
+    const joined = ana.inbox.find((m) => m.t === "join");
+    assert.equal(joined.member.hasEntrySound, true);
+    assert.equal("entrySound" in joined.member, false, "o arquivo do som nao vai junto na lista de membros");
+    ana.close(); bruno.close();
+  } finally {
+    await hub.close({ announce: false });
+  }
+});

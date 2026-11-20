@@ -45,6 +45,7 @@ import { SoundboardPage } from "./components/SoundboardPage";
 import { OnlineSoundsPage } from "./components/OnlineSoundsPage";
 import { FavoritosPage } from "./components/FavoritosPage";
 import { ScreenSharePage, ScreenShareFloating } from "./components/ScreenSharePage";
+import { setLocalProfile } from "./screenShare";
 import { VoiceLabPage } from "./components/VoiceLabPage";
 import { ConfigPage, colorPalettes } from "./components/ConfigPage";
 
@@ -162,15 +163,18 @@ function App() {
     return !saved || saved === "MicFudido" ? "VozLab" : saved;
   });
   const [profileSub, setProfileSub] = useState(() => {
-    return localStorage.getItem("micfudiddo.profileSub") || "Plano Vitalício";
+    // O antigo "Plano Vitalício" era so enfeite; agora o campo e o seu status.
+    const saved = localStorage.getItem("micfudiddo.profileSub") || "";
+    return saved === "Plano Vitalício" ? "" : saved;
   });
   const [profileImage, setProfileImage] = useState(() => {
     return localStorage.getItem("micfudiddo.profileImage") || "";
   });
   const [userProfileOpen, setUserProfileOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
-  const [profilePlan, setProfilePlan] = useState(() => {
-    return localStorage.getItem("micfudiddo.profilePlan") !== null ? localStorage.getItem("micfudiddo.profilePlan") : "PRO";
+  const [profileColor, setProfileColor] = useState(() => localStorage.getItem("micfudiddo.profileColor") || "violet");
+  const [profileEntrySound, setProfileEntrySound] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("micfudiddo.profileEntrySound") || "null"); } catch { return null; }
   });
   const [profileBio, setProfileBio] = useState(() => {
     return localStorage.getItem("micfudiddo.profileBio") !== null ? localStorage.getItem("micfudiddo.profileBio") : "Olá! Bem-vindo ao meu perfil.";
@@ -403,7 +407,22 @@ function App() {
   useEffect(() => { localStorage.setItem("micfudiddo.profileName", profileName); }, [profileName]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileSub", profileSub); }, [profileSub]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileImage", profileImage); }, [profileImage]);
-  useEffect(() => { localStorage.setItem("micfudiddo.profilePlan", profilePlan); }, [profilePlan]);
+  useEffect(() => { localStorage.removeItem("micfudiddo.profilePlan"); }, []);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileColor", profileColor); }, [profileColor]);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileEntrySound", JSON.stringify(profileEntrySound)); }, [profileEntrySound]);
+  // As salas mostram o seu perfil (foto, status, cor...). Muda na hora para quem esta na sala com voce.
+  useEffect(() => {
+    setLocalProfile({
+      name: profileName,
+      status: profileSub,
+      bio: profileBio,
+      readme: profileReadme,
+      avatar: profileImage,
+      avatarPosition: Number(profileImagePosition) || 50,
+      color: profileColor,
+      entrySound: profileEntrySound
+    });
+  }, [profileName, profileSub, profileBio, profileReadme, profileImage, profileImagePosition, profileColor, profileEntrySound]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileBio", profileBio); }, [profileBio]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileReadme", profileReadme); }, [profileReadme]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileImagePosition", profileImagePosition); }, [profileImagePosition]);
@@ -1096,9 +1115,9 @@ function App() {
             state={state}
             profileName={profileName}
             profileSub={profileSub}
-            profilePlan={profilePlan}
             profileImage={profileImage}
             profileImagePosition={profileImagePosition}
+            profileColor={profileColor}
             onOpenProfile={() => setUserProfileOpen(true)}
             onManageAccount={() => setEditProfileOpen(true)}
             appVersion={appVersion}
@@ -1256,7 +1275,7 @@ function App() {
               )}
               {page === "tela" && (
                 <ErrorBoundary>
-                  <ScreenSharePage setToast={setToast} />
+                  <ScreenSharePage setToast={setToast} sounds={state?.sounds || []} call={call} />
                 </ErrorBoundary>
               )}
               {page === "perfis" && (
@@ -1389,11 +1408,11 @@ function App() {
             }}
             profileName={profileName}
             profileSub={profileSub}
-            profilePlan={profilePlan}
             profileImage={profileImage}
             profileImagePosition={profileImagePosition}
             profileBio={profileBio}
             profileReadme={profileReadme}
+            profileColor={profileColor}
             stats={{
               sounds: state?.sounds?.length || 0,
               plays: state?.totalPlayCount || 0,
@@ -1411,8 +1430,11 @@ function App() {
             setProfileName={setProfileName}
             profileSub={profileSub}
             setProfileSub={setProfileSub}
-            profilePlan={profilePlan}
-            setProfilePlan={setProfilePlan}
+            profileColor={profileColor}
+            setProfileColor={setProfileColor}
+            profileEntrySound={profileEntrySound}
+            setProfileEntrySound={setProfileEntrySound}
+            sounds={state?.sounds || []}
             profileImage={profileImage}
             setProfileImage={setProfileImage}
             profileImagePosition={profileImagePosition}

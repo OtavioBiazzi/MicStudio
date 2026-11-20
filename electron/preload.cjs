@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     setStatus: (status) => ipcRenderer.invoke("screen:status", status),
     takeCommand: () => ipcRenderer.invoke("screen:take-command"),
     notify: (body) => ipcRenderer.invoke("screen:notify", body),
+    saveSound: (payload) => ipcRenderer.invoke("screen:save-sound", payload),
+    saveImage: (payload) => ipcRenderer.invoke("screen:save-image", payload),
     onRooms: (callback) => {
       const listener = (_event, rooms) => callback?.(rooms);
       ipcRenderer.on("screen:rooms", listener);

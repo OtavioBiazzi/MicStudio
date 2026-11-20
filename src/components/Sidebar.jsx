@@ -11,6 +11,7 @@ import {
   Waveform,
   Screencast
 } from "@phosphor-icons/react";
+import { profileGradient } from "./ProfileCard";
 
 const sections = [
   {
@@ -42,7 +43,7 @@ export function Sidebar({
   state,
   profileName,
   profileSub,
-  profilePlan,
+  profileColor,
   profileImage,
   profileImagePosition,
   onOpenProfile,
@@ -100,7 +101,7 @@ export function Sidebar({
 
       <div className="sidebar-bottom">
         <div className="sidebar-profile" onClick={onOpenProfile} style={{ cursor: "pointer" }}>
-          <div className="profile-avatar" style={{ overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="profile-avatar" style={{ overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: profileGradient(profileColor) }}>
             {profileImage ? (
               <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
             ) : (
@@ -109,8 +110,8 @@ export function Sidebar({
             <span className="status-dot" />
           </div>
           <div className="profile-info">
-            <strong>{profileName} {profilePlan && <span className="pro-badge">{profilePlan}</span>}</strong>
-            <small>{profileSub}</small>
+            <strong>{profileName}</strong>
+            <small>{profileSub || "Ver meu perfil"}</small>
           </div>
         </div>
         <div 

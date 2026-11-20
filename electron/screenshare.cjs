@@ -18,7 +18,13 @@ const WS_PATH = `${PATH_PREFIX}/ws`;
 const BEACON_PREFIX = "VOZLAB-SALA2 ";
 const BEACON_INTERVAL_MS = 2000;
 const ROOM_EXPIRE_MS = 7000;
-const MAX_MESSAGE_BYTES = 256 * 1024;
+const MAX_MESSAGE_BYTES = 9 * 1024 * 1024; // cabe uma imagem ou um som de ate ~6 MB
+const MAX_ATTACHMENT_CHARS = 8.5 * 1024 * 1024; // base64
+const MAX_AVATAR_CHARS = 200 * 1024;
+const MAX_ENTRY_SOUND_CHARS = 900 * 1024;
+const HISTORY_MEDIA_BUDGET = 40 * 1024 * 1024; // o historico do chat guarda no maximo isso em anexos
+const REACTIONS = ["🔥", "😂", "👏", "😮", "💀", "❤️", "🤡", "👀"];
+const PROFILE_COLORS = ["violet", "pink", "teal", "orange", "blue", "green", "red", "gold"];
 const HELLO_TIMEOUT_MS = 6000;
 const PING_INTERVAL_MS = 15000;
 const CHAT_HISTORY = 60;
@@ -88,7 +94,52 @@ function publicMember(member) {
     address: member.address,
     joinedAt: member.joinedAt,
     isHost: member.isHost,
-    live: member.live
+    live: member.live,
+    profile: member.profile,
+    hasEntrySound: Boolean(member.entrySound)
+  };
+}
+
+function isDataUrl(value, prefixes, maxChars) {
+  const text = String(value || "");
+  return text.length <= maxChars && prefixes.some((prefix) => text.startsWith(prefix)) && /^data:[a-z0-9.+/-]+;base64,[A-Za-z0-9+/=]+$/i.test(text);
+}
+
+// Perfil que cada um mostra na sala: so texto curto e uma foto pequena.
+function cleanProfile(value) {
+  const profile = value && typeof value === "object" ? value : {};
+  const position = Number(profile.avatarPosition);
+  return {
+    avatar: isDataUrl(profile.avatar, ["data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,"], MAX_AVATAR_CHARS) ? profile.avatar : "",
+    avatarPosition: Number.isFinite(position) ? Math.min(100, Math.max(0, position)) : 50,
+    status: cleanText(profile.status, 60),
+    bio: cleanText(profile.bio, 120),
+    readme: String(profile.readme ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").slice(0, 4000),
+    color: PROFILE_COLORS.includes(profile.color) ? profile.color : "violet"
+  };
+}
+
+function cleanEntrySound(value) {
+  if (!value || typeof value !== "object") return null;
+  if (!isDataUrl(value.data, ["data:audio/"], MAX_ENTRY_SOUND_CHARS)) return null;
+  return { name: cleanText(value.name, 60) || "Som", data: value.data };
+}
+
+function cleanAttachment(value) {
+  if (!value || typeof value !== "object") return null;
+  const kind = value.kind === "image" ? "image" : value.kind === "sound" ? "sound" : "";
+  if (!kind) return null;
+  const prefixes = kind === "image" ? ["data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,", "data:image/gif;base64,"] : ["data:audio/"];
+  if (!isDataUrl(value.data, prefixes, MAX_ATTACHMENT_CHARS)) return null;
+  const duration = Number(value.duration);
+  return {
+    kind,
+    name: cleanText(value.name, 80) || (kind === "image" ? "imagem" : "som"),
+    data: value.data,
+    width: Number(value.width) || 0,
+    height: Number(value.height) || 0,
+    duration: Number.isFinite(duration) ? Math.max(0, Math.min(3600, duration)) : 0,
+    size: Math.round(value.data.length * 0.75)
   };
 }
 
@@ -189,7 +240,9 @@ function createRoomHub({ room, maxMembers = 10, hostAddress = () => localAddress
           address: local ? hostAddress() : remote,
           joinedAt: Date.now(),
           isHost,
-          live: null
+          live: null,
+          profile: cleanProfile(message.profile),
+          entrySound: cleanEntrySound(message.entrySound)
         };
         members.set(member.id, member);
         send(member, {
@@ -200,17 +253,34 @@ function createRoomHub({ room, maxMembers = 10, hostAddress = () => localAddress
           chat: chat.slice(-CHAT_HISTORY)
         });
         broadcast({ t: "join", member: publicMember(member) }, member.id);
+        if (member.entrySound && !previous) broadcast({ t: "entry", from: member.id, sound: member.entrySound }, member.id);
         return;
       }
 
       switch (message.t) {
         case "chat": {
           const text = String(message.text ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, 500);
-          if (!text) return;
-          const entry = { id: crypto.randomUUID(), from: member.id, name: member.name, text, at: Date.now() };
+          const attachment = cleanAttachment(message.attachment);
+          if (!text && !attachment) return;
+          const entry = { id: crypto.randomUUID(), from: member.id, name: member.name, text, at: Date.now(), ...(attachment ? { attachment } : {}) };
           chat.push(entry);
           if (chat.length > CHAT_HISTORY) chat.shift();
+          trimHistoryMedia();
           broadcast({ t: "chat", message: entry });
+          return;
+        }
+        case "profile": {
+          member.profile = cleanProfile(message.profile);
+          if ("entrySound" in message) member.entrySound = cleanEntrySound(message.entrySound);
+          broadcast({ t: "member", member: publicMember(member) });
+          return;
+        }
+        case "react": {
+          if (!REACTIONS.includes(message.emoji)) return;
+          const now = Date.now();
+          if (now - (member.lastReact || 0) < 250) return; // sem spam
+          member.lastReact = now;
+          broadcast({ t: "react", from: member.id, emoji: message.emoji });
           return;
         }
         case "state": {
@@ -268,6 +338,17 @@ function createRoomHub({ room, maxMembers = 10, hostAddress = () => localAddress
       try { client.ping(); } catch (_) {}
     }
   }, PING_INTERVAL_MS);
+
+  // Anexos antigos saem do historico (so o arquivo; a mensagem fica) para a memoria nao crescer sem fim.
+  function trimHistoryMedia() {
+    let total = 0;
+    for (let i = chat.length - 1; i >= 0; i--) {
+      const attachment = chat[i].attachment;
+      if (!attachment?.data) continue;
+      total += attachment.data.length;
+      if (total > HISTORY_MEDIA_BUDGET) chat[i] = { ...chat[i], attachment: { ...attachment, data: "", expired: true } };
+    }
+  }
 
   // O host vai sair: avisa quem assume (o mais antigo na sala) para a sala continuar.
   function announceClosing() {
@@ -459,6 +540,7 @@ function createDiscovery(onRooms, { port = DISCOVERY_PORT, ownAddresses = () => 
 }
 
 module.exports = {
+  REACTIONS, PROFILE_COLORS, cleanProfile, cleanAttachment,
   DEFAULT_PORT, DISCOVERY_PORT, WS_PATH, createRoomHub, localAddresses, probeRoom, isValidHost, codesMatch, cleanRoomId,
   broadcastAddresses, encodeBeacon, decodeBeacon, createBeacon, createDiscovery
 };

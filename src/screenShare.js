@@ -18,6 +18,10 @@ export const SCREEN_QUALITIES = {
 
 export const DEFAULT_ROOM = { id: "padrao", name: "Sala da galera" };
 export const MAX_WATCHERS = 6;
+export const REACTIONS = ["🔥", "😂", "👏", "😮", "💀", "❤️", "🤡", "👀"];
+export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+const MAX_ENTRY_SOUND_BYTES = 650 * 1024;
+const ENTRY_SOUNDS_KEY = "vozlab.screen.entrySounds";
 const PORT = 47920;
 const WS_PATH = "/vozlab/ws";
 const HOST_PREFS_KEY = "vozlab.screen.host";
@@ -43,6 +47,7 @@ const lobbyState = {
   streams: {}, // memberId -> { status, stream, stats, hasAudio }
   focus: "",
   reconnecting: false,
+  reactions: [],
   error: ""
 };
 
@@ -59,6 +64,8 @@ let removeRoomsListener = null;
 let discoveryUsers = 0;
 let lastStatusSignature = "";
 let chatVisible = false;
+let localProfile = { name: "", status: "", bio: "", readme: "", avatar: "", avatarPosition: 50, color: "violet", entrySound: null };
+let entrySoundCache = { path: "", data: null };
 
 // ---------- estado ----------
 function reportStatus() {
@@ -128,6 +135,7 @@ function clientId() {
 }
 
 function profileName() {
+  if (localProfile.name.trim()) return localProfile.name.trim();
   try { return (localStorage.getItem("micfudiddo.profileName") || "").trim() || "Amigo"; } catch { return "Amigo"; }
 }
 
@@ -252,7 +260,10 @@ function openSocket(host, port, password) {
       reject(new Error("A sala não respondeu. Confira se vocês estão na mesma rede do Radmin."));
     }, CONNECT_TIMEOUT_MS);
     const who = session?.identity || { name: profileName(), clientId: clientId() };
-    ws.onopen = () => ws.send(JSON.stringify({ t: "hello", name: who.name, clientId: who.clientId, password: password || "" }));
+    ws.onopen = () => ws.send(JSON.stringify({
+      t: "hello", name: who.name, clientId: who.clientId, password: password || "",
+      profile: publicProfile(), entrySound: entrySoundCache.data
+    }));
     ws.onmessage = (event) => {
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
@@ -363,6 +374,12 @@ function handleMessage(message) {
       return;
     case "signal":
       handleSignal(message.from, message.data);
+      return;
+    case "react":
+      addReaction(message.from, message.emoji);
+      return;
+    case "entry":
+      if (message.from !== state.me) playEntrySound(message.sound);
       return;
     case "kicked":
       session = { ...session, intentional: true };
@@ -476,6 +493,7 @@ export async function enterRoom({ roomId = DEFAULT_ROOM.id, name = DEFAULT_ROOM.
   }
   // Nome e id ficam fixos durante a sala: as reconexoes se apresentam do mesmo jeito.
   session = { roomId, name, password, host, port, intentional: false, identity: { name: profileName(), clientId: clientId() } };
+  await loadEntrySound();
   setState({ phase: "joining", joiningText: host ? "Conectando..." : "Procurando a sala na rede...", error: "" });
   startDiscovery();
   try {
@@ -551,6 +569,171 @@ export function setFocus(memberId) {
 
 export function clearScreenShareError() {
   if (state.error || state.needsPassword) setState({ error: "", needsPassword: null });
+}
+
+
+// ---------- perfil ----------
+function publicProfile() {
+  return {
+    avatar: localProfile.avatar,
+    avatarPosition: localProfile.avatarPosition,
+    status: localProfile.status,
+    bio: localProfile.bio,
+    readme: localProfile.readme,
+    color: localProfile.color
+  };
+}
+
+async function fileToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Não consegui ler o arquivo."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function fileUrl(filePath) {
+  return "file:///" + String(filePath).replace(/\\/g, "/");
+}
+
+const AUDIO_TYPES = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", webm: "audio/webm", flac: "audio/flac", aac: "audio/aac", m4a: "audio/mp4" };
+
+async function readSoundFile(filePath, maxBytes) {
+  const response = await fetch(fileUrl(filePath));
+  if (!response.ok) throw new Error("Não achei o arquivo desse som.");
+  const blob = await response.blob();
+  if (blob.size > maxBytes) throw new Error(`Esse som é grande demais (máximo ${Math.round(maxBytes / 1024 / 1024 * 10) / 10} MB).`);
+  const ext = String(filePath).split(".").pop().toLowerCase();
+  const type = blob.type && blob.type.startsWith("audio/") ? blob.type : AUDIO_TYPES[ext] || "audio/mpeg";
+  return fileToDataUrl(new Blob([blob], { type }));
+}
+
+async function loadEntrySound() {
+  const sound = localProfile.entrySound;
+  if (!sound?.path) {
+    entrySoundCache = { path: "", data: null };
+    return;
+  }
+  if (entrySoundCache.path === sound.path && entrySoundCache.data) return;
+  try {
+    entrySoundCache = { path: sound.path, data: { name: sound.name, data: await readSoundFile(sound.path, MAX_ENTRY_SOUND_BYTES) } };
+  } catch {
+    entrySoundCache = { path: sound.path, data: null };
+  }
+}
+
+// Chamado pelo app sempre que voce muda o perfil. Na sala, os outros veem na hora.
+export async function setLocalProfile(profile) {
+  const before = JSON.stringify({ ...publicProfile(), entry: localProfile.entrySound?.path || "" });
+  localProfile = { ...localProfile, ...profile };
+  const entryChanged = (localProfile.entrySound?.path || "") !== entrySoundCache.path;
+  if (entryChanged) await loadEntrySound();
+  const after = JSON.stringify({ ...publicProfile(), entry: localProfile.entrySound?.path || "" });
+  if (before !== after && state.phase === "room") {
+    send({ t: "profile", profile: publicProfile(), ...(entryChanged ? { entrySound: entrySoundCache.data } : {}) });
+  }
+}
+
+export function entrySoundTooBig() {
+  return Boolean(localProfile.entrySound?.path) && !entrySoundCache.data;
+}
+
+export function readEntrySoundsEnabled() {
+  return readJson(ENTRY_SOUNDS_KEY, true) !== false;
+}
+
+export function setEntrySoundsEnabled(enabled) {
+  writeJson(ENTRY_SOUNDS_KEY, Boolean(enabled));
+  setState({ entrySoundsVersion: (state.entrySoundsVersion || 0) + 1 });
+}
+
+let entryAudio = null;
+function playEntrySound(sound) {
+  if (!sound?.data || !readEntrySoundsEnabled()) return;
+  try {
+    entryAudio?.pause();
+    entryAudio = new Audio(sound.data);
+    entryAudio.volume = 0.6;
+    entryAudio.play().catch(() => {});
+    const current = entryAudio;
+    setTimeout(() => { if (entryAudio === current) current.pause(); }, 7000); // som de entrada nunca passa de 7 s
+  } catch {}
+}
+
+// ---------- reacoes ----------
+export function react(emoji) {
+  if (REACTIONS.includes(emoji)) send({ t: "react", emoji });
+}
+
+function addReaction(from, emoji) {
+  if (!REACTIONS.includes(emoji)) return;
+  const id = `${Date.now()}-${Math.random()}`;
+  const member = memberById(from);
+  const reaction = { id, emoji, name: member?.name || "", x: 8 + Math.random() * 84 };
+  setState((current) => ({ reactions: [...current.reactions.slice(-24), reaction] }));
+  setTimeout(() => setState((current) => ({ reactions: current.reactions.filter((item) => item.id !== id) })), 2800);
+}
+
+// ---------- anexos do chat ----------
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Não consegui abrir essa imagem."));
+    image.src = src;
+  });
+}
+
+async function prepareImage(file) {
+  if (!file?.type?.startsWith("image/")) throw new Error("Escolha uma imagem (PNG, JPG, WEBP ou GIF).");
+  if (file.type === "image/gif") {
+    if (file.size > MAX_ATTACHMENT_BYTES) throw new Error("GIF grande demais (máximo 6 MB).");
+    const data = await fileToDataUrl(file);
+    const image = await loadImage(data);
+    return { data, width: image.naturalWidth, height: image.naturalHeight };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(url);
+    const scale = Math.min(1, 1920 / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+    // PNG pequeno continua PNG (prints ficam nitidos); o resto vira JPEG leve.
+    let data = file.type === "image/png" && file.size < 1.5 * 1024 * 1024 ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.86);
+    if (data.length * 0.75 > MAX_ATTACHMENT_BYTES) data = canvas.toDataURL("image/jpeg", 0.7);
+    return { data, width, height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function sendImage(file, text = "") {
+  if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
+  const { data, width, height } = await prepareImage(file);
+  send({ t: "chat", text: String(text || "").slice(0, 500), attachment: { kind: "image", name: file.name || "imagem", data, width, height } });
+}
+
+export async function sendSound(sound) {
+  if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
+  if (!sound?.path) throw new Error("Esse som não tem arquivo.");
+  const data = await readSoundFile(sound.path, MAX_ATTACHMENT_BYTES);
+  const duration = Number(sound.duration) || 0;
+  send({ t: "chat", text: "", attachment: { kind: "sound", name: sound.name || "som", data, duration } });
+}
+
+export async function saveSoundToDisk(attachment) {
+  if (!attachment?.data) throw new Error("Esse som não está mais disponível.");
+  return api().saveSound({ name: attachment.name, data: attachment.data });
+}
+
+export async function saveImageToDisk(attachment) {
+  if (!attachment?.data) throw new Error("Essa imagem não está mais disponível.");
+  return api().saveImage({ name: attachment.name, data: attachment.data });
 }
 
 // ---------- WebRTC ----------

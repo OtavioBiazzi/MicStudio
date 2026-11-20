@@ -820,7 +820,7 @@ export function ConfigPage({
               <Row label="Apagar meu cadastro de perfil" desc="Volta nome, foto, plano e texto do seu perfil ao padrão.">
                 <button className="btn btn-danger" onClick={() => {
                   if (!confirm("Apagar nome, foto, plano e texto do seu perfil de usuário?")) return;
-                  ["profileName", "profileSub", "profileImage", "profilePlan", "profileBio", "profileReadme", "profileImagePosition"].forEach((k) => localStorage.removeItem(`micfudiddo.${k}`));
+                  ["profileName", "profileSub", "profileImage", "profilePlan", "profileBio", "profileReadme", "profileImagePosition", "profileColor", "profileEntrySound"].forEach((k) => localStorage.removeItem(`micfudiddo.${k}`));
                   setToast("Perfil apagado! Recarregando...");
                   setTimeout(() => window.location.reload(), 1200);
                 }}>Apagar perfil</button>

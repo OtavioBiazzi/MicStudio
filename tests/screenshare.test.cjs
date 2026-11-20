@@ -1,11 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createRoomServer, probeRoom, joinRoom, localAddresses, isValidHost, codesMatch } = require("../electron/screenshare.cjs");
+const {
+  createRoomServer, probeRoom, joinRoom, localAddresses, isValidHost, codesMatch,
+  broadcastAddresses, encodeBeacon, decodeBeacon, createBeacon, createDiscovery
+} = require("../electron/screenshare.cjs");
 
 const OFFER = { type: "offer", sdp: "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n" };
 
 async function openRoom(options = {}) {
-  const room = { name: "Sala do Teste", code: "", version: "9.9.9", busy: () => false, ...options.room };
+  const room = { name: "Sala do Teste", code: "", version: "9.9.9", maxViewers: 4, busy: () => false, viewers: () => 1, ...options.room };
   const handle = createRoomServer({
     room,
     decisionTimeoutMs: options.decisionTimeoutMs ?? 2000,
@@ -19,7 +22,7 @@ test("a sala responde quem e e se pede codigo", async () => {
   const { handle, port } = await openRoom({ room: { code: "ABCD" } });
   try {
     const info = await probeRoom("127.0.0.1", port);
-    assert.deepEqual(info, { online: true, name: "Sala do Teste", needsCode: true, busy: false });
+    assert.deepEqual(info, { online: true, name: "Sala do Teste", needsCode: true, busy: false, viewers: 1, maxViewers: 4 });
   } finally {
     await handle.close();
   }
@@ -34,10 +37,11 @@ test("pedido aceito devolve a resposta de video para quem assiste", async () => 
     }
   });
   try {
-    const answer = await joinRoom({ host: "127.0.0.1", port, name: "Amigo\u0007", code: "", offer: OFFER });
+    const answer = await joinRoom({ host: "127.0.0.1", port, name: "Amigo\u0007", code: "", clientId: "abc-123", offer: OFFER });
     assert.deepEqual(answer, { type: "answer", sdp: "v=0\r\nresposta" });
     assert.equal(seen.name, "Amigo", "caracteres de controle no nome sao removidos");
     assert.equal(seen.offer.sdp, OFFER.sdp);
+    assert.equal(seen.clientId, "abc-123", "o id do amigo chega para quem transmite (reconexao e amigos de confianca)");
     assert.equal(handle.pendingCount(), 0);
   } finally {
     await handle.close();
@@ -82,7 +86,7 @@ test("codigo certo passa, sem diferenca de maiuscula", async () => {
 test("sala ocupada recusa na hora", async () => {
   const { handle, port } = await openRoom({ room: { busy: () => true } });
   try {
-    await assert.rejects(joinRoom({ host: "127.0.0.1", port, name: "A", offer: OFFER }), /Já tem alguém assistindo/);
+    await assert.rejects(joinRoom({ host: "127.0.0.1", port, name: "A", offer: OFFER }), /A sala está cheia/);
     assert.equal((await probeRoom("127.0.0.1", port)).busy, true);
   } finally {
     await handle.close();
@@ -144,4 +148,58 @@ test("comparacao de codigo", () => {
   assert.equal(codesMatch("ABCD", "abcd"), true);
   assert.equal(codesMatch("ABCD", "ABC"), false);
   assert.equal(codesMatch("ABCD", undefined), false);
+});
+
+test("o aviso da sala na rede vai e volta sem perder nada", () => {
+  const decoded = decodeBeacon(encodeBeacon({ name: "Pedro", port: 47920, needsCode: true, viewers: 2, maxViewers: 4 }));
+  assert.deepEqual(decoded, { name: "Pedro", port: 47920, needsCode: true, viewers: 2, maxViewers: 4 });
+  assert.equal(decodeBeacon(Buffer.from("qualquer outra coisa")), null);
+  assert.equal(decodeBeacon(Buffer.from("VOZLAB-SALA1 {quebrado")), null);
+});
+
+test("endereco de broadcast de cada rede", () => {
+  const list = broadcastAddresses({
+    "Radmin VPN": [{ family: "IPv4", address: "26.55.66.77", netmask: "255.0.0.0", internal: false }],
+    Ethernet: [{ family: "IPv4", address: "192.168.0.10", netmask: "255.255.255.0", internal: false }],
+    Loopback: [{ family: "IPv4", address: "127.0.0.1", netmask: "255.0.0.0", internal: true }]
+  });
+  assert.ok(list.includes("26.255.255.255"));
+  assert.ok(list.includes("192.168.0.255"));
+  assert.ok(list.includes("255.255.255.255"));
+  assert.ok(!list.includes("127.255.255.255"));
+});
+
+test("a sala aparece sozinha para quem procura na rede", async () => {
+  const port = 47000 + Math.floor(Math.random() * 900);
+  let rooms = [];
+  const discovery = createDiscovery((list) => { rooms = list; }, { port, ownAddresses: () => [] });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const beacon = createBeacon(() => ({ name: "Sala do Pedro", port: 47920, needsCode: false, viewers: 1, maxViewers: 4 }), { port, intervalMs: 100, targets: () => ["127.0.0.1"] });
+  try {
+    for (let i = 0; i < 30 && !rooms.length; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(rooms.length, 1);
+    assert.equal(rooms[0].host, "127.0.0.1");
+    assert.equal(rooms[0].name, "Sala do Pedro");
+    assert.equal(rooms[0].viewers, 1);
+  } finally {
+    beacon.stop();
+    discovery.stop();
+  }
+});
+
+test("a propria sala nao aparece na lista", async () => {
+  const port = 47000 + Math.floor(Math.random() * 900);
+  let rooms = [];
+  let calls = 0;
+  const discovery = createDiscovery((list) => { rooms = list; calls += 1; }, { port, ownAddresses: () => ["127.0.0.1"] });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const beacon = createBeacon(() => ({ name: "Eu", port: 47920 }), { port, intervalMs: 100, targets: () => ["127.0.0.1"] });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(rooms.length, 0);
+    assert.equal(calls, 0);
+  } finally {
+    beacon.stop();
+    discovery.stop();
+  }
 });

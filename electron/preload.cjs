@@ -58,15 +58,29 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     addresses: () => ipcRenderer.invoke("screen:addresses"),
     hostStart: (options) => ipcRenderer.invoke("screen:host-start", options),
     hostStop: () => ipcRenderer.invoke("screen:host-stop"),
-    setBusy: (busy) => ipcRenderer.invoke("screen:host-busy", Boolean(busy)),
+    setViewers: (count) => ipcRenderer.invoke("screen:host-viewers", count),
     decide: (payload) => ipcRenderer.invoke("screen:decide", payload),
     probe: (host) => ipcRenderer.invoke("screen:probe", host),
     join: (payload) => ipcRenderer.invoke("screen:join", payload),
-    setActive: (active) => ipcRenderer.invoke("screen:set-active", Boolean(active)),
+    discoverStart: () => ipcRenderer.invoke("screen:discover-start"),
+    discoverStop: () => ipcRenderer.invoke("screen:discover-stop"),
+    setStatus: (status) => ipcRenderer.invoke("screen:status", status),
+    takeCommand: () => ipcRenderer.invoke("screen:take-command"),
+    notify: (body) => ipcRenderer.invoke("screen:notify", body),
     onJoinRequest: (callback) => {
       const listener = (_event, request) => callback?.(request);
       ipcRenderer.on("screen:join-request", listener);
       return () => ipcRenderer.removeListener("screen:join-request", listener);
+    },
+    onRooms: (callback) => {
+      const listener = (_event, rooms) => callback?.(rooms);
+      ipcRenderer.on("screen:rooms", listener);
+      return () => ipcRenderer.removeListener("screen:rooms", listener);
+    },
+    onCommand: (callback) => {
+      const listener = (_event, command) => callback?.(command);
+      ipcRenderer.on("screen:command", listener);
+      return () => ipcRenderer.removeListener("screen:command", listener);
     }
   },
   audioPathsFromDrop: (files) => Array.from(files || []).map((file) => webUtils.getPathForFile(file)).filter(Boolean)

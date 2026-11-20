@@ -1,15 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Monitor, AppWindow, Broadcast, Eye, Copy, ArrowClockwise, X, Check, CornersOut, SignOut, Lock, LockOpen,
-  WifiHigh, WifiSlash, UserCircle, Trash, Info, StopCircle, Play
+  WifiHigh, WifiSlash, UserCircle, Trash, Info, StopCircle, Play, SpeakerHigh, SpeakerSlash, SpeakerSimpleHigh,
+  Star, ArrowsLeftRight, Question, CaretDown, ArrowSquareOut, Users
 } from "@phosphor-icons/react";
 import {
-  SCREEN_QUALITIES, useScreenShare, isScreenShareAvailable, listScreenSources, listAddresses, startHosting, stopHosting,
-  acceptViewer, rejectViewer, kickViewer, joinRoom, leaveRoom, probeRoom, readRecents, forgetRecent, readHostPrefs,
-  saveHostPrefs, randomRoomCode, clearScreenShareError, clearHostNotice
+  SCREEN_QUALITIES, MAX_VIEWERS, useScreenShare, isScreenShareAvailable, listScreenSources, listAddresses, startHosting,
+  stopHosting, changeHosting, acceptViewer, rejectViewer, kickViewer, joinRoom, leaveRoom, probeRoom, readRecents,
+  forgetRecent, readHostPrefs, saveHostPrefs, randomRoomCode, clearScreenShareError, clearHostNotice, isTrusted,
+  setTrusted, startDiscovery, stopDiscovery, readViewerVolume, saveViewerVolume, installScreenShareBridge
 } from "../screenShare";
 
-function VideoView({ stream, muted = true, className = "", onDoubleClick, videoRef }) {
+const RADMIN_URL = "https://www.radmin-vpn.com/br/";
+
+function VideoView({ stream, muted = true, volume = 1, className = "", onDoubleClick, videoRef }) {
   const localRef = useRef(null);
   const ref = videoRef || localRef;
   useEffect(() => {
@@ -18,6 +22,10 @@ function VideoView({ stream, muted = true, className = "", onDoubleClick, videoR
     if (video.srcObject !== stream) video.srcObject = stream || null;
     if (stream) video.play?.().catch(() => {});
   }, [stream, ref]);
+  useEffect(() => {
+    const video = ref.current;
+    if (video) video.volume = Math.min(1, Math.max(0, volume));
+  }, [volume, ref]);
   return <video ref={ref} className={className} autoPlay playsInline muted={muted} onDoubleClick={onDoubleClick} />;
 }
 
@@ -35,6 +43,36 @@ function copy(text, setToast) {
   const done = () => setToast?.("Copiado!");
   if (window.micfudiddo?.copyText) window.micfudiddo.copyText(text).then(done).catch(() => {});
   else navigator.clipboard?.writeText(text).then(done).catch(() => {});
+}
+
+function openRadmin() {
+  if (window.micfudiddo?.openExternal) window.micfudiddo.openExternal(RADMIN_URL);
+  else window.open(RADMIN_URL, "_blank", "noopener");
+}
+
+function Guide({ startOpen = false, onSeen }) {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <section className={`ssCard ssGuide ${open ? "open" : ""}`}>
+      <button className="ssGuideHead" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        <Question size={17} weight="fill" />
+        <span>Como usar com os amigos (Radmin VPN)</span>
+        <CaretDown size={14} className="ssGuideCaret" />
+      </button>
+      {open && (
+        <>
+          <ol className="ssSteps">
+            <li><b>Todo mundo instala o Radmin VPN</b> (é grátis). <button className="ssLink inline" onClick={openRadmin}>Baixar <ArrowSquareOut size={12} /></button></li>
+            <li><b>Um de vocês cria uma rede</b> no Radmin (Rede › Criar rede) e os outros entram com o nome e a senha dela.</li>
+            <li><b>Quem vai mostrar a tela</b> clica em <b>Transmitir</b> aqui no VozLab.</li>
+            <li><b>Quem vai assistir</b> abre <b>Assistir</b>: a sala aparece sozinha em "Na rede agora". Se não aparecer, é só colar o IP do amigo.</li>
+            <li>Na primeira vez o Windows pergunta sobre o firewall: marque <b>Redes públicas</b> também e clique em Permitir.</li>
+          </ol>
+          {onSeen && <button className="btn btn-ghost ssSmallBtn" onClick={() => { setOpen(false); onSeen(); }}><Check size={14} /> Entendi</button>}
+        </>
+      )}
+    </section>
+  );
 }
 
 function AddressCard({ addresses, setToast, onRefresh }) {
@@ -55,7 +93,7 @@ function AddressCard({ addresses, setToast, onRefresh }) {
             </div>
             <button className="btn btn-ghost ssSmallBtn" onClick={() => copy(main.address, setToast)}><Copy size={14} /> Copiar IP</button>
           </div>
-          <p className="ssMuted">Sua sala é sempre a mesma. Seus amigos colam esse IP uma vez em <b>Assistir</b> e depois é só clicar na sua sala.</p>
+          <p className="ssMuted">Sua sala é sempre a mesma. Na rede do Radmin ela aparece sozinha para os amigos; se não aparecer, eles colam esse IP uma vez.</p>
           {addresses.length > 1 && (
             <div className="ssOtherIps">
               {addresses.slice(1).map((item) => (
@@ -69,7 +107,6 @@ function AddressCard({ addresses, setToast, onRefresh }) {
       ) : (
         <p className="ssMuted">Não achei nenhuma rede. Conecte o PC na internet e abra o Radmin VPN.</p>
       )}
-      <p className="ssMuted small">Se o Windows perguntar sobre o firewall na primeira vez, marque <b>Redes públicas</b> também e clique em Permitir. A rede do Radmin costuma ser pública.</p>
       {!hasVpn && addresses.length > 0 && (
         <div className="ssWarn"><Info size={15} /> Não achei o Radmin VPN. Ele precisa estar aberto e na mesma rede dos seus amigos (se estiverem na mesma casa, não precisa).</div>
       )}
@@ -77,7 +114,7 @@ function AddressCard({ addresses, setToast, onRefresh }) {
   );
 }
 
-function SourcePicker({ sources, loading, selectedId, onSelect, onRefresh }) {
+function SourcePicker({ sources, loading, selectedId, onSelect, onRefresh, title = "O que transmitir" }) {
   const screens = sources.filter((item) => item.isScreen);
   const windows = sources.filter((item) => !item.isScreen);
   const renderItem = (item) => (
@@ -89,7 +126,7 @@ function SourcePicker({ sources, loading, selectedId, onSelect, onRefresh }) {
   return (
     <section className="ssCard">
       <div className="ssCardHead">
-        <span className="ssLabel">O que transmitir</span>
+        <span className="ssLabel">{title}</span>
         <button className="ssLink" onClick={onRefresh} disabled={loading}><ArrowClockwise size={13} /> {loading ? "Procurando..." : "Atualizar"}</button>
       </div>
       {screens.length > 0 && <div className="ssSources">{screens.map(renderItem)}</div>}
@@ -104,29 +141,67 @@ function SourcePicker({ sources, loading, selectedId, onSelect, onRefresh }) {
   );
 }
 
+function useSources() {
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await listScreenSources();
+      setSources(list);
+      return list;
+    } catch {
+      setSources([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  return { sources, loading, refresh };
+}
+
+function QualityPicker({ value, onChange }) {
+  return (
+    <div className="ssQualities">
+      {Object.values(SCREEN_QUALITIES).map((quality) => (
+        <button key={quality.id} className={`ssQuality ${value === quality.id ? "on" : ""}`} onClick={() => onChange(quality.id)}>
+          <strong>{quality.label}</strong>
+          <small>{quality.detail}</small>
+          <em>{quality.hint}</em>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AudioToggle({ checked, onChange, disabled }) {
+  return (
+    <label className={`ssToggleRow ${disabled ? "disabled" : ""}`}>
+      <span>
+        <b>{checked ? <SpeakerHigh size={14} /> : <SpeakerSlash size={14} />} Mandar o som do PC</b>
+        <small>Vai junto tudo o que toca no seu PC, inclusive as vozes do Discord. Se vocês estiverem em call, os amigos ouvem eco: deixe desligado.</small>
+      </span>
+      <span className="toggleSwitch">
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+        <span className="toggleTrack" />
+      </span>
+    </label>
+  );
+}
+
 function HostSetup({ profileName, setToast }) {
   const [addresses, setAddresses] = useState([]);
-  const [sources, setSources] = useState([]);
-  const [loadingSources, setLoadingSources] = useState(false);
+  const { sources, loading, refresh } = useSources();
   const [selected, setSelected] = useState(null);
   const [prefs, setPrefs] = useState(readHostPrefs);
   const [starting, setStarting] = useState(false);
 
   const updatePrefs = (patch) => setPrefs((current) => { const next = { ...current, ...patch }; saveHostPrefs(next); return next; });
-
   const refreshAddresses = useCallback(() => { listAddresses().then(setAddresses).catch(() => {}); }, []);
   const refreshSources = useCallback(async () => {
-    setLoadingSources(true);
-    try {
-      const list = await listScreenSources();
-      setSources(list);
-      setSelected((current) => list.find((item) => item.id === current?.id) || list.find((item) => item.isScreen) || list[0] || null);
-    } catch {
-      setSources([]);
-    } finally {
-      setLoadingSources(false);
-    }
-  }, []);
+    const list = await refresh();
+    setSelected((current) => list.find((item) => item.id === current?.id) || list.find((item) => item.id === readHostPrefs().lastSourceId) || list.find((item) => item.isScreen) || list[0] || null);
+  }, [refresh]);
 
   useEffect(() => { refreshAddresses(); refreshSources(); }, [refreshAddresses, refreshSources]);
 
@@ -137,7 +212,9 @@ function HostSetup({ profileName, setToast }) {
       await startHosting({
         sourceId: selected.id,
         sourceName: selected.name,
+        isScreen: selected.isScreen,
         quality: prefs.quality,
+        shareAudio: prefs.shareAudio,
         name: profileName || "Sala",
         code: prefs.askCode ? prefs.code : ""
       });
@@ -151,30 +228,23 @@ function HostSetup({ profileName, setToast }) {
   return (
     <div className="ssColumns">
       <div className="ssMain">
-        <SourcePicker sources={sources} loading={loadingSources} selectedId={selected?.id} onSelect={setSelected} onRefresh={refreshSources} />
+        {!prefs.guideSeen && <Guide startOpen onSeen={() => updatePrefs({ guideSeen: true })} />}
+        <SourcePicker sources={sources} loading={loading} selectedId={selected?.id} onSelect={setSelected} onRefresh={refreshSources} />
+        {prefs.guideSeen && <Guide />}
       </div>
       <aside className="ssSide">
         <AddressCard addresses={addresses} setToast={setToast} onRefresh={refreshAddresses} />
         <section className="ssCard">
           <span className="ssLabel">Qualidade</span>
-          <div className="ssQualities">
-            {Object.values(SCREEN_QUALITIES).map((quality) => (
-              <button key={quality.id} className={`ssQuality ${prefs.quality === quality.id ? "on" : ""}`} onClick={() => updatePrefs({ quality: quality.id })}>
-                <strong>{quality.label}</strong>
-                <small>{quality.detail}</small>
-                <em>{quality.hint}</em>
-              </button>
-            ))}
-          </div>
+          <QualityPicker value={prefs.quality} onChange={(quality) => updatePrefs({ quality })} />
+          <AudioToggle checked={prefs.shareAudio} onChange={(shareAudio) => updatePrefs({ shareAudio })} />
         </section>
         <section className="ssCard">
-          <div className="ssCardHead">
-            <span className="ssLabel">Quem pode entrar</span>
-          </div>
+          <span className="ssLabel">Quem pode entrar</span>
           <label className="ssToggleRow">
             <span>
               <b>{prefs.askCode ? <Lock size={14} /> : <LockOpen size={14} />} Pedir código</b>
-              <small>{prefs.askCode ? "Só entra quem souber o código." : "Qualquer um com seu IP pode pedir. Você sempre aceita antes."}</small>
+              <small>{prefs.askCode ? "Só entra quem souber o código." : "Qualquer um com seu IP pode pedir. Você aceita antes (ou marca o amigo para entrar direto)."}</small>
             </span>
             <span className="toggleSwitch">
               <input type="checkbox" checked={prefs.askCode} onChange={(e) => updatePrefs({ askCode: e.target.checked })} />
@@ -192,6 +262,7 @@ function HostSetup({ profileName, setToast }) {
         <button className="btn btn-primary ssBigBtn" onClick={start} disabled={!selected || starting}>
           <Broadcast size={18} weight="fill" /> {starting ? "Abrindo a sala..." : "Começar a transmitir"}
         </button>
+        <p className="ssMuted small">Dá para pôr um atalho para começar e parar em Configurações › Atalhos. Até {MAX_VIEWERS} amigos assistem ao mesmo tempo.</p>
       </aside>
     </div>
   );
@@ -211,7 +282,69 @@ function RequestCard({ request }) {
   );
 }
 
+function ViewerRow({ viewer }) {
+  const trusted = isTrusted(viewer.clientId);
+  return (
+    <div className="ssViewer">
+      <UserCircle size={30} weight="fill" />
+      <div className="ssRequestText">
+        <b>{viewer.name}</b>
+        {viewer.connected ? <StatLine stats={viewer.stats} /> : <small>Conectando...</small>}
+      </div>
+      {viewer.clientId && (
+        <button
+          className={`ssIconBtn ${trusted ? "starred" : ""}`}
+          onClick={() => setTrusted(viewer.clientId, viewer.name, !trusted)}
+          title={trusted ? "Entra direto (clique para voltar a pedir)" : "Deixar entrar direto da próxima vez"}
+          aria-label={trusted ? "Parar de aceitar direto" : "Aceitar direto da próxima vez"}
+        >
+          <Star size={16} weight={trusted ? "fill" : "regular"} />
+        </button>
+      )}
+      <button className="ssIconBtn" onClick={() => kickViewer(viewer.id)} title="Tirar da sala" aria-label="Tirar da sala"><X size={16} /></button>
+    </div>
+  );
+}
+
+function ChangePanel({ hosting, setToast, onClose }) {
+  const { sources, loading, refresh } = useSources();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { refresh(); }, [refresh]);
+  const apply = async (patch) => {
+    setBusy(true);
+    try {
+      await changeHosting(patch);
+    } catch (error) {
+      setToast?.(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={`ssChange ${busy ? "busy" : ""}`}>
+      <div className="ssCardHead">
+        <span className="ssLabel">Trocar sem derrubar ninguém</span>
+        <button className="ssIconBtn" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
+      </div>
+      <SourcePicker
+        title="Tela ou janela"
+        sources={sources}
+        loading={loading}
+        selectedId={hosting.sourceId}
+        onSelect={(item) => item.id !== hosting.sourceId && apply({ sourceId: item.id, sourceName: item.name, isScreen: item.isScreen })}
+        onRefresh={refresh}
+      />
+      <section className="ssCard">
+        <span className="ssLabel">Qualidade</span>
+        <QualityPicker value={hosting.quality} onChange={(quality) => quality !== hosting.quality && apply({ quality })} />
+        <AudioToggle checked={hosting.shareAudio} disabled={busy} onChange={(shareAudio) => apply({ shareAudio })} />
+      </section>
+    </div>
+  );
+}
+
 function HostLive({ hosting, setToast }) {
+  const [changing, setChanging] = useState(false);
   const quality = SCREEN_QUALITIES[hosting.quality];
   const main = hosting.addresses[0];
   return (
@@ -221,15 +354,18 @@ function HostLive({ hosting, setToast }) {
           <div className="ssVideoWrap">
             <VideoView stream={hosting.stream} className="ssVideo" />
             <span className="ssLive"><span className="ssDot" /> AO VIVO</span>
+            {hosting.hasAudio && <span className="ssAudioBadge"><SpeakerHigh size={13} weight="fill" /> com som</span>}
           </div>
           <div className="ssStageBar">
             <div className="ssStageInfo">
               <b>{hosting.sourceName}</b>
               <small>{quality?.label} · {quality?.detail}{hosting.code ? ` · código ${hosting.code}` : ""}</small>
             </div>
-            <button className="btn ssStopBtn" onClick={() => stopHosting()}><StopCircle size={16} weight="fill" /> Parar transmissão</button>
+            <button className="btn btn-ghost ssSmallBtn" onClick={() => setChanging((value) => !value)}><ArrowsLeftRight size={15} /> Trocar</button>
+            <button className="btn ssStopBtn" onClick={() => stopHosting()}><StopCircle size={16} weight="fill" /> Parar</button>
           </div>
         </section>
+        {changing && <ChangePanel hosting={hosting} setToast={setToast} onClose={() => setChanging(false)} />}
       </div>
       <aside className="ssSide">
         {hosting.requests.length > 0 && (
@@ -239,75 +375,88 @@ function HostLive({ hosting, setToast }) {
           </section>
         )}
         <section className="ssCard">
-          <span className="ssLabel">Assistindo</span>
-          {hosting.viewer ? (
-            <div className="ssViewer">
-              <UserCircle size={30} weight="fill" />
-              <div className="ssRequestText">
-                <b>{hosting.viewer.name}</b>
-                {hosting.viewer.connected ? <StatLine stats={hosting.stats} /> : <small>Conectando...</small>}
-              </div>
-              <button className="ssIconBtn" onClick={kickViewer} title="Tirar da sala" aria-label="Tirar da sala"><X size={16} /></button>
+          <div className="ssCardHead">
+            <span className="ssLabel">Assistindo</span>
+            <span className="ssCount"><Users size={13} /> {hosting.viewers.length}/{MAX_VIEWERS}</span>
+          </div>
+          {hosting.viewers.length > 0 ? (
+            <div className="ssViewers">
+              {hosting.viewers.map((viewer) => <ViewerRow key={viewer.id} viewer={viewer} />)}
             </div>
           ) : (
-            <p className="ssMuted">Ninguém ainda.{main ? <> Mande seu IP: <button className="ssInlineCopy" onClick={() => copy(main.address, setToast)}>{main.address} <Copy size={12} /></button></> : null}</p>
+            <p className="ssMuted">Ninguém ainda.{main ? <> Seu IP: <button className="ssInlineCopy" onClick={() => copy(main.address, setToast)}>{main.address} <Copy size={12} /></button></> : null}</p>
           )}
-          {hosting.stats?.limitedBy && <p className="ssMuted small">A qualidade caiu para não travar ({hosting.stats.limitedBy === "bandwidth" ? "internet" : "processador"}).</p>}
+          {hosting.viewers.some((viewer) => viewer.stats?.limitedBy) && <p className="ssMuted small">A qualidade caiu um pouco para não travar.</p>}
+          {hosting.viewers.length > 0 && <p className="ssMuted small"><Star size={11} weight="fill" /> na pessoa = ela entra direto da próxima vez, sem você aceitar.</p>}
           {hosting.notice && <div className="ssNotice" onClick={clearHostNotice}>{hosting.notice}</div>}
         </section>
-        <p className="ssMuted small">Pode minimizar ou trocar de aba: a transmissão continua. Nesta versão, uma pessoa assiste por vez.</p>
+        <p className="ssMuted small">Pode minimizar ou trocar de aba: a transmissão continua. Para parar pela bandeja, clique com o botão direito no ícone do VozLab.</p>
       </aside>
     </div>
   );
 }
 
-function RecentRoom({ item, onJoin, onForget, disabled }) {
-  const [status, setStatus] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    probeRoom(item.host).then((result) => { if (alive) setStatus(result); }).catch(() => {});
-    const timer = setInterval(() => probeRoom(item.host).then((result) => { if (alive) setStatus(result); }).catch(() => {}), 15000);
-    return () => { alive = false; clearInterval(timer); };
-  }, [item.host]);
+function RoomRow({ room, status, onJoin, onForget, disabled }) {
   const online = status?.online;
-  const label = !status ? "Verificando..." : online ? (status.busy ? "Ocupada" : "Transmitindo agora") : "Offline";
+  const full = status?.busy;
+  const label = !status ? "Verificando..." : online ? (full ? "Sala cheia" : "Transmitindo agora") : "Offline";
+  const count = online && status.maxViewers > 1 ? ` · ${status.viewers || 0}/${status.maxViewers} assistindo` : "";
   return (
-    <div className={`ssRecent ${online && !status.busy ? "live" : ""}`}>
+    <div className={`ssRecent ${online && !full ? "live" : ""}`}>
       <span className="ssRecentIcon">{online ? <WifiHigh size={18} weight="bold" /> : <WifiSlash size={18} />}</span>
       <div className="ssRequestText">
-        <b>{status?.name || item.name || item.host}</b>
-        <small>{item.host} · <span className="ssRecentState">{label}</span>{status?.needsCode ? " · pede código" : ""}</small>
+        <b>{status?.name || room.name || room.host}</b>
+        <small>{room.host} · <span className="ssRecentState">{label}</span>{count}{status?.needsCode ? " · pede código" : ""}</small>
       </div>
-      <button className="ssIconBtn" onClick={() => onForget(item.host)} title="Esquecer" aria-label="Esquecer"><Trash size={15} /></button>
-      <button className="btn btn-primary ssSmallBtn" disabled={disabled || !online || status?.busy} onClick={() => onJoin(item.host, status?.needsCode)}>
+      {onForget && <button className="ssIconBtn" onClick={() => onForget(room.host)} title="Esquecer" aria-label="Esquecer"><Trash size={15} /></button>}
+      <button className="btn btn-primary ssSmallBtn" disabled={disabled || !online || full} onClick={() => onJoin(room.host, status?.needsCode)}>
         <Play size={13} weight="fill" /> Assistir
       </button>
     </div>
   );
 }
 
-function ViewerSetup({ profileName, setToast }) {
+function RecentRoom({ item, discovered, ...props }) {
+  const [probed, setProbed] = useState(null);
+  useEffect(() => {
+    if (discovered) return undefined;
+    let alive = true;
+    const check = () => probeRoom(item.host).then((result) => { if (alive) setProbed(result); }).catch(() => {});
+    check();
+    const timer = setInterval(check, 15000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [item.host, discovered]);
+  const status = discovered ? { online: true, name: discovered.name, needsCode: discovered.needsCode, busy: discovered.viewers >= discovered.maxViewers, viewers: discovered.viewers, maxViewers: discovered.maxViewers } : probed;
+  return <RoomRow room={item} status={status} {...props} />;
+}
+
+function ViewerSetup({ profileName, setToast, rooms }) {
   const [host, setHost] = useState("");
   const [code, setCode] = useState("");
   const [needsCode, setNeedsCode] = useState(false);
   const [recents, setRecents] = useState(readRecents);
   const [busy, setBusy] = useState(false);
 
-  const join = async (target, askCode = needsCode) => {
+  useEffect(() => {
+    startDiscovery();
+    return () => stopDiscovery();
+  }, []);
+
+  const join = async (target, askCode = false) => {
     const value = String(target || "").trim();
     if (!value) { setToast?.("Cole o IP de quem está transmitindo."); return; }
     setBusy(true);
     try {
       const probe = await probeRoom(value);
       if (!probe.online) { setToast?.(probe.reason || "Essa pessoa não está transmitindo agora."); return; }
-      if (probe.busy) { setToast?.("Já tem alguém assistindo essa sala."); return; }
-      if ((probe.needsCode || askCode) && !code.trim()) {
+      if (probe.busy) { setToast?.("A sala está cheia."); return; }
+      if ((probe.needsCode || askCode) && !(value === host.trim() && code.trim())) {
         setHost(value);
         setNeedsCode(true);
         setToast?.("Essa sala pede um código. Digite e clique em Assistir.");
         return;
       }
-      await joinRoom({ host: value, code: code.trim(), name: profileName || "Amigo" });
+      await joinRoom({ host: value, code: value === host.trim() ? code.trim() : "", name: profileName || "Amigo" });
     } catch (error) {
       setToast?.(error.message);
     } finally {
@@ -316,26 +465,52 @@ function ViewerSetup({ profileName, setToast }) {
     }
   };
 
+  const discoveredByHost = useMemo(() => new Map((rooms || []).map((room) => [room.host, room])), [rooms]);
+  const newRooms = (rooms || []).filter((room) => !recents.some((item) => item.host === room.host));
+
   return (
     <div className="ssColumns">
       <div className="ssMain">
         <section className="ssCard">
-          <span className="ssLabel">Salas dos amigos</span>
-          {recents.length === 0 ? (
-            <p className="ssMuted">As salas em que você entrar aparecem aqui. Da próxima vez é só clicar em Assistir.</p>
-          ) : (
+          <div className="ssCardHead">
+            <span className="ssLabel">Na rede agora</span>
+            <span className="ssScanning"><span className="ssScanDot" /> procurando salas</span>
+          </div>
+          {newRooms.length === 0 && recents.length === 0 && (
+            <p className="ssMuted">Nenhuma sala ainda. Quando um amigo na mesma rede do Radmin clicar em Transmitir, ela aparece aqui sozinha.</p>
+          )}
+          {newRooms.length === 0 && recents.length > 0 && <p className="ssMuted">Nenhuma sala nova. As dos amigos que você já assistiu estão logo abaixo.</p>}
+          {newRooms.length > 0 && (
             <div className="ssRecents">
-              {recents.map((item) => (
-                <RecentRoom key={item.host} item={item} disabled={busy} onJoin={join} onForget={(value) => { forgetRecent(value); setRecents(readRecents()); }} />
+              {newRooms.map((room) => (
+                <RecentRoom key={room.host} item={{ host: room.host, name: room.name }} discovered={room} disabled={busy} onJoin={join} />
               ))}
             </div>
           )}
         </section>
+        {recents.length > 0 && (
+          <section className="ssCard">
+            <span className="ssLabel">Salas dos amigos</span>
+            <div className="ssRecents">
+              {recents.map((item) => (
+                <RecentRoom
+                  key={item.host}
+                  item={item}
+                  discovered={discoveredByHost.get(item.host)}
+                  disabled={busy}
+                  onJoin={join}
+                  onForget={(value) => { forgetRecent(value); setRecents(readRecents()); }}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+        <Guide />
       </div>
       <aside className="ssSide">
         <section className="ssCard">
-          <span className="ssLabel">Entrar numa sala</span>
-          <form className="ssJoinForm" onSubmit={(e) => { e.preventDefault(); join(host); }}>
+          <span className="ssLabel">Entrar pelo IP</span>
+          <form className="ssJoinForm" onSubmit={(e) => { e.preventDefault(); join(host, needsCode); }}>
             <label className="ssField">
               <span>IP de quem transmite</span>
               <input value={host} onChange={(e) => { setHost(e.target.value); setNeedsCode(false); }} placeholder="Ex: 26.123.45.67" inputMode="decimal" disabled={busy} />
@@ -350,7 +525,7 @@ function ViewerSetup({ profileName, setToast }) {
               <Eye size={18} weight="fill" /> {busy ? "Conectando..." : "Assistir"}
             </button>
           </form>
-          <p className="ssMuted small">Peça o IP para quem vai transmitir. Ele aparece em <b>Transmitir › Sua sala</b>. Vocês dois precisam estar na mesma rede do Radmin VPN.</p>
+          <p className="ssMuted small">Só precisa disso se a sala não aparecer sozinha. O IP fica em <b>Transmitir › Sua sala</b> no PC de quem transmite.</p>
         </section>
       </aside>
     </div>
@@ -360,17 +535,42 @@ function ViewerSetup({ profileName, setToast }) {
 function ViewerLive({ watching }) {
   const videoRef = useRef(null);
   const stageRef = useRef(null);
+  const [volume, setVolume] = useState(readViewerVolume);
+  const [muted, setMuted] = useState(false);
   const fullscreen = () => {
     const el = stageRef.current;
     if (!el) return;
     if (document.fullscreenElement) document.exitFullscreen?.();
     else el.requestFullscreen?.().catch(() => {});
   };
+  const changeVolume = (value) => {
+    setVolume(value);
+    setMuted(false);
+    saveViewerVolume(value);
+  };
   const waiting = !!watching.status;
+  const controls = (light) => (
+    <>
+      <div className="ssStageInfo">
+        <b>{watching.name || watching.host}</b>
+        {!waiting && <StatLine stats={watching.stats} />}
+      </div>
+      {!waiting && watching.hasAudio && (
+        <div className="ssVolume">
+          <button className={`ssIconBtn ${light ? "light" : ""}`} onClick={() => setMuted((value) => !value)} aria-label={muted ? "Ligar o som" : "Tirar o som"}>
+            {muted || volume === 0 ? <SpeakerSlash size={17} /> : <SpeakerSimpleHigh size={17} />}
+          </button>
+          <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} aria-label="Volume" style={{ "--fill": `${(muted ? 0 : volume) * 100}%` }} />
+        </div>
+      )}
+      {!waiting && <button className={`ssIconBtn ${light ? "light" : ""}`} onClick={fullscreen} title="Tela cheia (ou clique duas vezes no vídeo)" aria-label="Tela cheia"><CornersOut size={18} /></button>}
+      <button className="btn ssStopBtn" onClick={() => leaveRoom()}><SignOut size={15} /> {waiting && watching.status !== "Reconectando..." ? "Cancelar" : "Sair"}</button>
+    </>
+  );
   return (
     <section className="ssCard ssStage ssWatch">
       <div className="ssVideoWrap ssWatchWrap" ref={stageRef}>
-        <VideoView stream={watching.stream} className="ssVideo" videoRef={videoRef} onDoubleClick={fullscreen} />
+        <VideoView stream={watching.stream} className="ssVideo" videoRef={videoRef} onDoubleClick={fullscreen} muted={muted || !watching.hasAudio} volume={volume} />
         {waiting && (
           <div className="ssWaiting">
             <span className="ssSpinner" />
@@ -378,23 +578,9 @@ function ViewerLive({ watching }) {
             <small>{watching.name || watching.host}</small>
           </div>
         )}
-        <div className="ssOverlayBar">
-          <div className="ssStageInfo">
-            <b>{watching.name || watching.host}</b>
-            {!waiting && <StatLine stats={watching.stats} />}
-          </div>
-          {!waiting && <button className="ssIconBtn light" onClick={fullscreen} title="Tela cheia (ou clique duas vezes no vídeo)" aria-label="Tela cheia"><CornersOut size={18} /></button>}
-          <button className="btn ssStopBtn" onClick={() => leaveRoom()}><SignOut size={15} /> {waiting ? "Cancelar" : "Sair"}</button>
-        </div>
+        <div className="ssOverlayBar">{controls(true)}</div>
       </div>
-      <div className="ssStageBar">
-          <div className="ssStageInfo">
-            <b>{watching.name || watching.host}</b>
-            {!waiting && <StatLine stats={watching.stats} />}
-          </div>
-          {!waiting && <button className="ssIconBtn" onClick={fullscreen} title="Tela cheia (ou clique duas vezes no vídeo)" aria-label="Tela cheia"><CornersOut size={18} /></button>}
-          <button className="btn ssStopBtn" onClick={() => leaveRoom()}><SignOut size={15} /> {waiting ? "Cancelar" : "Sair"}</button>
-      </div>
+      <div className="ssStageBar">{controls(false)}</div>
     </section>
   );
 }
@@ -406,13 +592,6 @@ export function ScreenSharePage({ profileName, setToast }) {
   });
   const pickTab = (value) => { setTab(value); try { localStorage.setItem("vozlab.screen.tab", value); } catch {} };
   const available = isScreenShareAvailable();
-
-  useEffect(() => {
-    if (share.error) {
-      setToast?.(share.error);
-      clearScreenShareError();
-    }
-  }, [share.error, setToast]);
 
   const activeTab = share.mode === "hosting" ? "transmitir" : share.mode === "joining" || share.mode === "watching" ? "assistir" : tab;
   const locked = share.mode !== "idle";
@@ -443,18 +622,29 @@ export function ScreenSharePage({ profileName, setToast }) {
       ) : activeTab === "transmitir" ? (
         <HostSetup profileName={profileName} setToast={setToast} />
       ) : (
-        <ViewerSetup profileName={profileName} setToast={setToast} />
+        <ViewerSetup profileName={profileName} setToast={setToast} rooms={share.rooms} />
       )}
     </div>
   );
 }
 
-// Fica sempre na tela (fora da aba): mostra pedidos para entrar e um atalho de volta quando voce esta em outra aba.
-export function ScreenShareFloating({ page, setPage }) {
+// Fica sempre montado: liga o atalho global e o menu da bandeja, mostra os avisos e, fora da aba, os pedidos para
+// entrar e um atalho de volta.
+export function ScreenShareFloating({ page, setPage, setToast }) {
   const share = useScreenShare();
+
+  useEffect(() => installScreenShareBridge(), []);
+  useEffect(() => {
+    if (share.error) {
+      setToast?.(share.error);
+      clearScreenShareError();
+    }
+  }, [share.error, setToast]);
+
   if (page === "tela" || share.mode === "idle") return null;
   if (share.mode === "hosting") {
     const request = share.hosting.requests[0];
+    const viewers = share.hosting.viewers.length;
     return (
       <div className="ssFloat">
         {request ? (
@@ -468,7 +658,7 @@ export function ScreenShareFloating({ page, setPage }) {
           <>
             <span className="ssDot" />
             <button className="ssFloatMain" onClick={() => setPage("tela")}>
-              Transmitindo{share.hosting.viewer ? ` para ${share.hosting.viewer.name}` : ""}
+              Transmitindo{viewers ? ` para ${viewers === 1 ? share.hosting.viewers[0].name : `${viewers} pessoas`}` : ""}
             </button>
             <button className="ssIconBtn" onClick={() => stopHosting()} title="Parar transmissão" aria-label="Parar transmissão"><StopCircle size={18} weight="fill" /></button>
           </>

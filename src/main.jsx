@@ -1321,7 +1321,7 @@ function App() {
 
       {/* Floating Dock */}
       <ErrorBoundary>
-        <ScreenShareFloating page={page} setPage={setPage} />
+        <ScreenShareFloating page={page} setPage={setPage} setToast={setToast} />
         <FloatingDock
           state={state}
           call={call}

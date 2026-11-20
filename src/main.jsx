@@ -44,6 +44,7 @@ import { VozesPage } from "./components/VozesPage";
 import { SoundboardPage } from "./components/SoundboardPage";
 import { OnlineSoundsPage } from "./components/OnlineSoundsPage";
 import { FavoritosPage } from "./components/FavoritosPage";
+import { ScreenSharePage, ScreenShareFloating } from "./components/ScreenSharePage";
 import { VoiceLabPage } from "./components/VoiceLabPage";
 import { ConfigPage, colorPalettes } from "./components/ConfigPage";
 
@@ -91,7 +92,7 @@ function App() {
   const [state, setState] = useState(null);
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem("micfudiddo.page") || "vozes";
-    const validPages = ["vozes", "soundboard", "online_library", "favoritos", "voicelab", "perfis", "config"];
+    const validPages = ["vozes", "soundboard", "online_library", "favoritos", "tela", "voicelab", "perfis", "config"];
     return validPages.includes(saved) ? saved : "vozes";
   });
   const [selectedSound, setSelectedSound] = useState(null);
@@ -1253,6 +1254,11 @@ function App() {
                   />
                 </ErrorBoundary>
               )}
+              {page === "tela" && (
+                <ErrorBoundary>
+                  <ScreenSharePage profileName={profileName} setToast={setToast} />
+                </ErrorBoundary>
+              )}
               {page === "perfis" && (
                 <ErrorBoundary>
                   <ProfilesPage state={state} call={call} setToast={setToast} customVoices={customVoices} />
@@ -1315,6 +1321,7 @@ function App() {
 
       {/* Floating Dock */}
       <ErrorBoundary>
+        <ScreenShareFloating page={page} setPage={setPage} />
         <FloatingDock
           state={state}
           call={call}

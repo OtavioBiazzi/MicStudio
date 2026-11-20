@@ -1,10 +1,14 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, Notification, shell, Tray, clipboard } = require("electron");
+const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, Notification, shell, Tray, clipboard } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 const { backendFailure, waitUntilReady } = require("./backend-status.cjs");
 const { createIntroOpener, createSessionGate } = require("./onboarding.cjs");
 const { runHotkeyNatively, createRepeatGuard } = require("./hotkey-native.cjs");
 const hotkeyRepeatGuard = createRepeatGuard();
+const screenShare = require("./screenshare.cjs");
+// Compartilhar tela: sem isto o Chromium esconde o IP local do WebRTC atras de um nome ".local" que nao resolve
+// pelo Radmin/Hamachi, e a conexao entre os amigos nao fecha.
+app.commandLine.appendSwitch("disable-features", "WebRtcHideLocalIpsWithMdns");
 
 const ROOT = __dirname.endsWith("electron") ? path.join(__dirname, "..") : process.cwd();
 const API = "http://127.0.0.1:38717";
@@ -25,6 +29,8 @@ let registeredGlobalShortcuts = new Map();
 let shortcutConflicts = new Map();
 let rendererRecoveryAttempts = 0;
 let uiSleepTimer = null;
+let screenRoom = null; // sala aberta enquanto voce transmite a tela
+let screenShareActive = false; // transmitindo ou assistindo: a janela nao pode dormir
 const UI_SLEEP_DELAY_MS = 20000;
 const claimUpdateCheck = createSessionGate();
 let openIntroVideo;
@@ -517,6 +523,7 @@ async function scheduleUiSleep() {
   const settings = await readAppSettings();
   if (settings.freeMemoryInTray === false) return;
   uiSleepTimer = setTimeout(() => {
+    if (screenShareActive) return; // destruir a janela cortaria a transmissao
     if (quitting || !mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible()) return;
     const sleeping = mainWindow;
     mainWindow = null;
@@ -1091,6 +1098,98 @@ ipcMain.handle("backend:retry", async () => {
 });
 ipcMain.handle("backend:open-logs", () => shell.openPath(path.join(app.getPath("userData"), "logs")));
 
+// ---------- Compartilhar tela ----------
+function sendToRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+async function closeScreenRoom() {
+  const room = screenRoom;
+  screenRoom = null;
+  if (room) await room.close().catch(() => {});
+}
+
+ipcMain.handle("screen:sources", async () => {
+  const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false });
+  return sources
+    .filter((source) => source.name && !/^VozLab/i.test(source.name))
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      isScreen: source.id.startsWith("screen:"),
+      thumbnail: source.thumbnail?.isEmpty() ? "" : source.thumbnail.toDataURL()
+    }));
+});
+
+ipcMain.handle("screen:addresses", () => screenShare.localAddresses());
+
+ipcMain.handle("screen:host-start", async (_event, options = {}) => {
+  await closeScreenRoom();
+  const roomState = { busy: false };
+  const room = screenShare.createRoomServer({
+    room: {
+      name: String(options.name || "Sala").slice(0, 40),
+      code: String(options.code || "").slice(0, 24),
+      version: app.getVersion(),
+      busy: () => roomState.busy
+    },
+    onJoinRequest: (request) => {
+      sendToRenderer("screen:join-request", request);
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+        try {
+          if (Notification.isSupported()) {
+            const note = new Notification({ title: "VozLab", body: `${request.name} quer assistir sua tela.`, silent: false });
+            note.on("click", () => showMainWindow());
+            note.show();
+          }
+        } catch (_) {}
+      }
+    }
+  });
+  room.state = roomState;
+  try {
+    const port = await room.listen(screenShare.DEFAULT_PORT);
+    screenRoom = room;
+    return { ok: true, port, addresses: screenShare.localAddresses() };
+  } catch (error) {
+    await room.close().catch(() => {});
+    const reason = error?.code === "EADDRINUSE" ? "A porta 47920 já está em uso. Feche outro VozLab aberto e tente de novo." : "Não consegui abrir a sala.";
+    return { ok: false, reason };
+  }
+});
+
+ipcMain.handle("screen:host-stop", () => closeScreenRoom());
+
+ipcMain.handle("screen:host-busy", (_event, busy) => {
+  if (screenRoom?.state) screenRoom.state.busy = Boolean(busy);
+});
+
+ipcMain.handle("screen:decide", (_event, payload = {}) => {
+  if (!screenRoom) return false;
+  return screenRoom.decide(String(payload.id || ""), {
+    accepted: Boolean(payload.accepted),
+    answer: payload.answer,
+    reason: payload.reason
+  });
+});
+
+ipcMain.handle("screen:probe", (_event, host) => screenShare.probeRoom(host));
+
+ipcMain.handle("screen:join", async (_event, payload = {}) => {
+  try {
+    return { ok: true, answer: await screenShare.joinRoom(payload) };
+  } catch (error) {
+    return { ok: false, reason: error.message };
+  }
+});
+
+ipcMain.handle("screen:set-active", (_event, active) => {
+  screenShareActive = Boolean(active);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.setBackgroundThrottling(!screenShareActive);
+  if (screenShareActive) clearTimeout(uiSleepTimer);
+  else if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) scheduleUiSleep();
+});
+
 app.on("second-instance", () => {
   showMainWindow();
 });
@@ -1109,5 +1208,6 @@ app.on("window-all-closed", (event) => {
 });
 
 app.on("will-quit", () => {
+  closeScreenRoom();
   stopSoundHotkeys();
 });

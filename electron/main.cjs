@@ -1242,6 +1242,55 @@ ipcMain.handle("screen:take-command", () => {
   return command;
 });
 
+// Anexos do chat da sala: decodifica o data URL e grava no disco.
+const RECEIVED_EXTENSIONS = {
+  "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/wave": ".wav",
+  "audio/ogg": ".ogg", "audio/webm": ".webm", "audio/flac": ".flac", "audio/x-flac": ".flac", "audio/aac": ".aac",
+  "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
+  "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"
+};
+
+function decodeDataUrl(dataUrl) {
+  const match = /^data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(dataUrl || ""));
+  if (!match) throw new Error("Arquivo inválido.");
+  const mime = match[1].toLowerCase();
+  const ext = RECEIVED_EXTENSIONS[mime];
+  if (!ext) throw new Error("Tipo de arquivo não suportado.");
+  return { mime, ext, buffer: Buffer.from(match[2], "base64") };
+}
+
+function safeFileBase(name, fallback) {
+  const base = String(name || "").replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  return base || fallback;
+}
+
+ipcMain.handle("screen:save-sound", async (_event, payload = {}) => {
+  const fs = require("fs");
+  const { ext, buffer } = decodeDataUrl(payload.data);
+  if (!ext || !/^\.(mp3|wav|ogg|webm|flac|aac|m4a)$/.test(ext)) throw new Error("Isso não é um som.");
+  const dir = path.join(app.getPath("userData"), "sons-recebidos");
+  await fs.promises.mkdir(dir, { recursive: true });
+  const base = safeFileBase(payload.name, "som recebido");
+  let target = path.join(dir, `${base}${ext}`);
+  for (let i = 2; fs.existsSync(target) && i < 200; i++) target = path.join(dir, `${base} (${i})${ext}`);
+  await fs.promises.writeFile(target, buffer);
+  return target;
+});
+
+ipcMain.handle("screen:save-image", async (_event, payload = {}) => {
+  const fs = require("fs");
+  const { ext, buffer } = decodeDataUrl(payload.data);
+  if (!/^\.(jpg|png|webp|gif)$/.test(ext)) throw new Error("Isso não é uma imagem.");
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Salvar imagem",
+    defaultPath: path.join(app.getPath("pictures"), `${safeFileBase(payload.name, "imagem")}${ext}`),
+    filters: [{ name: "Imagem", extensions: [ext.slice(1)] }]
+  });
+  if (result.canceled || !result.filePath) return "";
+  await fs.promises.writeFile(result.filePath, buffer);
+  return result.filePath;
+});
+
 ipcMain.handle("screen:notify", (_event, body) => {
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) return;
   try {

@@ -2,13 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Monitor, AppWindow, Broadcast, Copy, ArrowClockwise, X, CornersOut, SignOut, Lock, WifiHigh, WifiSlash, Trash,
   Info, StopCircle, SpeakerHigh, SpeakerSlash, SpeakerSimpleHigh, ArrowsLeftRight, Question, CaretDown, ArrowSquareOut,
-  Users, Crown, Hash, PaperPlaneRight, Plus, Eye, EyeSlash, Screencast, ChatsCircle, UsersThree, SignIn
+  Users, Crown, Hash, PaperPlaneRight, Plus, Eye, EyeSlash, Screencast, ChatsCircle, UsersThree, SignIn,
+  Play, Stop, Check, DownloadSimple, MusicNotes, MagnifyingGlass, ImageSquare, PlusCircle, BellRinging, BellSlash
 } from "@phosphor-icons/react";
+import { ProfileCard, ProfilePhoto } from "./ProfileCard";
 import {
   SCREEN_QUALITIES, DEFAULT_ROOM, useScreenShare, isScreenShareAvailable, listScreenSources, listAddresses, enterRoom,
   leaveRoom, createRoomId, startDiscovery, stopDiscovery, probeRoom, readRecentHosts, forgetRecentHost, readHostPrefs,
   saveHostPrefs, startShare, stopShare, watch, unwatch, setFocus, sendChat, setChatVisible, kickMember, readVolume,
-  saveVolume, clearScreenShareError, installScreenShareBridge
+  saveVolume, clearScreenShareError, installScreenShareBridge, REACTIONS, react, sendImage, sendSound, saveSoundToDisk,
+  saveImageToDisk, readEntrySoundsEnabled, setEntrySoundsEnabled
 } from "../screenShare";
 
 const RADMIN_URL = "https://www.radmin-vpn.com/br/";
@@ -20,7 +23,8 @@ function avatarColor(seed) {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-function Avatar({ name, seed, size = 32, live = false }) {
+function Avatar({ name, seed, size = 32, live = false, profile = null }) {
+  if (profile) return <ProfilePhoto image={profile.avatar} position={profile.avatarPosition} name={name} color={profile.color} size={size} live={live} />;
   return (
     <span className={`rmAvatar ${live ? "live" : ""}`} style={{ width: size, height: size, background: avatarColor(seed || name), fontSize: size * 0.42 }}>
       {String(name || "?").trim().charAt(0).toUpperCase()}
@@ -426,15 +430,17 @@ function SharePicker({ current, onClose, setToast }) {
   );
 }
 
-function MemberRow({ member, me, isHostView, watching, onWatch }) {
+function MemberRow({ member, me, isHostView, watching, onWatch, onOpen }) {
   const isMe = member.id === me;
   return (
     <div className={`rmMember ${member.live ? "live" : ""} ${watching ? "watching" : ""}`}>
-      <Avatar name={member.name} seed={member.clientId} size={34} live={Boolean(member.live)} />
-      <div className="rmMemberText">
-        <b>{member.name}{isMe && <em> (você)</em>}{member.isHost && <Crown size={13} weight="fill" className="rmCrown" title="Host da sala" />}</b>
-        <small>{member.live ? member.live.title : member.isHost ? "Host da sala" : "Na sala"}</small>
-      </div>
+      <button className="rmMemberOpen" onClick={onOpen} title={`Ver o perfil de ${member.name}`}>
+        <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={34} live={Boolean(member.live)} />
+        <span className="rmMemberText">
+          <b>{member.name}{isMe && <em> (você)</em>}{member.isHost && <Crown size={13} weight="fill" className="rmCrown" title="Host da sala" />}</b>
+          <small>{member.live ? member.live.title : member.profile?.status || (member.isHost ? "Host da sala" : "Na sala")}</small>
+        </span>
+      </button>
       {member.live && !isMe && (
         <button className={`rmLiveBtn ${watching ? "on" : ""}`} onClick={() => onWatch(member.id)} title={watching ? "Parar de assistir" : "Assistir"}>
           {watching ? <EyeSlash size={14} /> : <Eye size={14} />} {watching ? "Parar" : "Assistir"}
@@ -516,7 +522,7 @@ function Stage({ share, setToast, onShare }) {
               <div className="rmLiveCards">
                 {liveOthers.map((member) => (
                   <button key={member.id} className="rmLiveCard" onClick={() => watch(member.id)}>
-                    <Avatar name={member.name} seed={member.clientId} size={40} live />
+                    <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={40} live />
                     <span><b>{member.name}</b><small>{member.live.title}{member.live.audio ? " · com som" : ""}</small></span>
                     <span className="rmLiveCardBtn"><Eye size={15} /> Assistir</span>
                   </button>
@@ -541,7 +547,7 @@ function Stage({ share, setToast, onShare }) {
               ))}
               {notWatched.map((member) => (
                 <button key={`n-${member.id}`} className="rmStripLive" onClick={() => watch(member.id)}>
-                  <Avatar name={member.name} seed={member.clientId} size={30} live />
+                  <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={30} live />
                   <span><b>{member.name}</b><small>{member.live.title}</small></span>
                   <Eye size={15} />
                 </button>
@@ -554,9 +560,169 @@ function Stage({ share, setToast, onShare }) {
   );
 }
 
-function ChatPanel({ share }) {
+function formatBytes(bytes) {
+  if (!bytes) return "";
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return "";
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+// Som mandado no chat: ouve aqui mesmo e salva no seu soundboard com um clique.
+function SoundAttachment({ attachment, mine, setToast, call }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => () => audioRef.current?.pause(), []);
+  const toggle = () => {
+    if (!attachment.data) return;
+    if (playing) {
+      audioRef.current?.pause();
+      return;
+    }
+    const audio = audioRef.current || new Audio(attachment.data);
+    audioRef.current = audio;
+    audio.volume = 0.8;
+    audio.ontimeupdate = () => setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
+    audio.onended = () => { setPlaying(false); setProgress(0); };
+    audio.onpause = () => setPlaying(false);
+    audio.play().then(() => setPlaying(true)).catch(() => setToast?.("Não consegui tocar esse som."));
+  };
+  const save = async () => {
+    setSaving(true);
+    try {
+      const filePath = await saveSoundToDisk(attachment);
+      await call?.("/api/sounds/add", { paths: [filePath] });
+      setSaved(true);
+      setToast?.(`"${attachment.name}" foi para o seu soundboard!`);
+    } catch (error) {
+      setToast?.(error.message || "Não consegui salvar o som.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (attachment.expired || !attachment.data) return <div className="rmAttach expired">Som que não está mais disponível.</div>;
+  return (
+    <div className="rmSound">
+      <button className={`rmSoundPlay ${playing ? "on" : ""}`} onClick={toggle} aria-label={playing ? "Parar" : "Ouvir"}>
+        {playing ? <Stop size={15} weight="fill" /> : <Play size={15} weight="fill" />}
+      </button>
+      <div className="rmSoundInfo">
+        <b>{attachment.name}</b>
+        <span className="rmSoundBar"><span style={{ width: `${progress * 100}%` }} /></span>
+        <small>{[formatDuration(attachment.duration), formatBytes(attachment.size)].filter(Boolean).join(" · ")}</small>
+      </div>
+      {!mine && (
+        <button className="btn btn-ghost ssSmallBtn rmSoundSave" onClick={save} disabled={saving || saved} title="Baixar para o seu soundboard">
+          {saved ? <Check size={14} weight="bold" /> : <DownloadSimple size={14} weight="bold" />} {saved ? "Salvo" : saving ? "Salvando..." : "Salvar"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ImageAttachment({ attachment, onOpen }) {
+  if (attachment.expired || !attachment.data) return <div className="rmAttach expired">Imagem que não está mais disponível.</div>;
+  const ratio = attachment.width && attachment.height ? attachment.width / attachment.height : 16 / 9;
+  return (
+    <button className="rmImage" onClick={() => onOpen(attachment)} style={{ aspectRatio: String(Math.min(2.4, Math.max(0.5, ratio))) }} title="Abrir">
+      <img src={attachment.data} alt={attachment.name} loading="lazy" />
+    </button>
+  );
+}
+
+function Lightbox({ attachment, onClose, setToast }) {
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const save = async () => {
+    try {
+      const saved = await saveImageToDisk(attachment);
+      if (saved) setToast?.("Imagem salva!");
+    } catch (error) {
+      setToast?.(error.message);
+    }
+  };
+  return (
+    <div className="rmLightbox" onClick={onClose}>
+      <img src={attachment.data} alt={attachment.name} onClick={(e) => e.stopPropagation()} />
+      <div className="rmLightboxBar" onClick={(e) => e.stopPropagation()}>
+        <span>{attachment.name}</span>
+        <button className="btn btn-ghost ssSmallBtn" onClick={save}><DownloadSimple size={14} /> Salvar imagem</button>
+        <button className="ssIconBtn light" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+      </div>
+    </div>
+  );
+}
+
+function SoundPicker({ sounds, onClose, setToast }) {
+  const [query, setQuery] = useState("");
+  const [sending, setSending] = useState("");
+  const previewRef = useRef(null);
+  useEffect(() => () => previewRef.current?.pause(), []);
+  const list = (sounds || []).filter((sound) => sound.path && (!query.trim() || String(sound.name || "").toLowerCase().includes(query.trim().toLowerCase()))).slice(0, 80);
+  const preview = (sound) => {
+    previewRef.current?.pause();
+    const audio = new Audio("file:///" + String(sound.path).replace(/\\/g, "/"));
+    audio.volume = 0.6;
+    previewRef.current = audio;
+    audio.play().catch(() => {});
+  };
+  const send = async (sound) => {
+    setSending(sound.id);
+    try {
+      previewRef.current?.pause();
+      await sendSound(sound);
+      onClose();
+    } catch (error) {
+      setToast?.(error.message);
+    } finally {
+      setSending("");
+    }
+  };
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent rmModal rmSoundPicker" onClick={(e) => e.stopPropagation()}>
+        <div className="rmModalHead"><MusicNotes size={18} weight="fill" /> <b>Mandar um som no chat</b></div>
+        <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Até 6 MB por som.</p>
+        <label className="ssSearch rmSoundSearch">
+          <MagnifyingGlass size={14} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procurar no seu soundboard" autoFocus />
+        </label>
+        <div className="rmSoundList">
+          {list.length === 0 && <p className="ssMuted small">Nenhum som encontrado.</p>}
+          {list.map((sound) => (
+            <div key={sound.id} className="rmSoundRow">
+              <button className="ssIconBtn" onClick={() => preview(sound)} aria-label="Ouvir"><Play size={13} weight="fill" /></button>
+              <span>{sound.name}</span>
+              <button className="btn btn-primary ssSmallBtn" disabled={Boolean(sending)} onClick={() => send(sound)}>
+                {sending === sound.id ? "Enviando..." : <><PaperPlaneRight size={13} weight="fill" /> Mandar</>}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="rmModalActions"><button className="btn btn-ghost ssSmallBtn" onClick={onClose}>Fechar</button></div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
   const [text, setText] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [soundPicker, setSoundPicker] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [sending, setSending] = useState(false);
   const listRef = useRef(null);
+  const fileRef = useRef(null);
   useEffect(() => {
     setChatVisible(true);
     return () => setChatVisible(false);
@@ -566,39 +732,136 @@ function ChatPanel({ share }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [share.chat.length]);
   const membersById = useMemo(() => new Map(share.members.map((member) => [member.id, member])), [share.members]);
+
+  const sendImages = async (files) => {
+    const images = [...(files || [])].filter((file) => file.type?.startsWith("image/")).slice(0, 4);
+    if (!images.length) return;
+    setSending(true);
+    try {
+      for (const file of images) await sendImage(file);
+    } catch (error) {
+      setToast?.(error.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onPaste = (event) => {
+    const files = [...(event.clipboardData?.files || [])];
+    if (files.some((file) => file.type?.startsWith("image/"))) {
+      event.preventDefault();
+      sendImages(files);
+    }
+  };
+
   return (
-    <aside className="rmChat">
+    <aside
+      className={`rmChat ${dragging ? "dragging" : ""}`}
+      onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); sendImages(e.dataTransfer.files); }}
+    >
       <div className="rmColHead"><ChatsCircle size={15} weight="fill" /> Chat da sala</div>
       <div className="rmChatList" ref={listRef}>
-        {share.chat.length === 0 && <p className="ssMuted small rmChatEmpty">Ninguém falou nada ainda.</p>}
-        {share.chat.map((message) => message.system ? (
-          <div key={message.id} className="rmChatSystem">{message.text}</div>
-        ) : (
-          <div key={message.id} className={`rmChatMsg ${message.from === share.me ? "mine" : ""}`}>
-            <Avatar name={message.name} seed={membersById.get(message.from)?.clientId || message.name} size={26} />
-            <div>
-              <span className="rmChatMeta"><b>{message.name}</b> <time>{new Date(message.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time></span>
-              <p>{message.text}</p>
+        {share.chat.length === 0 && <p className="ssMuted small rmChatEmpty">Ninguém falou nada ainda. Mande uma mensagem, uma imagem ou um som!</p>}
+        {share.chat.map((message) => {
+          if (message.system) return <div key={message.id} className="rmChatSystem">{message.text}</div>;
+          const author = membersById.get(message.from);
+          const mine = message.from === share.me;
+          return (
+            <div key={message.id} className={`rmChatMsg ${mine ? "mine" : ""}`}>
+              <button className="rmChatAvatar" onClick={() => author && onOpenProfile(author)} disabled={!author} aria-label={`Perfil de ${message.name}`}>
+                <Avatar name={message.name} seed={author?.clientId || message.name} profile={author?.profile} size={28} />
+              </button>
+              <div className="rmChatContent">
+                <span className="rmChatMeta"><b>{message.name}</b> <time>{new Date(message.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time></span>
+                {message.text && <p>{message.text}</p>}
+                {message.attachment?.kind === "image" && <ImageAttachment attachment={message.attachment} onOpen={setLightbox} />}
+                {message.attachment?.kind === "sound" && <SoundAttachment attachment={message.attachment} mine={mine} setToast={setToast} call={call} />}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {dragging && <div className="rmDropHint"><ImageSquare size={30} /> Solte a imagem para mandar</div>}
       <form className="rmChatInput" onSubmit={(e) => { e.preventDefault(); sendChat(text); setText(""); }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={`Conversar na ${share.room?.name || "sala"}`} maxLength={500} />
+        <div className="rmAttachWrap">
+          <button type="button" className="ssIconBtn" onClick={() => setMenu((value) => !value)} aria-label="Anexar" title="Mandar imagem ou som" disabled={sending}>
+            {sending ? <span className="ssSpinner tiny" /> : <PlusCircle size={19} weight="fill" />}
+          </button>
+          {menu && (
+            <div className="rmAttachMenu" onMouseLeave={() => setMenu(false)}>
+              <button type="button" onClick={() => { setMenu(false); fileRef.current?.click(); }}><ImageSquare size={16} /> Imagem</button>
+              <button type="button" onClick={() => { setMenu(false); setSoundPicker(true); }}><MusicNotes size={16} /> Som do soundboard</button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { sendImages(e.target.files); e.target.value = ""; }} />
+        </div>
+        <input value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} placeholder={`Conversar na ${share.room?.name || "sala"}`} maxLength={500} />
         <button type="submit" className="ssIconBtn" disabled={!text.trim()} aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
       </form>
+      {soundPicker && <SoundPicker sounds={sounds} onClose={() => setSoundPicker(false)} setToast={setToast} />}
+      {lightbox && <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} setToast={setToast} />}
     </aside>
   );
 }
 
-function RoomView({ share, setToast }) {
+function MemberProfileModal({ member, share, onClose }) {
+  const isMe = member.id === share.me;
+  const watching = Boolean(share.streams[member.id]);
+  const profile = { ...(member.profile || {}), name: member.name };
+  const badges = (
+    <>
+      {member.isHost && <span className="pfBadge gold"><Crown size={12} weight="fill" /> Host</span>}
+      {member.live && <span className="rmLivePill"><span className="ssDot" /> AO VIVO</span>}
+      {isMe && <span className="pfBadge">você</span>}
+    </>
+  );
+  const actions = (
+    <>
+      {member.live && !isMe && (
+        <button className="btn btn-primary ssSmallBtn" onClick={() => { if (watching) unwatch(member.id); else watch(member.id); onClose(); }}>
+          {watching ? <><EyeSlash size={14} /> Parar de assistir</> : <><Eye size={14} /> Assistir a tela</>}
+        </button>
+      )}
+      {share.room?.isHost && !isMe && (
+        <button className="btn btn-ghost ssSmallBtn danger" onClick={() => { kickMember(member.id); onClose(); }}><X size={14} /> Tirar da sala</button>
+      )}
+    </>
+  );
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent pfModal" onClick={(e) => e.stopPropagation()}>
+        <ProfileCard profile={profile} badges={badges} actions={actions} onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
+function Reactions({ reactions }) {
+  return (
+    <div className="rmReactions" aria-hidden="true">
+      {reactions.map((reaction) => (
+        <span key={reaction.id} className="rmReaction" style={{ left: `${reaction.x}%` }}>
+          <span className="rmReactionEmoji">{reaction.emoji}</span>
+          {reaction.name && <small>{reaction.name}</small>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function RoomView({ share, setToast, sounds, call }) {
   const [picker, setPicker] = useState(false);
+  const [profileOf, setProfileOf] = useState(null);
+  const [entryOn, setEntryOn] = useState(readEntrySoundsEnabled);
   const room = share.room;
   const meMember = share.members.find((member) => member.id === share.me);
   const hostMember = share.members.find((member) => member.isHost);
   const inviteIp = hostMember?.address || room.host;
   const live = share.members.filter((member) => member.live);
   const idle = share.members.filter((member) => !member.live);
+  const profileMember = profileOf ? share.members.find((member) => member.id === profileOf) : null;
 
   useEffect(() => {
     // Na sala a descoberta continua ligada: se dois PCs abriram a mesma sala ao mesmo tempo, elas se juntam sozinhas.
@@ -607,6 +870,12 @@ function RoomView({ share, setToast }) {
   }, []);
 
   const toggleWatch = (id) => (share.streams[id] ? unwatch(id) : watch(id));
+  const toggleEntry = () => {
+    const next = !entryOn;
+    setEntryOn(next);
+    setEntrySoundsEnabled(next);
+    setToast?.(next ? "Sons de entrada ligados." : "Sons de entrada desligados.");
+  };
 
   return (
     <div className="rmRoom">
@@ -617,6 +886,9 @@ function RoomView({ share, setToast }) {
           {hostMember && <span className="rmHostTag"><Crown size={12} weight="fill" /> {hostMember.id === share.me ? "Você é o host" : `Host: ${hostMember.name}`}</span>}
           {share.reconnecting && <span className="rmReconnecting"><span className="ssSpinner tiny" /> Reconectando...</span>}
         </div>
+        <button className={`rmTopIcon ${entryOn ? "on" : ""}`} onClick={toggleEntry} title={entryOn ? "Sons de entrada ligados (clique para desligar)" : "Sons de entrada desligados (clique para ligar)"} aria-label="Sons de entrada">
+          {entryOn ? <BellRinging size={17} weight="fill" /> : <BellSlash size={17} />}
+        </button>
         {inviteIp && inviteIp !== "127.0.0.1" && (
           <button className="rmInvite" onClick={() => copy(inviteIp, setToast)} title="Copiar o IP para quem não vê a sala sozinho">
             <Copy size={13} /> {inviteIp}
@@ -631,18 +903,21 @@ function RoomView({ share, setToast }) {
             <>
               <div className="rmColHead">Ao vivo — {live.length}</div>
               {live.map((member) => (
-                <MemberRow key={member.id} member={member} me={share.me} isHostView={room.isHost} watching={Boolean(share.streams[member.id])} onWatch={toggleWatch} />
+                <MemberRow key={member.id} member={member} me={share.me} isHostView={room.isHost} watching={Boolean(share.streams[member.id])} onWatch={toggleWatch} onOpen={() => setProfileOf(member.id)} />
               ))}
             </>
           )}
           <div className="rmColHead"><Users size={13} /> Na sala — {idle.length}</div>
           {idle.map((member) => (
-            <MemberRow key={member.id} member={member} me={share.me} isHostView={room.isHost} watching={false} onWatch={toggleWatch} />
+            <MemberRow key={member.id} member={member} me={share.me} isHostView={room.isHost} watching={false} onWatch={toggleWatch} onOpen={() => setProfileOf(member.id)} />
           ))}
         </aside>
 
         <div className="rmCenter">
-          <Stage share={share} setToast={setToast} onShare={() => setPicker(true)} />
+          <div className="rmStageWrap">
+            <Stage share={share} setToast={setToast} onShare={() => setPicker(true)} />
+            <Reactions reactions={share.reactions || []} />
+          </div>
           <div className="rmControls">
             {share.share ? (
               <>
@@ -651,27 +926,42 @@ function RoomView({ share, setToast }) {
                   <b>{share.share.sourceName}</b>
                   <small>{SCREEN_QUALITIES[share.share.quality]?.label} · {share.watchers.length} assistindo{share.share.hasAudio ? " · com som" : ""}</small>
                 </span>
-                <button className="btn btn-ghost ssSmallBtn" onClick={() => setPicker(true)}><ArrowsLeftRight size={15} /> Trocar</button>
-                <button className="btn ssStopBtn" onClick={() => stopShare()}><StopCircle size={16} weight="fill" /> Parar de compartilhar</button>
               </>
             ) : (
+              <span className="rmLiveInfo">
+                <button className="rmMeChip" onClick={() => meMember && setProfileOf(meMember.id)} title="Ver o meu perfil na sala">
+                  <Avatar name={meMember?.name || "Você"} seed={meMember?.clientId} profile={meMember?.profile} size={28} />
+                  <span><b>{meMember?.name || "Você"}</b><small>{share.members.length} {share.members.length === 1 ? "pessoa" : "pessoas"} na sala</small></span>
+                </button>
+              </span>
+            )}
+            <div className="rmReactBar" role="group" aria-label="Reagir">
+              {REACTIONS.map((emoji) => (
+                <button key={emoji} onClick={() => react(emoji)} title="Reagir para a sala">{emoji}</button>
+              ))}
+            </div>
+            {share.share ? (
               <>
-                <span className="rmLiveInfo"><b>{meMember?.name || "Você"}</b><small>{share.members.length} {share.members.length === 1 ? "pessoa" : "pessoas"} na sala</small></span>
-                <button className="btn btn-primary rmShareBtn" onClick={() => setPicker(true)}><Screencast size={18} weight="fill" /> Compartilhar tela</button>
+                <button className="btn btn-ghost ssSmallBtn" onClick={() => setPicker(true)}><ArrowsLeftRight size={15} /> Trocar</button>
+                <button className="btn ssStopBtn" onClick={() => stopShare()}><StopCircle size={16} weight="fill" /> Parar</button>
               </>
+            ) : (
+              <button className="btn btn-primary rmShareBtn" onClick={() => setPicker(true)}><Screencast size={18} weight="fill" /> Compartilhar tela</button>
             )}
           </div>
         </div>
 
-        <ChatPanel share={share} />
+        <ChatPanel share={share} sounds={sounds} setToast={setToast} call={call} onOpenProfile={(member) => setProfileOf(member.id)} />
       </div>
 
       {picker && <SharePicker current={share.share} onClose={() => setPicker(false)} setToast={setToast} />}
+      {profileMember && <MemberProfileModal member={profileMember} share={share} onClose={() => setProfileOf(null)} />}
     </div>
   );
 }
 
-export function ScreenSharePage({ setToast }) {
+export function ScreenSharePage({ setToast, sounds = [], call }) {
+
   const share = useScreenShare();
   const available = isScreenShareAvailable();
 
@@ -684,7 +974,7 @@ export function ScreenSharePage({ setToast }) {
     );
   }
 
-  if (share.phase === "room" && share.room) return <RoomView share={share} setToast={setToast} />;
+  if (share.phase === "room" && share.room) return <RoomView share={share} setToast={setToast} sounds={sounds} call={call} />;
 
   return (
     <div className="ssPage">

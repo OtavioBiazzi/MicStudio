@@ -14,6 +14,7 @@ import {
   EffectSliderRow
 } from "../utils";
 import { useTtsVoices } from "../useTtsVoices";
+import { ProfileCard, ProfilePhoto, AvatarCropper, PROFILE_COLORS } from "./ProfileCard";
 
 const playbackModes = [
   { value: "restart", label: "Recomeçar do início", desc: "Tocar de novo recomeça o som do início." },
@@ -522,19 +523,11 @@ function resizeAvatar(file, size = 256) {
 }
 
 function ProfileAvatar({ image, position = 50, size = 72 }) {
-  return (
-    <div className="profile-avatar" style={{ width: size, height: size, borderRadius: "50%", background: "linear-gradient(135deg, var(--purple-dim), var(--purple))", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", flexShrink: 0 }}>
-      {image ? (
-        <img src={image} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${position}%` }} />
-      ) : (
-        <Waveform size={Math.round(size * 0.46)} weight="fill" color="#fff" />
-      )}
-    </div>
-  );
+  return <ProfilePhoto image={image} position={position} size={size} />;
 }
 
 // --- UserProfileModal ---
-export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profilePlan, profileImage, profileImagePosition, profileBio, profileReadme, stats }) {
+export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profileImage, profileImagePosition, profileBio, profileReadme, profileColor, stats }) {
   const items = stats ? [
     ["Sons", stats.sounds],
     ["Reproduções", stats.plays],
@@ -546,46 +539,22 @@ export function UserProfileModal({ onClose, onEdit, profileName, profileSub, pro
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
-        className="modalContent profileViewModal"
+        className="modalContent pfModal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 560, width: "92%", padding: 24 }}
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        <div className="profileViewHead">
-          <ProfileAvatar image={profileImage} position={profileImagePosition} size={84} />
-          <div className="profileViewWho">
-            <div className="profileViewName">
-              <h2>{profileName}</h2>
-              {profilePlan && <span className="pro-badge">{profilePlan}</span>}
-            </div>
-            {profileSub && <div className="profileViewSub">{profileSub}</div>}
-            {profileBio && <div className="profileViewBio">{profileBio}</div>}
-          </div>
-          <div className="profileViewButtons">
-            <button className="btn btn-ghost" onClick={onEdit}><Pencil size={13} /> Editar</button>
-            <button className="closeBtn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
-          </div>
-        </div>
-
-        {items.length > 0 && (
-          <div className="profileStats">
-            {items.map(([label, value]) => (
-              <div key={label} className="profileStat">
-                <strong>{Number(value || 0).toLocaleString("pt-BR")}</strong>
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
+        <ProfileCard
+          profile={{ name: profileName, status: profileSub, bio: profileBio, readme: profileReadme, avatar: profileImage, avatarPosition: profileImagePosition, color: profileColor }}
+          stats={items}
+          onClose={onClose}
+          actions={<button className="btn btn-ghost ssSmallBtn" onClick={onEdit}><Pencil size={13} /> Editar perfil</button>}
+        />
+        {!(profileReadme && profileReadme.trim()) && (
+          <p className="profileReadmeEmpty pfEmptyReadme">Você ainda não escreveu nada sobre você. Clique em Editar perfil para criar a sua página.</p>
         )}
-
-        <div className="readme-container profileReadme">
-          {profileReadme && profileReadme.trim()
-            ? renderMarkdown(profileReadme)
-            : <p className="profileReadmeEmpty">Você ainda não escreveu nada sobre você. Clique em Editar para criar a sua página.</p>}
-        </div>
       </motion.div>
     </div>
   );
@@ -593,11 +562,27 @@ export function UserProfileModal({ onClose, onEdit, profileName, profileSub, pro
 
 const README_TEMPLATE = "# Sobre mim\n\nEscreva aqui quem você é, o que faz com o VozLab Studio e quais são suas vozes favoritas.\n\n### Minhas vozes favoritas\n- **Voz 1**: para que serve\n- **Voz 2**: para que serve\n\n> Dica: use **negrito**, *itálico* e listas com `-`.";
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith("image/")) {
+      reject(new Error("Escolha um arquivo de imagem (PNG, JPG, WEBP ou GIF)."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Não consegui abrir essa imagem."));
+    reader.readAsDataURL(file);
+  });
+}
+
 // --- EditProfileModal ---
-export function EditProfileModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profilePlan, setProfilePlan, profileImage, setProfileImage, profileImagePosition, setProfileImagePosition, profileBio, setProfileBio, profileReadme, setProfileReadme }) {
+export function EditProfileModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profileImage, setProfileImage, profileImagePosition, setProfileImagePosition, profileBio, setProfileBio, profileReadme, setProfileReadme, profileColor, setProfileColor, profileEntrySound, setProfileEntrySound, sounds = [] }) {
   const fileInputRef = useRef(null);
+  const previewRef = useRef(null);
   const [readmeMode, setReadmeMode] = useState("edit");
   const [avatarError, setAvatarError] = useState("");
+  const [cropSrc, setCropSrc] = useState("");
+  const [entrySearch, setEntrySearch] = useState("");
 
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
@@ -605,12 +590,24 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
     if (!file) return;
     try {
       setAvatarError("");
-      setProfileImage(await resizeAvatar(file));
-      setProfileImagePosition("50");
+      setCropSrc(await readFileAsDataUrl(file));
     } catch (error) {
       setAvatarError(error.message);
     }
   };
+
+  const previewEntry = (sound) => {
+    try {
+      previewRef.current?.pause();
+      if (!sound?.path) return;
+      const audio = new Audio(filePathToUrl(sound.path));
+      audio.volume = 0.6;
+      previewRef.current = audio;
+      audio.play().catch(() => {});
+      setTimeout(() => { if (previewRef.current === audio) audio.pause(); }, 7000);
+    } catch {}
+  };
+  useEffect(() => () => previewRef.current?.pause(), []);
 
   const field = (label, value, setValue, { max, placeholder, hint } = {}) => (
     <div className="labField">
@@ -620,12 +617,14 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
     </div>
   );
 
+  const query = entrySearch.trim().toLowerCase();
+  const entryOptions = (sounds || []).filter((sound) => sound.path && (!query || String(sound.name || "").toLowerCase().includes(query))).slice(0, 40);
+
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
-        className="modalContent accountModal editProfileModal"
+        className="modalContent accountModal editProfileModal pfEditModal"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 520, width: "92%" }}
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
@@ -636,54 +635,92 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
           <button className="closeBtn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
         </div>
 
-        <div className="modalBody" style={{ display: "flex", flexDirection: "column", gap: 14, maxHeight: "64vh", overflowY: "auto", paddingRight: 4 }}>
-          <div className="profileEditPreview">
-            <ProfileAvatar image={profileImage} position={profileImagePosition} size={64} />
-            <div className="profileEditPreviewText">
-              <div className="profileViewName">
-                <strong>{profileName || "Seu nome"}</strong>
-                {profilePlan && <span className="pro-badge">{profilePlan}</span>}
-              </div>
-              <span>{profileSub || "Seu subtítulo"}</span>
-            </div>
-            <div className="profileEditPhotoButtons">
-              <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>Trocar foto</button>
-              {profileImage && <button className="btn btn-ghost danger" onClick={() => setProfileImage("")}>Remover</button>}
-            </div>
-            <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
-          </div>
-          {avatarError && <small style={{ color: "var(--danger)" }}>{avatarError}</small>}
-          {profileImage && (
+        <div className="pfEditGrid">
+          <div className="pfEditForm">
             <div className="labField">
-              <label>Posição da foto <span className="fieldCount">{profileImagePosition}%</span></label>
-              <input type="range" min="0" max="100" value={profileImagePosition} onChange={(e) => setProfileImagePosition(e.target.value)} />
+              <label>Foto</label>
+              <div className="pfPhotoRow">
+                <ProfilePhoto image={profileImage} position={profileImagePosition} name={profileName} color={profileColor} size={56} />
+                <button className="btn btn-ghost ssSmallBtn" onClick={() => fileInputRef.current?.click()}>Trocar foto</button>
+                {profileImage && <button className="btn btn-ghost ssSmallBtn" onClick={() => setCropSrc(profileImage)}>Ajustar</button>}
+                {profileImage && <button className="btn btn-ghost ssSmallBtn danger" onClick={() => setProfileImage("")}>Remover</button>}
+                <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
+              </div>
+              {avatarError && <small style={{ color: "var(--danger)" }}>{avatarError}</small>}
             </div>
-          )}
 
-          {field("Nome", profileName, setProfileName, { max: 24, placeholder: "Como você quer ser chamado" })}
-          {field("Subtítulo", profileSub, setProfileSub, { max: 40, placeholder: "Ex.: Streamer de fim de semana" })}
-          {field("Selo (deixe vazio para ocultar)", profilePlan, setProfilePlan, { max: 12, placeholder: "Ex.: PRO, VIP" })}
-          {field("Frase curta", profileBio, setProfileBio, { max: 90, placeholder: "Uma linha sobre você" })}
+            {field("Nome", profileName, setProfileName, { max: 24, placeholder: "Como você quer ser chamado" })}
+            {field("Status", profileSub, setProfileSub, { max: 60, placeholder: "Ex.: Jogando Valorant", hint: "Aparece embaixo do seu nome, aqui e nas salas." })}
+            {field("Frase curta", profileBio, setProfileBio, { max: 90, placeholder: "Uma linha sobre você" })}
 
-          <div className="labField">
-            <label>
-              Sobre mim (aceita Markdown)
-              <span className="readmeTabs">
-                <button className={readmeMode === "edit" ? "active" : ""} onClick={() => setReadmeMode("edit")}>Escrever</button>
-                <button className={readmeMode === "preview" ? "active" : ""} onClick={() => setReadmeMode("preview")}>Prévia</button>
-              </span>
-            </label>
-            {readmeMode === "edit" ? (
-              <>
-                <textarea rows={7} value={profileReadme} maxLength={4000} onChange={(e) => setProfileReadme(e.target.value)} placeholder="Escreva sobre você..." />
-                <div className="readmeActions">
-                  <button className="btn btn-ghost" onClick={() => setProfileReadme(README_TEMPLATE)}>Usar modelo</button>
-                  <span className="fieldCount">{String(profileReadme || "").length}/4000</span>
+            <div className="labField">
+              <label>Cor do cartão</label>
+              <div className="pfSwatches">
+                {Object.entries(PROFILE_COLORS).map(([key, tone]) => (
+                  <button
+                    key={key}
+                    className={`pfSwatch ${profileColor === key ? "on" : ""}`}
+                    style={{ background: `linear-gradient(135deg, ${tone.from}, ${tone.to})` }}
+                    onClick={() => setProfileColor(key)}
+                    title={tone.label}
+                    aria-label={tone.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="labField">
+              <label>Som de entrada nas salas <span className="fieldCount">{profileEntrySound ? "ligado" : "nenhum"}</span></label>
+              <small className="selectHint">Toca para os amigos quando você entra numa sala (até 7 segundos; sons pequenos, até 650 KB).</small>
+              {profileEntrySound ? (
+                <div className="pfEntryChosen">
+                  <MusicNotes size={16} weight="fill" />
+                  <b>{profileEntrySound.name}</b>
+                  <button className="ssIconBtn" onClick={() => previewEntry(profileEntrySound)} title="Ouvir" aria-label="Ouvir"><Play size={14} weight="fill" /></button>
+                  <button className="ssIconBtn" onClick={() => setProfileEntrySound(null)} title="Tirar" aria-label="Tirar"><X size={14} /></button>
                 </div>
-              </>
-            ) : (
-              <div className="readme-container profileReadme">{renderMarkdown(profileReadme || "")}</div>
-            )}
+              ) : (
+                <>
+                  <input type="text" value={entrySearch} onChange={(e) => setEntrySearch(e.target.value)} placeholder="Procurar um som do seu soundboard" />
+                  <div className="pfEntryList">
+                    {entryOptions.length === 0 && <small className="selectHint">Nenhum som encontrado.</small>}
+                    {entryOptions.map((sound) => (
+                      <div key={sound.id} className="pfEntryItem">
+                        <button className="ssIconBtn" onClick={() => previewEntry(sound)} title="Ouvir" aria-label="Ouvir"><Play size={13} weight="fill" /></button>
+                        <span>{sound.name}</span>
+                        <button className="btn btn-ghost ssSmallBtn" onClick={() => { previewRef.current?.pause(); setProfileEntrySound({ id: sound.id, name: sound.name, path: sound.path }); }}>Usar</button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="labField">
+              <label>
+                Sobre mim (aceita Markdown)
+                <span className="readmeTabs">
+                  <button className={readmeMode === "edit" ? "active" : ""} onClick={() => setReadmeMode("edit")}>Escrever</button>
+                  <button className={readmeMode === "preview" ? "active" : ""} onClick={() => setReadmeMode("preview")}>Prévia</button>
+                </span>
+              </label>
+              {readmeMode === "edit" ? (
+                <>
+                  <textarea rows={6} value={profileReadme} maxLength={4000} onChange={(e) => setProfileReadme(e.target.value)} placeholder="Escreva sobre você..." />
+                  <div className="readmeActions">
+                    <button className="btn btn-ghost" onClick={() => setProfileReadme(README_TEMPLATE)}>Usar modelo</button>
+                    <span className="fieldCount">{String(profileReadme || "").length}/4000</span>
+                  </div>
+                </>
+              ) : (
+                <div className="readme-container profileReadme">{renderMarkdown(profileReadme || "")}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="pfEditPreview">
+            <span className="ssLabel">Como os amigos te veem</span>
+            <ProfileCard profile={{ name: profileName, status: profileSub, bio: profileBio, readme: "", avatar: profileImage, avatarPosition: profileImagePosition, color: profileColor }} />
           </div>
         </div>
 
@@ -692,6 +729,13 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
           <button className="btn btn-primary" onClick={onClose} style={{ padding: "6px 18px", fontSize: 12 }}>Pronto</button>
         </div>
       </motion.div>
+      {cropSrc && (
+        <AvatarCropper
+          src={cropSrc}
+          onCancel={() => setCropSrc("")}
+          onApply={(dataUrl) => { setProfileImage(dataUrl); setProfileImagePosition("50"); setCropSrc(""); }}
+        />
+      )}
     </div>
   );
 }
@@ -1538,6 +1582,23 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.7.0": `### Versão 2.7.0
+
+**Perfis mais legais**
+- Saiu o "plano" (PRO / Plano Vitalício). No lugar entrou o **Status** (ex.: "Jogando Valorant"), que aparece com uma bolinha verde.
+- **Editor de foto igual ao do Discord:** ao trocar a foto, você arrasta para posicionar, dá zoom (barra ou rodinha do mouse) e gira. Tem Redefinir, Cancelar e Aplicar. Dá para reajustar a foto atual com o botão **Ajustar**.
+- **Cor do cartão:** escolha entre 8 cores para a faixa do seu perfil.
+- **Som de entrada:** escolha um som do seu soundboard para tocar quando você entrar numa sala (até 7 segundos).
+- Prévia ao vivo de "como os amigos te veem" enquanto você edita.
+
+**Salas ainda mais divertidas**
+- **Foto e perfil de todo mundo na sala:** a lista mostra a foto e o status de cada um. Clique em alguém para ver o cartão de perfil completo (cor, foto, status, frase e "Sobre mim").
+- **Mandar imagens no chat:** pelo botão +, arrastando para o chat ou colando com Ctrl+V. Clique na imagem para ver em tela cheia e salvar.
+- **Mandar sons no chat:** escolha um som do seu soundboard. Os amigos ouvem ali mesmo e clicam em **Salvar** para levar o som para o soundboard deles.
+- **Reações:** 🔥 😂 👏 😮 💀 ❤️ 🤡 👀 sobem pela tela para todo mundo ver.
+- **Sons de entrada** dos amigos tocam quando eles entram (dá para desligar no sininho no topo da sala).
+- Todos precisam estar na **2.7.0** para ver fotos, imagens e sons.
+`,
   "v2.6.0": `### Versão 2.6.0
 
 **Salas, no estilo do Discord**

@@ -1237,3 +1237,128 @@ input[type=range] { touch-action: none; }
 .modalContent.rmModal { width: min(420px, calc(100vw - 32px)); max-width: 420px; }
 .rmPicker .ssSources { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .rmPickerOptions .ssSubLabel { display: block; }
+
+/* ===== Perfil (cartao estilo Discord) ===== */
+.pfPhoto { position: relative; display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; color: #fff; font-weight: 800; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18); }
+.pfPhoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pfPhoto.live { overflow: visible; box-shadow: 0 0 0 2px var(--bg-card, #111), 0 0 0 4px #ff4d4f; }
+.pfPhoto.live img { border-radius: 50%; }
+.pfModal { width: min(440px, calc(100vw - 32px)); max-width: 440px; padding: 0; overflow: hidden; max-height: calc(100vh - 48px); overflow-y: auto; }
+.pfCard { position: relative; display: flex; flex-direction: column; background: var(--bg-card, #15151d); border-radius: 18px; overflow: hidden; }
+.pfBanner { height: 96px; position: relative; }
+.pfClose { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; border: none; background: rgba(0, 0, 0, .35); color: #fff; cursor: pointer; }
+.pfClose:hover { background: rgba(0, 0, 0, .55); }
+.pfHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 0 16px; margin-top: -46px; }
+.pfBig { box-shadow: 0 0 0 6px var(--bg-card, #15151d); }
+.pfActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding-bottom: 6px; }
+.pfBody { display: flex; flex-direction: column; gap: 8px; padding: 12px 18px 18px; }
+.pfName { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pfName h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+.pfBadge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, .08); color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.pfBadge.gold { background: rgba(255, 201, 60, .14); color: #ffd25c; }
+.pfStatus { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 5px 10px; border-radius: 10px; background: rgba(255, 255, 255, .05); font-size: 12.5px; color: var(--text); }
+.pfStatusDot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 0 3px rgba(61, 220, 132, .18); }
+.pfBio { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary, var(--text-muted)); }
+.pfStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+.pfStat { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .04); }
+.pfStat strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pfStat span { font-size: 11px; color: var(--text-muted); }
+.pfSection { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pfSectionTitle { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.pfReadme { max-height: 260px; overflow-y: auto; font-size: 13px; }
+.pfEmptyReadme { margin: 0; padding: 0 18px 18px; }
+
+.pfEditModal { width: min(860px, calc(100vw - 32px)) !important; max-width: 860px !important; }
+.pfEditGrid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; max-height: 66vh; overflow-y: auto; padding-right: 4px; }
+@media (max-width: 820px) { .pfEditGrid { grid-template-columns: 1fr; } .pfEditPreview { display: none; } }
+.pfEditForm { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pfEditPreview { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 8px; }
+.pfEditPreview .pfCard { border: 1px solid var(--border); }
+.pfPhotoRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pfSwatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.pfSwatch { width: 34px; height: 34px; border-radius: 10px; border: 2px solid transparent; cursor: pointer; transition: transform .15s; }
+.pfSwatch:hover { transform: scale(1.08); }
+.pfSwatch.on { border-color: #fff; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .4); }
+.pfEntryChosen { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(var(--accent-rgb), .12); border: 1px solid rgba(var(--accent-rgb), .35); }
+.pfEntryChosen > svg { color: var(--purple-light, var(--purple)); }
+.pfEntryChosen b { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pfEntryList { display: flex; flex-direction: column; gap: 4px; max-height: 170px; overflow-y: auto; margin-top: 6px; }
+.pfEntryItem { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; }
+.pfEntryItem:hover { background: rgba(255, 255, 255, .04); }
+.pfEntryItem span { flex: 1; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* editor da foto */
+.pfCropOverlay { z-index: 1200; }
+.modalContent.pfCrop { width: min(520px, calc(100vw - 32px)); max-width: 520px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.pfCropHead { display: flex; align-items: center; justify-content: space-between; }
+.pfCropHead h3 { margin: 0; font-size: 19px; font-weight: 800; }
+.pfCropStage { position: relative; height: 340px; border-radius: 14px; background: #0b0b10; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.pfCropStage:active { cursor: grabbing; }
+.pfCropImg { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: center center; pointer-events: none; }
+.pfCropCircle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .72); pointer-events: none; }
+.pfCropTools { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); }
+.pfCropTools input[type=range] { width: 200px; height: 18px; appearance: none; background: transparent; cursor: pointer; }
+.pfCropTools input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--purple) var(--fill, 0%), rgba(255, 255, 255, .15) var(--fill, 0%)); }
+.pfCropTools input[type=range]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+.pfRotate { margin-left: 10px; }
+.pfCropHint { margin: 0; text-align: center; font-size: 12px; color: var(--text-muted); }
+.pfCropFoot { display: flex; align-items: center; gap: 8px; }
+
+/* ===== Sala: perfis, anexos e reacoes ===== */
+.rmMemberOpen { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0; border: none; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.rmMemberOpen:hover .rmMemberText b { text-decoration: underline; text-decoration-color: rgba(255, 255, 255, .3); }
+.rmTopIcon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-muted); cursor: pointer; }
+.rmTopIcon.on { color: var(--purple-light, var(--purple)); border-color: rgba(var(--accent-rgb), .45); }
+.rmMeChip { display: flex; align-items: center; gap: 10px; padding: 0; border: none; background: none; color: inherit; cursor: pointer; text-align: left; min-width: 0; }
+.rmMeChip span { display: flex; flex-direction: column; min-width: 0; }
+.rmMeChip b { font-size: 13px; }
+.rmMeChip small { font-size: 11.5px; color: var(--text-muted); }
+.rmStageWrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.rmReactBar { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--bg-input); border: 1px solid var(--border); }
+.rmReactBar button { width: 30px; height: 30px; border: none; border-radius: 8px; background: transparent; font-size: 17px; line-height: 1; cursor: pointer; transition: transform .12s, background .12s; }
+.rmReactBar button:hover { background: rgba(255, 255, 255, .08); transform: translateY(-2px) scale(1.15); }
+.rmReactBar button:active { transform: scale(.9); }
+@media (max-width: 1320px) { .rmReactBar button:nth-child(n+6) { display: none; } }
+.rmReactions { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+.rmReaction { position: absolute; bottom: 10px; display: flex; flex-direction: column; align-items: center; animation: rmFloat 2.8s ease-out forwards; }
+.rmReactionEmoji { font-size: 38px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .5)); }
+.rmReaction small { margin-top: 2px; padding: 1px 7px; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+@keyframes rmFloat {
+  0% { transform: translateY(0) scale(.6); opacity: 0; }
+  12% { transform: translateY(-30px) scale(1.15); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translateY(-300px) scale(1); opacity: 0; }
+}
+
+.rmChat { position: relative; }
+.rmChat.dragging { border-color: rgba(var(--accent-rgb), .8); }
+.rmDropHint { position: absolute; inset: 40px 8px 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 2px dashed rgba(var(--accent-rgb), .7); background: rgba(var(--accent-rgb), .12); color: var(--text); font-weight: 700; font-size: 13px; pointer-events: none; }
+.rmChatAvatar { padding: 0; border: none; background: none; cursor: pointer; align-self: flex-start; }
+.rmChatAvatar:disabled { cursor: default; }
+.rmChatContent { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.rmImage { display: block; width: 100%; max-height: 260px; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #000; cursor: zoom-in; }
+.rmImage img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rmAttach.expired { font-size: 11.5px; color: var(--text-muted); font-style: italic; }
+.rmSound { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(var(--accent-rgb), .1); border: 1px solid rgba(var(--accent-rgb), .3); }
+.rmSoundPlay { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--purple), var(--purple-dim)); color: #fff; cursor: pointer; }
+.rmSoundPlay.on { background: #ff4d4f; }
+.rmSoundInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rmSoundInfo b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rmSoundInfo small { font-size: 10.5px; color: var(--text-muted); }
+.rmSoundBar { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.rmSoundBar span { display: block; height: 100%; background: var(--purple-light, var(--purple)); transition: width .2s linear; }
+.rmSoundSave { flex: none; height: 30px; }
+.rmAttachWrap { position: relative; }
+.rmAttachMenu { position: absolute; bottom: 42px; left: 0; z-index: 10; display: flex; flex-direction: column; min-width: 190px; padding: 6px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
+.rmAttachMenu button { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: none; border-radius: 8px; background: transparent; color: var(--text); font: 600 13px var(--font); cursor: pointer; text-align: left; }
+.rmAttachMenu button:hover { background: rgba(var(--accent-rgb), .14); }
+.rmLightbox { position: fixed; inset: 0; z-index: 1300; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 30px; background: rgba(0, 0, 0, .86); }
+.rmLightbox img { max-width: 100%; max-height: calc(100vh - 120px); border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.rmLightboxBar { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; }
+.modalContent.rmSoundPicker { width: min(480px, calc(100vw - 32px)); max-width: 480px; }
+.rmSoundSearch { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-muted); }
+.rmSoundSearch input { flex: 1; background: none; border: none; outline: none; color: var(--text); font: 13px var(--font); }
+.rmSoundList { display: flex; flex-direction: column; gap: 4px; max-height: 340px; overflow-y: auto; }
+.rmSoundRow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; }
+.rmSoundRow:hover { background: rgba(255, 255, 255, .04); }
+.rmSoundRow span { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

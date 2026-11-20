@@ -8,7 +8,8 @@ import {
   Flask,
   GearSix,
   UserSwitch,
-  Waveform
+  Waveform,
+  Screencast
 } from "@phosphor-icons/react";
 
 const sections = [
@@ -25,7 +26,8 @@ const sections = [
     label: "Biblioteca",
     pages: [
       { id: "online_library", label: "Explorar Sons", icon: Broadcast },
-      { id: "favoritos", label: "Favoritos", icon: Star }
+      { id: "favoritos", label: "Favoritos", icon: Star },
+      { id: "tela", label: "Compartilhar Tela", icon: Screencast }
     ]
   },
   {

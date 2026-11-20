@@ -53,5 +53,21 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     ipcRenderer.on("hotkey:trigger", listener);
     return () => ipcRenderer.removeListener("hotkey:trigger", listener);
   },
+  screen: {
+    sources: () => ipcRenderer.invoke("screen:sources"),
+    addresses: () => ipcRenderer.invoke("screen:addresses"),
+    hostStart: (options) => ipcRenderer.invoke("screen:host-start", options),
+    hostStop: () => ipcRenderer.invoke("screen:host-stop"),
+    setBusy: (busy) => ipcRenderer.invoke("screen:host-busy", Boolean(busy)),
+    decide: (payload) => ipcRenderer.invoke("screen:decide", payload),
+    probe: (host) => ipcRenderer.invoke("screen:probe", host),
+    join: (payload) => ipcRenderer.invoke("screen:join", payload),
+    setActive: (active) => ipcRenderer.invoke("screen:set-active", Boolean(active)),
+    onJoinRequest: (callback) => {
+      const listener = (_event, request) => callback?.(request);
+      ipcRenderer.on("screen:join-request", listener);
+      return () => ipcRenderer.removeListener("screen:join-request", listener);
+    }
+  },
   audioPathsFromDrop: (files) => Array.from(files || []).map((file) => webUtils.getPathForFile(file)).filter(Boolean)
 });

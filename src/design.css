@@ -1062,3 +1062,38 @@ input[type=range] { touch-action: none; }
 .ssRequest .ssRequestText { flex: 1 1 calc(100% - 50px); }
 .ssRequest .btn { flex: 1; justify-content: center; }
 .ssWatchWrap:not(:fullscreen) .ssOverlayBar { display: none; }
+
+/* Compartilhar tela: fase 2/3 */
+.ssGuide { padding: 0; gap: 0; }
+.ssGuideHead { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 16px; background: none; border: none; color: var(--text); font: 700 13px var(--font); cursor: pointer; text-align: left; }
+.ssGuideHead > svg:first-child { color: var(--purple-light, var(--purple)); }
+.ssGuideHead span { flex: 1; }
+.ssGuideCaret { color: var(--text-muted); transition: transform .2s; }
+.ssGuide.open .ssGuideCaret { transform: rotate(180deg); }
+.ssGuide.open { padding-bottom: 14px; }
+.ssGuide.open > .btn { margin: 0 16px; align-self: flex-start; }
+.ssSteps { margin: 0 16px 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-muted); }
+.ssSteps b { color: var(--text); }
+.ssSteps li::marker { color: var(--purple-light, var(--purple)); font-weight: 800; }
+.ssLink.inline { padding: 0 4px; font-size: 12px; vertical-align: baseline; }
+.ssAudioBadge { position: absolute; top: 12px; left: 104px; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11px; font-weight: 700; }
+.ssCount { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ssViewers { display: flex; flex-direction: column; gap: 8px; }
+.ssIconBtn.starred { color: #ffc93c; }
+.ssIconBtn.starred:hover { color: #ffd76a; }
+.ssChange { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: var(--radius-md); border: 1px dashed rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .04); transition: opacity .2s; }
+.ssChange.busy { opacity: .6; pointer-events: none; }
+.ssScanning { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-muted); }
+.ssScanDot { width: 7px; height: 7px; border-radius: 50%; background: #7bd88f; animation: ssBlink 1.4s ease-in-out infinite; }
+@keyframes ssBlink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+.ssToggleRow.disabled { opacity: .55; pointer-events: none; }
+.ssVolume { display: flex; align-items: center; gap: 4px; }
+.ssVolume input[type=range] { width: 90px; height: 16px; appearance: none; background: transparent; cursor: pointer; }
+.ssVolume input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: linear-gradient(90deg, var(--purple) var(--fill, 80%), rgba(255, 255, 255, .18) var(--fill, 80%)); }
+.ssVolume input[type=range]::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: #fff; }
+.ssStageBar .ssSmallBtn { flex: none; }
+.dockShareBtn { position: relative; }
+.dockShareBtn.live { color: #ff6b6b; }
+.dockShareBtn.live::after { content: ""; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #ff5252; box-shadow: 0 0 0 2px var(--bg-card, #111); animation: ssBlink 1.4s ease-in-out infinite; }
+.ssVideoWrap { overflow: hidden; }
+.ssVideoWrap > .ssVideo { position: absolute; inset: 0; }

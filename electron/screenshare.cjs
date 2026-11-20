@@ -5,10 +5,15 @@
 // resposta volta no mesmo pedido. Depois disso o video vai direto de um PC para o outro (WebRTC, sem passar por aqui).
 
 const http = require("http");
+const dgram = require("dgram");
 const os = require("os");
 const crypto = require("crypto");
 
 const DEFAULT_PORT = 47920;
+const DISCOVERY_PORT = 47921;
+const BEACON_PREFIX = "VOZLAB-SALA1 ";
+const BEACON_INTERVAL_MS = 2000;
+const ROOM_EXPIRE_MS = 7000;
 const PATH_PREFIX = "/vozlab/tela";
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_PENDING = 3;
@@ -54,7 +59,7 @@ function readJson(req) {
   });
 }
 
-// room: { name, code, version, busy() } ; onJoinRequest({ id, name, offer, address }) -> Promise<{ accepted, answer?, reason? }>
+// room: { name, code, version, busy(), viewers(), maxViewers } ; onJoinRequest({ id, name, offer, address }) -> Promise<{ accepted, answer?, reason? }>
 function createRoomServer({ room, onJoinRequest, decisionTimeoutMs = DECISION_TIMEOUT_MS }) {
   const pending = new Map();
 
@@ -67,6 +72,8 @@ function createRoomServer({ room, onJoinRequest, decisionTimeoutMs = DECISION_TI
           name: room.name || "Sala",
           needsCode: Boolean(room.code),
           busy: Boolean(room.busy?.()),
+          viewers: Number(room.viewers?.() || 0),
+          maxViewers: Number(room.maxViewers || 1),
           version: room.version || ""
         });
         return;
@@ -78,7 +85,7 @@ function createRoomServer({ room, onJoinRequest, decisionTimeoutMs = DECISION_TI
           return;
         }
         if (room.busy?.()) {
-          sendJson(res, 409, { reason: "Já tem alguém assistindo essa sala." });
+          sendJson(res, 409, { reason: "A sala está cheia." });
           return;
         }
         if (pending.size >= MAX_PENDING) {
@@ -91,7 +98,7 @@ function createRoomServer({ room, onJoinRequest, decisionTimeoutMs = DECISION_TI
           return;
         }
         const id = crypto.randomUUID();
-        const request = { id, name: cleanText(body.name) || "Alguém", offer: { type: "offer", sdp: offer.sdp }, address: cleanText(req.socket.remoteAddress, 64).replace(/^::ffff:/, "") };
+        const request = { id, name: cleanText(body.name) || "Alguém", clientId: cleanText(body.clientId, 64), offer: { type: "offer", sdp: offer.sdp }, address: cleanText(req.socket.remoteAddress, 64).replace(/^::ffff:/, "") };
         let finished = false;
         const decision = new Promise((resolve) => {
           const timer = setTimeout(() => resolve({ accepted: false, reason: "Quem está transmitindo não respondeu a tempo." }), decisionTimeoutMs);
@@ -207,17 +214,24 @@ async function probeRoom(host, port = DEFAULT_PORT, timeoutMs = 2500) {
   try {
     const res = await request(String(host).trim(), port, "GET", "sala", null, timeoutMs);
     if (res.status !== 200 || res.body?.app !== "vozlab") return { online: false, reason: "Não é uma sala do VozLab." };
-    return { online: true, name: cleanText(res.body.name) || "Sala", needsCode: Boolean(res.body.needsCode), busy: Boolean(res.body.busy) };
+    return {
+      online: true,
+      name: cleanText(res.body.name) || "Sala",
+      needsCode: Boolean(res.body.needsCode),
+      busy: Boolean(res.body.busy),
+      viewers: Number(res.body.viewers || 0),
+      maxViewers: Number(res.body.maxViewers || 1)
+    };
   } catch (error) {
     return { online: false, reason: friendlyNetworkError(error) };
   }
 }
 
-async function joinRoom({ host, port = DEFAULT_PORT, name, code, offer }, timeoutMs = DECISION_TIMEOUT_MS + 15_000) {
+async function joinRoom({ host, port = DEFAULT_PORT, name, code, clientId, offer }, timeoutMs = DECISION_TIMEOUT_MS + 15_000) {
   if (!isValidHost(host)) throw new Error("IP inválido.");
   let res;
   try {
-    res = await request(String(host).trim(), port, "POST", "entrar", { name: cleanText(name), code: cleanText(code, 24), offer }, timeoutMs);
+    res = await request(String(host).trim(), port, "POST", "entrar", { name: cleanText(name), code: cleanText(code, 24), clientId: cleanText(clientId, 64), offer }, timeoutMs);
   } catch (error) {
     throw new Error(friendlyNetworkError(error));
   }
@@ -225,4 +239,119 @@ async function joinRoom({ host, port = DEFAULT_PORT, name, code, offer }, timeou
   throw new Error(res.body?.reason || "Não deu para entrar na sala.");
 }
 
-module.exports = { DEFAULT_PORT, createRoomServer, localAddresses, probeRoom, joinRoom, isValidHost, codesMatch };
+
+// ---------- Descoberta de salas na rede ----------
+// Quem transmite avisa a rede (broadcast UDP) a cada 2 s; quem esta na aba Assistir escuta e mostra as salas.
+// O Radmin VPN repassa broadcast como uma rede de casa, por isso a sala do amigo aparece sozinha.
+function ipToInt(ip) {
+  return ip.split(".").reduce((acc, part) => ((acc << 8) | (Number(part) & 255)) >>> 0, 0);
+}
+
+function intToIp(value) {
+  return [24, 16, 8, 0].map((shift) => (value >>> shift) & 255).join(".");
+}
+
+function broadcastAddresses(interfaces = os.networkInterfaces()) {
+  const list = new Set(["255.255.255.255"]);
+  for (const entries of Object.values(interfaces || {})) {
+    for (const entry of entries || []) {
+      if ((entry.family !== "IPv4" && entry.family !== 4) || entry.internal || !entry.netmask) continue;
+      const ip = ipToInt(entry.address);
+      const mask = ipToInt(entry.netmask);
+      list.add(intToIp((ip | (~mask >>> 0)) >>> 0));
+    }
+  }
+  return [...list];
+}
+
+function encodeBeacon(info) {
+  return Buffer.from(BEACON_PREFIX + JSON.stringify({
+    name: cleanText(info.name) || "Sala",
+    port: Number(info.port) || DEFAULT_PORT,
+    needsCode: Boolean(info.needsCode),
+    viewers: Number(info.viewers || 0),
+    maxViewers: Number(info.maxViewers || 1)
+  }));
+}
+
+function decodeBeacon(buffer) {
+  const text = buffer.toString("utf8");
+  if (!text.startsWith(BEACON_PREFIX) || text.length > 2048) return null;
+  try {
+    const data = JSON.parse(text.slice(BEACON_PREFIX.length));
+    return {
+      name: cleanText(data.name) || "Sala",
+      port: Number.isInteger(data.port) && data.port > 0 && data.port < 65536 ? data.port : DEFAULT_PORT,
+      needsCode: Boolean(data.needsCode),
+      viewers: Number(data.viewers) || 0,
+      maxViewers: Number(data.maxViewers) || 1
+    };
+  } catch {
+    return null;
+  }
+}
+
+// getInfo() -> { name, port, needsCode, viewers, maxViewers }
+function createBeacon(getInfo, { port = DISCOVERY_PORT, intervalMs = BEACON_INTERVAL_MS, targets = broadcastAddresses } = {}) {
+  const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+  let timer = null;
+  socket.on("error", () => {});
+  const send = () => {
+    const message = encodeBeacon(getInfo());
+    for (const address of targets()) socket.send(message, port, address, () => {});
+  };
+  socket.bind(0, () => {
+    try { socket.setBroadcast(true); } catch (_) {}
+    send();
+    timer = setInterval(send, intervalMs);
+  });
+  return {
+    sendNow: send,
+    stop() {
+      clearInterval(timer);
+      try { socket.close(); } catch (_) {}
+    }
+  };
+}
+
+// onRooms(list) e chamado quando a lista muda. ownAddresses: IPs desta maquina (a propria sala nao aparece).
+function createDiscovery(onRooms, { port = DISCOVERY_PORT, ownAddresses = () => localAddresses().map((item) => item.address), expireMs = ROOM_EXPIRE_MS } = {}) {
+  const rooms = new Map();
+  const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+  let lastSignature = "";
+  const publish = () => {
+    const now = Date.now();
+    for (const [host, room] of rooms) if (now - room.seenAt > expireMs) rooms.delete(host);
+    const list = [...rooms.values()].map(({ seenAt, ...room }) => room).sort((a, b) => a.name.localeCompare(b.name));
+    const signature = JSON.stringify(list);
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      onRooms(list);
+    }
+  };
+  socket.on("error", () => {});
+  socket.on("message", (buffer, rinfo) => {
+    const info = decodeBeacon(buffer);
+    if (!info) return;
+    const host = String(rinfo.address || "").replace(/^::ffff:/, "");
+    if (ownAddresses().includes(host)) return;
+    rooms.set(host, { host, ...info, seenAt: Date.now() });
+    publish();
+  });
+  let bound = false;
+  socket.bind(port, () => { bound = true; });
+  const timer = setInterval(publish, 1500);
+  return {
+    isBound: () => bound,
+    rooms: () => [...rooms.values()],
+    stop() {
+      clearInterval(timer);
+      try { socket.close(); } catch (_) {}
+    }
+  };
+}
+
+module.exports = {
+  DEFAULT_PORT, DISCOVERY_PORT, createRoomServer, localAddresses, probeRoom, joinRoom, isValidHost, codesMatch,
+  broadcastAddresses, encodeBeacon, decodeBeacon, createBeacon, createDiscovery
+};

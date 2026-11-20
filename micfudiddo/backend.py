@@ -121,6 +121,7 @@ DEFAULT_APP_SETTINGS = {
     "unlimitedTts": False,
     "ttsWidgetOpacity": 82,
     "shortcutFocusTtsWidget": "",
+    "shortcutToggleScreenShare": "",
     "keepTtsTextAfterSpeak": False,
     "ttsVolume": 100,
     "maxSoundboardStorage": 0,

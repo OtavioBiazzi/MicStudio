@@ -1541,13 +1541,18 @@ const LOCAL_CHANGELOGS = {
   "v2.5.0": `### Versão 2.5.0
 
 **Compartilhar tela (novo)**
-- Nova aba **Compartilhar Tela** na barra lateral, em Biblioteca. Transmita a tela ou uma janela para um amigo direto pelo Radmin VPN (ou Hamachi, ZeroTier, Tailscale e rede de casa), sem servidor e sem abrir outro app.
-- **Transmitir:** escolha a tela ou a janela pelas miniaturas e a qualidade (Leve 720p 30 fps, Normal 1080p 30 fps ou Fluida 1080p 60 fps para jogos). O app mostra o seu IP do Radmin com botão de copiar.
-- **Sala padrão:** a sua sala é sempre a mesma. O amigo cola o seu IP uma vez e depois ela aparece em **Salas dos amigos**, com o aviso "Transmitindo agora" e o botão Assistir.
-- Você sempre aceita ou recusa quem pede para entrar, mesmo estando em outra aba. Se quiser, ative **Pedir código** para que só entre quem souber o código.
-- **Assistir:** vídeo com tela cheia (botão ou clique duplo), FPS, resolução e atraso na barra de baixo.
+- Nova aba **Compartilhar Tela** na barra lateral (em Biblioteca) e um botão no dock. Transmita a tela ou uma janela para os amigos direto pelo Radmin VPN (também funciona com Hamachi, ZeroTier, Tailscale ou a rede de casa), sem servidor e sem abrir outro app.
+- **Até 4 amigos assistindo ao mesmo tempo**, cada um com resolução, FPS e atraso na lista.
+- **Salas aparecem sozinhas:** quem abre **Assistir** vê em "Na rede agora" as salas dos amigos que estão transmitindo, sem digitar IP. As salas em que você já entrou ficam em **Salas dos amigos**, com o aviso "Transmitindo agora".
+- **Qualidade:** Leve (720p 30 fps), Normal (1080p 30 fps) ou Fluida (1080p 60 fps, para jogos).
+- **Som do PC (opcional):** manda junto o som que toca no seu PC. Vem desligado, porque inclui as vozes do Discord e daria eco em call. Quem assiste tem controle de volume.
+- **Trocar sem derrubar:** troque a tela, a janela, a qualidade ou o som no meio da transmissão e ninguém cai.
+- **Quem entra:** você aceita ou recusa cada pedido, mesmo estando em outra aba (e recebe uma notificação do Windows se o app estiver minimizado). Clique na estrela de um amigo para ele entrar direto das próximas vezes. Se quiser, ative **Pedir código**. Você pode tirar alguém da sala a qualquer momento.
+- **Reconexão automática:** se a conexão de quem assiste cair, o app reconecta sozinho, sem você precisar aceitar de novo.
+- **Bandeja e atalho:** o ícone da bandeja mostra quantos estão assistindo e tem "Parar transmissão". Em Configurações › Atalhos dá para pôr um atalho que começa e para a transmissão com a última tela escolhida.
+- **Guia do Radmin** na própria aba, explicando como criar a rede com os amigos.
 - A transmissão continua se você trocar de aba ou minimizar. Enquanto você transmite ou assiste, o app não "dorme" na bandeja.
-- Nesta versão, uma pessoa assiste por vez e o som do PC ainda não vai junto.
+- Na primeira vez, o Windows pergunta sobre o firewall: marque também **Redes públicas** (a rede do Radmin costuma ser pública).
 `,
   "v2.4.1": `### Versão 2.4.1
 

@@ -256,7 +256,7 @@ export function ConfigPage({
       } else if (tab === "soundboard") {
         await save({ allowMultipleSounds: false, onlinePlaybackRoute: "both", maxSoundVolume: "1.0", onlinePreviewVolume: "0.25", clipEnabled: false, clipDuration: "30", clipSource: "both", maxSoundboardStorage: 0, importDestinationMode: "ask", importDestinationTabs: ["Todos"], rememberLastImportTabs: true, autoOrganizeBySource: false });
       } else if (tab === "atalhos") {
-        await save({ shortcutMuteMic: "", shortcutToggleBypass: "", shortcutToggleSoundboard: "", shortcutToggleVoiceChanger: "", shortcutRecordVoice: "", shortcutRecordPC: "", shortcutRecordCombo: "", shortcutCommandGlitch: "Ctrl+Alt+G", shortcutClip: "", shortcutFocusTtsWidget: "" });
+        await save({ shortcutMuteMic: "", shortcutToggleBypass: "", shortcutToggleSoundboard: "", shortcutToggleVoiceChanger: "", shortcutRecordVoice: "", shortcutRecordPC: "", shortcutRecordCombo: "", shortcutCommandGlitch: "Ctrl+Alt+G", shortcutClip: "", shortcutFocusTtsWidget: "", shortcutToggleScreenShare: "" });
       } else if (tab === "aparencia") {
         setAccentColor("purple");
         setCustomAccentColor(DEFAULT_CUSTOM_ACCENT);
@@ -599,6 +599,7 @@ export function ConfigPage({
               {hotkey("Ligar/desligar o retorno do soundboard", "shortcutToggleSoundboard", "O que você ouve no fone; não muda o que os outros ouvem.")}
               {hotkey("Disparar o glitch sob comando", "shortcutCommandGlitch")}
               {hotkey("Abrir o widget de texto para voz", "shortcutFocusTtsWidget")}
+              {hotkey("Começar/parar a transmissão de tela", "shortcutToggleScreenShare", "Usa a última tela e qualidade escolhidas em Compartilhar Tela.")}
             </Section>
 
             <Section icon={Record} title="Gravação" desc="Aperte uma vez para começar e outra para parar.">

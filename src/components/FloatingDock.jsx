@@ -16,8 +16,10 @@ import {
   CaretDown,
   StopCircle,
   MicrophoneStage,
-  Waveform
+  Waveform,
+  Screencast
 } from "@phosphor-icons/react";
+import { useScreenShare } from "../screenShare";
 
 const voiceImageModules = import.meta.glob("../../assets/voices/*.png", { eager: true, import: "default" });
 function getVoiceImage(id) {
@@ -307,6 +309,7 @@ export function FloatingDock({
               )}
             </div>
           )}
+          <DockShareButton setPage={setPage} />
           <button
             className="bbBtn icon-only dock-status-btn"
             onClick={() => setPage("config")}
@@ -501,5 +504,19 @@ export function FloatingDock({
         </div>
       )}
     </div>
+  );
+}
+
+// Atalho do dock para "Compartilhar tela"; fica vermelho piscando enquanto voce transmite ou assiste.
+function DockShareButton({ setPage }) {
+  const share = useScreenShare();
+  const live = share.mode !== "idle";
+  const title = share.mode === "hosting"
+    ? `Transmitindo${share.hosting?.viewers?.length ? ` para ${share.hosting.viewers.length}` : ""}`
+    : share.mode === "idle" ? "Compartilhar tela" : "Assistindo uma tela";
+  return (
+    <button className={`bbBtn icon-only dockShareBtn ${live ? "live" : ""}`} onClick={() => setPage("tela")} title={title} aria-label={title}>
+      <Screencast size={16} weight={live ? "fill" : "regular"} />
+    </button>
   );
 }

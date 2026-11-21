@@ -304,7 +304,7 @@ test("o perfil de cada um aparece na sala e muda na hora", async () => {
   try {
     const ana = await connect(port, { name: "Ana", clientId: "a", profile: { avatar: TINY_JPEG, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink", lixo: "x" } });
     const welcome = await ana.next("welcome");
-    assert.deepEqual(welcome.members[0].profile, { avatar: TINY_JPEG, avatarPosition: 50, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink" });
+    assert.deepEqual(welcome.members[0].profile, { avatar: TINY_JPEG, avatarPosition: 50, avatarCrop: null, banner: null, theme: null, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink" });
     const bruno = await connect(port, { name: "Bruno", clientId: "b", profile: { avatar: "javascript:alert(1)", color: "nao-existe" } });
     const seen = await bruno.next("welcome");
     const brunoProfile = seen.members.find((m) => m.name === "Bruno").profile;

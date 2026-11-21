@@ -43,6 +43,9 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --windowed --collect-all imageio_ffmpeg --collect-all yt_dlp --name MicFudiddoBackend --distpath backend-dist --workpath build/backend backend_run.py
 
+      - name: Build native audio helper
+        run: node build/build-audiotap.cjs
+
       - name: Package Electron App
         run: npx electron-builder --win
         env:

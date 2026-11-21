@@ -44,6 +44,7 @@ export function Sidebar({
   profileName,
   profileSub,
   profileColor,
+  profileAvatarCrop,
   profileImage,
   profileImagePosition,
   onOpenProfile,
@@ -103,7 +104,7 @@ export function Sidebar({
         <div className="sidebar-profile" onClick={onOpenProfile} style={{ cursor: "pointer" }}>
           <div className="profile-avatar" style={{ overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: profileGradient(profileColor) }}>
             {profileImage ? (
-              <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%` }} />
+              <img src={profileImage} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover", objectPosition: `center ${profileImagePosition}%`, ...(profileAvatarCrop ? { transform: `translate(${profileAvatarCrop.x * 100}%, ${profileAvatarCrop.y * 100}%) rotate(${profileAvatarCrop.rotation || 0}deg) scale(${profileAvatarCrop.zoom || 1})`, borderRadius: 0 } : {}) }} />
             ) : (
               <Waveform size={18} weight="fill" color="#fff" />
             )}

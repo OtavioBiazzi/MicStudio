@@ -20,7 +20,8 @@ const BEACON_INTERVAL_MS = 2000;
 const ROOM_EXPIRE_MS = 7000;
 const MAX_MESSAGE_BYTES = 9 * 1024 * 1024; // cabe uma imagem ou um som de ate ~6 MB
 const MAX_ATTACHMENT_CHARS = 8.5 * 1024 * 1024; // base64
-const MAX_AVATAR_CHARS = 200 * 1024;
+const MAX_AVATAR_CHARS = 1.4 * 1024 * 1024; // foto pode ser GIF animado (~1 MB)
+const MAX_BANNER_CHARS = 3.4 * 1024 * 1024; // faixa pode ser GIF (~2,5 MB)
 const MAX_ENTRY_SOUND_CHARS = 900 * 1024;
 const HISTORY_MEDIA_BUDGET = 40 * 1024 * 1024; // o historico do chat guarda no maximo isso em anexos
 const REACTIONS = ["🔥", "😂", "👏", "😮", "💀", "❤️", "🤡", "👀"];
@@ -106,12 +107,41 @@ function isDataUrl(value, prefixes, maxChars) {
 }
 
 // Perfil que cada um mostra na sala: so texto curto e uma foto pequena.
+const IMAGE_PREFIXES = ["data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,", "data:image/gif;base64,"];
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+// Ajuste de posicao (arrastar/zoom/girar) guardado para GIFs, que nao podem ser recortados sem perder a animacao.
+function cleanCrop(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    x: clampNumber(value.x, -1, 1, 0),
+    y: clampNumber(value.y, -1, 1, 0),
+    zoom: clampNumber(value.zoom, 1, 6, 1),
+    rotation: [0, 90, 180, 270].includes(Number(value.rotation)) ? Number(value.rotation) : 0
+  };
+}
+
+function cleanColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "";
+}
+
 function cleanProfile(value) {
   const profile = value && typeof value === "object" ? value : {};
-  const position = Number(profile.avatarPosition);
+  const banner = profile.banner && typeof profile.banner === "object" ? profile.banner : null;
+  const bannerImage = banner && isDataUrl(banner.data, IMAGE_PREFIXES, MAX_BANNER_CHARS) ? banner.data : "";
+  const theme = profile.theme && typeof profile.theme === "object" ? profile.theme : null;
+  const primary = cleanColor(theme?.primary);
+  const accent = cleanColor(theme?.accent);
   return {
-    avatar: isDataUrl(profile.avatar, ["data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,"], MAX_AVATAR_CHARS) ? profile.avatar : "",
-    avatarPosition: Number.isFinite(position) ? Math.min(100, Math.max(0, position)) : 50,
+    avatar: isDataUrl(profile.avatar, IMAGE_PREFIXES, MAX_AVATAR_CHARS) ? profile.avatar : "",
+    avatarPosition: clampNumber(profile.avatarPosition, 0, 100, 50),
+    avatarCrop: cleanCrop(profile.avatarCrop),
+    banner: bannerImage ? { data: bannerImage, crop: cleanCrop(banner.crop) } : null,
+    theme: primary && accent ? { primary, accent } : null,
     status: cleanText(profile.status, 60),
     bio: cleanText(profile.bio, 120),
     readme: String(profile.readme ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").slice(0, 4000),
@@ -139,6 +169,7 @@ function cleanAttachment(value) {
     width: Number(value.width) || 0,
     height: Number(value.height) || 0,
     duration: Number.isFinite(duration) ? Math.max(0, Math.min(3600, duration)) : 0,
+    voice: kind === "sound" && value.voice === true,
     size: Math.round(value.data.length * 0.75)
   };
 }
@@ -147,7 +178,7 @@ function cleanLive(value) {
   if (!value || typeof value !== "object") return null;
   return {
     title: cleanText(value.title, 60) || "Tela",
-    quality: cleanText(value.quality, 12),
+    quality: cleanText(value.quality, 24),
     audio: Boolean(value.audio)
   };
 }

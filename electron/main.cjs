@@ -612,7 +612,24 @@ function createWindow({ show = true, wake = false } = {}) {
       webSecurity: false
     }
   });
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    // Janela fixa de uma tela da sala (botao direito > Abrir em janela fixa): fica sempre por cima.
+    if (url === "about:blank" && String(frameName || "").startsWith("vozlab-popout")) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 960,
+          height: 560,
+          minWidth: 320,
+          minHeight: 180,
+          alwaysOnTop: true,
+          autoHideMenuBar: true,
+          backgroundColor: "#000000",
+          title: "VozLab - tela",
+          icon: getIconPath()
+        }
+      };
+    }
     shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -1158,15 +1175,23 @@ function refreshTrayForScreenShare() {
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
-ipcMain.handle("screen:sources", async () => {
-  const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false });
+// Primeiro a lista rapida (sem miniaturas, com icone do app); depois as miniaturas.
+ipcMain.handle("screen:sources", async (_event, options = {}) => {
+  const withThumbs = options.thumbnails !== false;
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    thumbnailSize: withThumbs ? { width: 400, height: 225 } : { width: 0, height: 0 },
+    fetchWindowIcons: !withThumbs
+  });
   return sources
     .filter((source) => source.name && !/^VozLab/i.test(source.name))
     .map((source) => ({
       id: source.id,
       name: source.name,
       isScreen: source.id.startsWith("screen:"),
-      thumbnail: source.thumbnail?.isEmpty() ? "" : source.thumbnail.toDataURL()
+      displayId: source.display_id || "",
+      thumbnail: withThumbs && source.thumbnail && !source.thumbnail.isEmpty() ? source.thumbnail.toDataURL() : "",
+      icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : ""
     }));
 });
 
@@ -1291,6 +1316,93 @@ ipcMain.handle("screen:save-image", async (_event, payload = {}) => {
   return result.filePath;
 });
 
+// ---------- Som do compartilhamento (ajudante nativo) ----------
+// O VozLabAudioTap captura o som de um app ou do PC inteiro, sempre sem o Discord e sem o VozLab (eco/voz vazando).
+let audioTap = null;
+
+function audioTapPath() {
+  return isDev ? path.join(ROOT, "native-dist", "VozLabAudioTap.exe") : path.join(process.resourcesPath, "native", "VozLabAudioTap.exe");
+}
+
+function stopAudioTap() {
+  const child = audioTap;
+  audioTap = null;
+  if (child && !child.killed) {
+    try { child.kill(); } catch (_) {}
+  }
+}
+
+ipcMain.handle("screen:audio-start", (_event, options = {}) => {
+  const fs = require("fs");
+  stopAudioTap();
+  const exe = audioTapPath();
+  if (!fs.existsSync(exe)) return { ok: false, reason: "O ajudante de som não foi encontrado. Reinstale o VozLab." };
+  const args = [];
+  if (options.mode === "app") {
+    const hwnd = String(options.sourceId || "").split(":")[1];
+    if (!/^\d+$/.test(hwnd || "")) return { ok: false, reason: "Essa janela não tem som separado." };
+    args.push("--app", hwnd);
+  } else {
+    args.push("--system");
+  }
+  args.push("--exclude-pid", String(process.pid));
+  if (backend?.pid) args.push("--exclude-pid", String(backend.pid));
+  let child;
+  try {
+    child = spawn(exe, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    return { ok: false, reason: "Não consegui abrir o ajudante de som." };
+  }
+  audioTap = child;
+  child.stdout.on("data", (chunk) => {
+    if (audioTap === child) sendToRenderer("screen:audio-data", chunk);
+  });
+  let pending = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (text) => {
+    pending += text;
+    let index;
+    while ((index = pending.indexOf("\n")) >= 0) {
+      const line = pending.slice(0, index).trim();
+      pending = pending.slice(index + 1);
+      if (!line) continue;
+      try { if (audioTap === child) sendToRenderer("screen:audio-event", JSON.parse(line)); } catch (_) {}
+    }
+  });
+  child.on("exit", (code) => {
+    if (audioTap === child) {
+      audioTap = null;
+      sendToRenderer("screen:audio-event", { type: "exit", code });
+    }
+  });
+  child.on("error", () => {
+    if (audioTap === child) {
+      audioTap = null;
+      sendToRenderer("screen:audio-event", { type: "error", message: "O ajudante de som parou." });
+    }
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("screen:audio-stop", () => stopAudioTap());
+
+// Foto e faixa do perfil (podem ser GIFs grandes): ficam em arquivo, nao no armazenamento do navegador.
+ipcMain.handle("profile:save-media", async (_event, payload = {}) => {
+  const fs = require("fs");
+  const kind = payload.kind === "banner" ? "banner" : "avatar";
+  const { ext, buffer } = decodeDataUrl(payload.data);
+  if (!/^\.(jpg|png|webp|gif)$/.test(ext)) throw new Error("Isso não é uma imagem.");
+  if (buffer.length > 8 * 1024 * 1024) throw new Error("Imagem grande demais (máximo 8 MB).");
+  const dir = path.join(app.getPath("userData"), "perfil");
+  await fs.promises.mkdir(dir, { recursive: true });
+  for (const name of await fs.promises.readdir(dir)) {
+    if (name.startsWith(`${kind}-`)) await fs.promises.unlink(path.join(dir, name)).catch(() => {});
+  }
+  const target = path.join(dir, `${kind}-${Date.now()}${ext}`);
+  await fs.promises.writeFile(target, buffer);
+  return target;
+});
+
 ipcMain.handle("screen:notify", (_event, body) => {
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) return;
   try {
@@ -1320,6 +1432,7 @@ app.on("window-all-closed", (event) => {
 });
 
 app.on("will-quit", () => {
+  stopAudioTap();
   closeScreenRoom();
   stopScreenDiscovery();
   stopSoundHotkeys();

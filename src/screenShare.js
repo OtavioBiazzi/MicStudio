@@ -10,18 +10,32 @@
 
 import { useSyncExternalStore } from "react";
 
-export const SCREEN_QUALITIES = {
-  leve: { id: "leve", label: "Leve", detail: "720p · 30 fps", width: 1280, height: 720, fps: 30, bitrate: 3_000_000, hint: "Pesa menos no jogo e na internet." },
-  normal: { id: "normal", label: "Normal", detail: "1080p · 30 fps", width: 1920, height: 1080, fps: 30, bitrate: 6_000_000, hint: "Bom para a maioria das coisas." },
-  fluida: { id: "fluida", label: "Fluida", detail: "1080p · 60 fps", width: 1920, height: 1080, fps: 60, bitrate: 10_000_000, hint: "Para jogos. Usa mais internet." }
+// Qualidade igual a do Discord: resolucao + quadros por segundo.
+export const RESOLUTIONS = [
+  { id: "720", label: "720p", width: 1280, height: 720, bitrate: 2_500_000 },
+  { id: "1080", label: "1080p", width: 1920, height: 1080, bitrate: 5_000_000 },
+  { id: "1440", label: "1440p", width: 2560, height: 1440, bitrate: 9_000_000 },
+  { id: "source", label: "Original", width: 3840, height: 2160, bitrate: 14_000_000 }
+];
+export const FRAME_RATES = [15, 30, 60];
+export const AUDIO_MODES = {
+  none: { id: "none", label: "Sem som" },
+  app: { id: "app", label: "Som do app" },
+  system: { id: "system", label: "Som do PC" }
 };
+
+export function streamPreset(resolution = "1080", fps = 30) {
+  const res = RESOLUTIONS.find((item) => item.id === resolution) || RESOLUTIONS[1];
+  const rate = FRAME_RATES.includes(Number(fps)) ? Number(fps) : 30;
+  const bitrate = Math.round(res.bitrate * Math.pow(rate / 30, 0.7));
+  return { ...res, resolution: res.id, fps: rate, bitrate, label: `${res.label} · ${rate} fps` };
+}
 
 export const DEFAULT_ROOM = { id: "padrao", name: "Sala da galera" };
 export const MAX_WATCHERS = 6;
 export const REACTIONS = ["🔥", "😂", "👏", "😮", "💀", "❤️", "🤡", "👀"];
 export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
-const MAX_ENTRY_SOUND_BYTES = 650 * 1024;
-const ENTRY_SOUNDS_KEY = "vozlab.screen.entrySounds";
+export const MAX_VOICE_SECONDS = 180;
 const PORT = 47920;
 const WS_PATH = "/vozlab/ws";
 const HOST_PREFS_KEY = "vozlab.screen.host";
@@ -42,7 +56,7 @@ const lobbyState = {
   members: [],
   chat: [],
   unread: 0,
-  share: null, // { stream, sourceId, sourceName, isScreen, quality, shareAudio, hasAudio }
+  share: null, // { stream, sourceId, sourceName, isScreen, resolution, fps, audioMode, hasAudio, audioSources, label }
   watchers: [], // ids de quem esta assistindo a minha tela
   streams: {}, // memberId -> { status, stream, stats, hasAudio }
   focus: "",
@@ -64,8 +78,8 @@ let removeRoomsListener = null;
 let discoveryUsers = 0;
 let lastStatusSignature = "";
 let chatVisible = false;
-let localProfile = { name: "", status: "", bio: "", readme: "", avatar: "", avatarPosition: 50, color: "violet", entrySound: null };
-let entrySoundCache = { path: "", data: null };
+let localProfile = { name: "", status: "", bio: "", readme: "", avatar: "", avatarPosition: 50, avatarCrop: null, banner: null, theme: null, color: "violet" };
+let preparedMedia = { avatarKey: "", avatar: "", bannerKey: "", banner: "" };
 
 // ---------- estado ----------
 function reportStatus() {
@@ -141,9 +155,11 @@ function profileName() {
 
 export function readHostPrefs() {
   const saved = readJson(HOST_PREFS_KEY, {});
+  const oldQuality = { leve: ["720", 30], normal: ["1080", 30], fluida: ["1080", 60] }[saved.quality];
   return {
-    quality: SCREEN_QUALITIES[saved.quality] ? saved.quality : "normal",
-    shareAudio: saved.shareAudio === true,
+    resolution: RESOLUTIONS.some((item) => item.id === saved.resolution) ? saved.resolution : oldQuality?.[0] || "1080",
+    fps: FRAME_RATES.includes(Number(saved.fps)) ? Number(saved.fps) : oldQuality?.[1] || 30,
+    audioMode: AUDIO_MODES[saved.audioMode] ? saved.audioMode : "system",
     lastSourceId: typeof saved.lastSourceId === "string" ? saved.lastSourceId : "",
     guideSeen: saved.guideSeen === true
   };
@@ -172,12 +188,12 @@ export function forgetRecentHost(host) {
 export function readVolume(key) {
   const all = readJson(VOLUMES_KEY, {});
   const value = Number(all?.[key]);
-  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.8;
+  return Number.isFinite(value) ? Math.min(10, Math.max(0, value)) : 1; // ate 1000%
 }
 
 export function saveVolume(key, value) {
   const all = readJson(VOLUMES_KEY, {});
-  writeJson(VOLUMES_KEY, { ...(all && typeof all === "object" ? all : {}), [key]: Math.min(1, Math.max(0, Number(value) || 0)) });
+  writeJson(VOLUMES_KEY, { ...(all && typeof all === "object" ? all : {}), [key]: Math.min(10, Math.max(0, Number(value) || 0)) });
 }
 
 // ---------- descoberta de salas ----------
@@ -204,8 +220,8 @@ export function probeRoom(host) {
   return api()?.probe?.(host) || Promise.resolve({ online: false, reason: "Indisponível." });
 }
 
-export async function listScreenSources() {
-  return (await api()?.sources?.()) || [];
+export async function listScreenSources(options = {}) {
+  return (await api()?.sources?.(options)) || [];
 }
 
 export async function listAddresses() {
@@ -262,7 +278,7 @@ function openSocket(host, port, password) {
     const who = session?.identity || { name: profileName(), clientId: clientId() };
     ws.onopen = () => ws.send(JSON.stringify({
       t: "hello", name: who.name, clientId: who.clientId, password: password || "",
-      profile: publicProfile(), entrySound: entrySoundCache.data
+      profile: publicProfile()
     }));
     ws.onmessage = (event) => {
       let message;
@@ -378,9 +394,6 @@ function handleMessage(message) {
     case "react":
       addReaction(message.from, message.emoji);
       return;
-    case "entry":
-      if (message.from !== state.me) playEntrySound(message.sound);
-      return;
     case "kicked":
       session = { ...session, intentional: true };
       leaveRoom(message.reason || "Você foi tirado da sala.");
@@ -493,7 +506,6 @@ export async function enterRoom({ roomId = DEFAULT_ROOM.id, name = DEFAULT_ROOM.
   }
   // Nome e id ficam fixos durante a sala: as reconexoes se apresentam do mesmo jeito.
   session = { roomId, name, password, host, port, intentional: false, identity: { name: profileName(), clientId: clientId() } };
-  await loadEntrySound();
   setState({ phase: "joining", joiningText: host ? "Conectando..." : "Procurando a sala na rede...", error: "" });
   startDiscovery();
   try {
@@ -575,8 +587,11 @@ export function clearScreenShareError() {
 // ---------- perfil ----------
 function publicProfile() {
   return {
-    avatar: localProfile.avatar,
+    avatar: preparedMedia.avatar,
     avatarPosition: localProfile.avatarPosition,
+    avatarCrop: localProfile.avatarCrop || null,
+    banner: preparedMedia.banner ? { data: preparedMedia.banner, crop: localProfile.banner?.crop || null } : null,
+    theme: localProfile.theme || null,
     status: localProfile.status,
     bio: localProfile.bio,
     readme: localProfile.readme,
@@ -594,10 +609,11 @@ async function fileToDataUrl(blob) {
 }
 
 function fileUrl(filePath) {
+  if (/^(file|data|blob|https?):/i.test(String(filePath))) return String(filePath);
   return "file:///" + String(filePath).replace(/\\/g, "/");
 }
 
-const AUDIO_TYPES = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", webm: "audio/webm", flac: "audio/flac", aac: "audio/aac", m4a: "audio/mp4" };
+const AUDIO_TYPES = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", webm: "audio/webm", flac: "audio/flac", aac: "audio/aac", m4a: "audio/mp4", opus: "audio/ogg" };
 
 async function readSoundFile(filePath, maxBytes) {
   const response = await fetch(fileUrl(filePath));
@@ -609,56 +625,51 @@ async function readSoundFile(filePath, maxBytes) {
   return fileToDataUrl(new Blob([blob], { type }));
 }
 
-async function loadEntrySound() {
-  const sound = localProfile.entrySound;
-  if (!sound?.path) {
-    entrySoundCache = { path: "", data: null };
-    return;
-  }
-  if (entrySoundCache.path === sound.path && entrySoundCache.data) return;
+// A foto e a faixa vao para os amigos como data URL. Imagens paradas grandes sao reduzidas; GIF vai inteiro se couber
+// (senao vai so o primeiro quadro). Isso tambem conserta fotos antigas gigantes que a sala recusava.
+async function prepareMedia(src, { maxSide, maxGifBytes, maxStaticBytes }) {
+  if (!src) return "";
   try {
-    entrySoundCache = { path: sound.path, data: { name: sound.name, data: await readSoundFile(sound.path, MAX_ENTRY_SOUND_BYTES) } };
+    const response = await fetch(fileUrl(src));
+    const blob = await response.blob();
+    const isGif = blob.type === "image/gif" || /\.gif($|\?)/i.test(src) || String(src).startsWith("data:image/gif");
+    if (isGif && blob.size <= maxGifBytes) return fileToDataUrl(new Blob([blob], { type: "image/gif" }));
+    if (!isGif && blob.size <= maxStaticBytes && /^image\/(jpeg|png|webp)$/.test(blob.type)) return fileToDataUrl(blob);
+    const url = URL.createObjectURL(blob);
+    try {
+      const image = await loadImage(url);
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.88);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   } catch {
-    entrySoundCache = { path: sound.path, data: null };
+    return "";
   }
 }
 
 // Chamado pelo app sempre que voce muda o perfil. Na sala, os outros veem na hora.
 export async function setLocalProfile(profile) {
-  const before = JSON.stringify({ ...publicProfile(), entry: localProfile.entrySound?.path || "" });
+  const before = JSON.stringify(publicProfile());
   localProfile = { ...localProfile, ...profile };
-  const entryChanged = (localProfile.entrySound?.path || "") !== entrySoundCache.path;
-  if (entryChanged) await loadEntrySound();
-  const after = JSON.stringify({ ...publicProfile(), entry: localProfile.entrySound?.path || "" });
-  if (before !== after && state.phase === "room") {
-    send({ t: "profile", profile: publicProfile(), ...(entryChanged ? { entrySound: entrySoundCache.data } : {}) });
+  const avatarKey = String(localProfile.avatar || "");
+  if (avatarKey !== preparedMedia.avatarKey) {
+    preparedMedia.avatarKey = avatarKey;
+    const prepared = await prepareMedia(avatarKey, { maxSide: 512, maxGifBytes: 1000 * 1024, maxStaticBytes: 300 * 1024 });
+    if (preparedMedia.avatarKey === avatarKey) preparedMedia.avatar = prepared;
   }
-}
-
-export function entrySoundTooBig() {
-  return Boolean(localProfile.entrySound?.path) && !entrySoundCache.data;
-}
-
-export function readEntrySoundsEnabled() {
-  return readJson(ENTRY_SOUNDS_KEY, true) !== false;
-}
-
-export function setEntrySoundsEnabled(enabled) {
-  writeJson(ENTRY_SOUNDS_KEY, Boolean(enabled));
-  setState({ entrySoundsVersion: (state.entrySoundsVersion || 0) + 1 });
-}
-
-let entryAudio = null;
-function playEntrySound(sound) {
-  if (!sound?.data || !readEntrySoundsEnabled()) return;
-  try {
-    entryAudio?.pause();
-    entryAudio = new Audio(sound.data);
-    entryAudio.volume = 0.6;
-    entryAudio.play().catch(() => {});
-    const current = entryAudio;
-    setTimeout(() => { if (entryAudio === current) current.pause(); }, 7000); // som de entrada nunca passa de 7 s
-  } catch {}
+  const bannerKey = String(localProfile.banner?.src || "");
+  if (bannerKey !== preparedMedia.bannerKey) {
+    preparedMedia.bannerKey = bannerKey;
+    const prepared = await prepareMedia(bannerKey, { maxSide: 1280, maxGifBytes: 2500 * 1024, maxStaticBytes: 600 * 1024 });
+    if (preparedMedia.bannerKey === bannerKey) preparedMedia.banner = prepared;
+  }
+  const after = JSON.stringify(publicProfile());
+  if (before !== after && state.phase === "room") send({ t: "profile", profile: publicProfile() });
 }
 
 // ---------- reacoes ----------
@@ -724,6 +735,36 @@ export async function sendSound(sound) {
   const data = await readSoundFile(sound.path, MAX_ATTACHMENT_BYTES);
   const duration = Number(sound.duration) || 0;
   send({ t: "chat", text: "", attachment: { kind: "sound", name: sound.name || "som", data, duration } });
+}
+
+function audioDuration(src) {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    audio.preload = "metadata";
+    const done = (value) => { audio.src = ""; resolve(value); };
+    audio.onloadedmetadata = () => {
+      if (Number.isFinite(audio.duration)) done(audio.duration);
+      else {
+        // webm gravado no navegador nao traz a duracao: pula para o fim para descobrir.
+        audio.currentTime = 1e7;
+        audio.ontimeupdate = () => { audio.ontimeupdate = null; done(audio.duration || 0); };
+      }
+    };
+    audio.onerror = () => done(0);
+    setTimeout(() => done(0), 4000);
+    audio.src = src;
+  });
+}
+
+// Audio gravado na hora (mensagem de voz) ou arquivo de audio do PC: ate 3 minutos.
+export async function sendAudioBlob(blob, { name = "audio", voice = false, duration = 0 } = {}) {
+  if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
+  if (!blob?.type?.startsWith("audio/") && !voice) throw new Error("Escolha um arquivo de áudio.");
+  if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error("Áudio grande demais (máximo 6 MB). Use MP3, OGG ou M4A.");
+  const data = await fileToDataUrl(blob.type ? blob : new Blob([blob], { type: "audio/webm" }));
+  const seconds = duration || (await audioDuration(data));
+  if (seconds > MAX_VOICE_SECONDS + 1) throw new Error("Áudio longo demais (máximo 3 minutos).");
+  send({ t: "chat", text: "", attachment: { kind: "sound", name, data, duration: seconds, voice } });
 }
 
 export async function saveSoundToDisk(attachment) {
@@ -881,7 +922,7 @@ async function answerWatcher(from, data) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     signal(from, { kind: "answer", sdp: pc.localDescription.sdp });
-    await applyEncoding(peer.videoSender, SCREEN_QUALITIES[share.quality]);
+    await applyEncoding(peer.videoSender, streamPreset(share.resolution, share.fps));
   } catch {
     closeOutgoing(from);
     return;
@@ -912,7 +953,7 @@ function closeAllPeers() {
   }
 }
 
-async function applyEncoding(sender, preset = SCREEN_QUALITIES.normal) {
+async function applyEncoding(sender, preset = streamPreset()) {
   if (!sender) return;
   try {
     const params = sender.getParameters();
@@ -924,41 +965,148 @@ async function applyEncoding(sender, preset = SCREEN_QUALITIES.normal) {
   } catch {}
 }
 
-async function captureSource(sourceId, preset, shareAudio) {
+async function captureVideo(sourceId, preset) {
   const video = {
     mandatory: {
       chromeMediaSource: "desktop",
       chromeMediaSourceId: sourceId,
       maxWidth: preset.width,
       maxHeight: preset.height,
-      maxFrameRate: preset.fps
+      maxFrameRate: preset.fps,
+      minFrameRate: Math.min(15, preset.fps)
     }
   };
-  let stream = null;
-  let audioFailed = false;
-  if (shareAudio) {
-    try {
-      // No Windows isto pega o som que sai no PC (o mesmo que voce ouve).
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { mandatory: { chromeMediaSource: "desktop" } }, video });
-    } catch {
-      audioFailed = true;
-    }
-  }
-  if (!stream) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
-    } catch {
-      throw new Error("Não consegui capturar essa tela. Escolha outra ou tente de novo.");
-    }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+  } catch {
+    throw new Error("Não consegui capturar essa tela. Escolha outra ou tente de novo.");
   }
   const track = stream.getVideoTracks()[0];
   if (track) track.contentHint = preset.fps >= 60 ? "motion" : "detail";
-  return { stream, audioFailed };
+  return stream;
+}
+
+// Recebe o PCM do VozLabAudioTap (processo principal) e vira uma faixa de audio para o WebRTC.
+const TAP_WORKLET = `
+class VozLabTap extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.size = 48000 * 2;
+    this.buf = new Float32Array(this.size);
+    this.r = 0; this.w = 0; this.n = 0; this.primed = false;
+    this.port.onmessage = (event) => {
+      const samples = new Int16Array(event.data);
+      for (let i = 0; i < samples.length; i++) {
+        this.buf[this.w] = samples[i] / 32768;
+        this.w = (this.w + 1) % this.size;
+        if (this.n < this.size) this.n++; else this.r = (this.r + 1) % this.size;
+      }
+      const tooMuch = 48000 * 2 * 0.25;
+      if (this.n > tooMuch) {
+        let drop = this.n - Math.round(48000 * 2 * 0.06);
+        drop -= drop % 2;
+        this.r = (this.r + drop) % this.size;
+        this.n -= drop;
+      }
+    };
+  }
+  process(_inputs, outputs) {
+    const left = outputs[0][0];
+    const right = outputs[0][1] || left;
+    if (!this.primed) {
+      if (this.n >= 48000 * 2 * 0.06) this.primed = true;
+      else { left.fill(0); right.fill(0); return true; }
+    }
+    for (let i = 0; i < left.length; i++) {
+      if (this.n >= 2) {
+        left[i] = this.buf[this.r]; this.r = (this.r + 1) % this.size;
+        right[i] = this.buf[this.r]; this.r = (this.r + 1) % this.size;
+        this.n -= 2;
+      } else {
+        left[i] = 0; right[i] = 0; this.primed = false;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor("vozlab-tap", VozLabTap);
+`;
+
+let tapSession = null;
+
+function stopTapAudio() {
+  const session = tapSession;
+  tapSession = null;
+  if (!session) return;
+  session.removeData?.();
+  session.removeEvent?.();
+  try { session.track?.stop(); } catch {}
+  try { session.ctx.close(); } catch {}
+  api()?.audioStop?.();
+}
+
+async function startTapAudio(mode, sourceId) {
+  stopTapAudio();
+  if (!api()?.audioStart) return { track: null, reason: "O som separado só funciona no app instalado." };
+  const ctx = new AudioContext({ sampleRate: 48000, latencyHint: "interactive" });
+  const moduleUrl = URL.createObjectURL(new Blob([TAP_WORKLET], { type: "application/javascript" }));
+  try {
+    await ctx.audioWorklet.addModule(moduleUrl);
+  } finally {
+    URL.revokeObjectURL(moduleUrl);
+  }
+  const node = new AudioWorkletNode(ctx, "vozlab-tap", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+  const dest = ctx.createMediaStreamDestination();
+  node.connect(dest);
+  const session = { ctx, node, track: dest.stream.getAudioTracks()[0], leftover: null };
+  let settle;
+  const outcome = new Promise((resolve) => { settle = resolve; });
+  session.removeData = api().onAudioData((chunk) => {
+    let bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+    if (session.leftover) {
+      const joined = new Uint8Array(session.leftover.length + bytes.length);
+      joined.set(session.leftover);
+      joined.set(bytes, session.leftover.length);
+      bytes = joined;
+      session.leftover = null;
+    }
+    const even = bytes.length - (bytes.length % 2);
+    if (even < bytes.length) session.leftover = bytes.slice(even);
+    if (!even) return;
+    const copy = bytes.slice(0, even).buffer;
+    node.port.postMessage(copy, [copy]);
+  });
+  session.removeEvent = api().onAudioEvent((message) => {
+    if (!message) return;
+    if (message.type === "ready") settle({ ok: true });
+    else if (message.type === "error") settle({ ok: false, reason: message.message || "Não deu para pegar o som." });
+    else if (message.type === "sources") {
+      session.sources = message.names || [];
+      if (state.share && tapSession === session) setState({ share: { ...state.share, audioSources: session.sources } });
+    }
+    else if (message.type === "exit" && tapSession === session) {
+      settle({ ok: false, reason: "O ajudante de som fechou." });
+      if (state.share?.hasAudio) systemNotice("O som da sua transmissão parou. Troque a tela para tentar de novo.");
+    }
+  });
+  tapSession = session;
+  const started = await api().audioStart({ mode, sourceId });
+  if (!started?.ok) {
+    stopTapAudio();
+    return { track: null, reason: started?.reason || "Não deu para pegar o som." };
+  }
+  const result = await Promise.race([outcome, sleep(4000).then(() => ({ ok: true }))]);
+  if (!result.ok) {
+    stopTapAudio();
+    return { track: null, reason: result.reason };
+  }
+  return { track: session.track };
 }
 
 function announceShare() {
   const share = state.share;
-  send({ t: "state", live: share ? { title: share.sourceName, quality: share.quality, audio: share.hasAudio } : null });
+  send({ t: "state", live: share ? { title: share.sourceName, quality: share.label, audio: share.hasAudio } : null });
 }
 
 function watchTrackEnd(stream) {
@@ -968,28 +1116,44 @@ function watchTrackEnd(stream) {
 }
 
 // Compartilhar a tela na sala (ou trocar a tela/qualidade/som sem derrubar quem esta assistindo).
-export async function startShare({ sourceId, sourceName, isScreen = true, quality = "normal", shareAudio = false }) {
+// audioMode: "none" | "app" (so o app da janela) | "system" (PC inteiro). Discord e VozLab nunca vao junto.
+export async function startShare({ sourceId, sourceName, isScreen = true, resolution = "1080", fps = 30, audioMode = "none" }) {
   if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
-  const preset = SCREEN_QUALITIES[quality] || SCREEN_QUALITIES.normal;
-  const { stream, audioFailed } = await captureSource(sourceId, preset, shareAudio);
+  const preset = streamPreset(resolution, fps);
+  const mode = audioMode === "app" && isScreen ? "system" : AUDIO_MODES[audioMode] ? audioMode : "none";
+  const videoStream = await captureVideo(sourceId, preset);
   if (state.phase !== "room") {
-    stream.getTracks().forEach((track) => track.stop());
+    videoStream.getTracks().forEach((track) => track.stop());
     return;
   }
+  let audio = null;
+  let audioProblem = "";
+  if (mode !== "none") {
+    const tap = await startTapAudio(mode, sourceId);
+    audio = tap.track;
+    audioProblem = tap.reason || "";
+  } else {
+    stopTapAudio();
+  }
+  const video = videoStream.getVideoTracks()[0] || null;
+  const stream = new MediaStream([video, ...(audio ? [audio] : [])].filter(Boolean));
   const old = state.share?.stream;
-  const video = stream.getVideoTracks()[0] || null;
-  const audio = stream.getAudioTracks()[0] || null;
   for (const peer of outgoing.values()) {
     try { await peer.videoSender?.replaceTrack(video); } catch {}
     try { await peer.audioSender?.replaceTrack(audio); } catch {}
     await applyEncoding(peer.videoSender, preset);
   }
   watchTrackEnd(stream);
-  old?.getTracks().forEach((track) => track.stop());
-  saveHostPrefs({ quality: preset.id, shareAudio, lastSourceId: sourceId });
-  setState({ share: { stream, sourceId, sourceName, isScreen, quality: preset.id, shareAudio, hasAudio: Boolean(audio) } });
+  old?.getVideoTracks().forEach((track) => track.stop());
+  saveHostPrefs({ resolution: preset.resolution, fps: preset.fps, audioMode: mode === "system" && audioMode === "app" ? "app" : mode, lastSourceId: sourceId });
+  setState({
+    share: {
+      stream, sourceId, sourceName, isScreen, resolution: preset.resolution, fps: preset.fps, label: preset.label,
+      audioMode: mode, hasAudio: Boolean(audio), audioSources: audio ? tapSession?.sources || [] : []
+    }
+  });
   announceShare();
-  if (audioFailed) systemNotice("Não deu para pegar o som do PC; compartilhando só a imagem.");
+  if (audioProblem) systemNotice(`${audioProblem} Compartilhando só a imagem.`);
   ensureStats();
 }
 
@@ -997,6 +1161,7 @@ export async function stopShare({ silent = false, reason = "" } = {}) {
   const share = state.share;
   if (!share) return;
   for (const id of [...outgoing.keys()]) closeOutgoing(id, { notify: true });
+  stopTapAudio();
   share.stream.getTracks().forEach((track) => track.stop());
   setState({ share: null, watchers: [], ...(reason ? { error: reason } : {}) });
   if (!silent) announceShare();
@@ -1057,7 +1222,7 @@ async function toggleShareFromShortcut() {
     const sources = await listScreenSources();
     const source = sources.find((item) => item.id === prefs.lastSourceId) || sources.find((item) => item.isScreen) || sources[0];
     if (!source) throw new Error("Não achei nenhuma tela para compartilhar.");
-    await startShare({ sourceId: source.id, sourceName: source.name, isScreen: source.isScreen, quality: prefs.quality, shareAudio: prefs.shareAudio });
+    await startShare({ sourceId: source.id, sourceName: source.name, isScreen: source.isScreen, resolution: prefs.resolution, fps: prefs.fps, audioMode: source.isScreen && prefs.audioMode === "app" ? "system" : prefs.audioMode });
     api()?.notify?.(`Ao vivo na ${state.room?.name}: ${source.name}.`);
   } catch (error) {
     setState({ error: error.message });

@@ -173,9 +173,10 @@ function App() {
   const [userProfileOpen, setUserProfileOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [profileColor, setProfileColor] = useState(() => localStorage.getItem("micfudiddo.profileColor") || "violet");
-  const [profileEntrySound, setProfileEntrySound] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("micfudiddo.profileEntrySound") || "null"); } catch { return null; }
-  });
+  const readJsonSetting = (key) => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } };
+  const [profileAvatarCrop, setProfileAvatarCrop] = useState(() => readJsonSetting("micfudiddo.profileAvatarCrop"));
+  const [profileBanner, setProfileBanner] = useState(() => readJsonSetting("micfudiddo.profileBanner"));
+  const [profileTheme, setProfileTheme] = useState(() => readJsonSetting("micfudiddo.profileTheme"));
   const [profileBio, setProfileBio] = useState(() => {
     return localStorage.getItem("micfudiddo.profileBio") !== null ? localStorage.getItem("micfudiddo.profileBio") : "Olá! Bem-vindo ao meu perfil.";
   });
@@ -409,7 +410,10 @@ function App() {
   useEffect(() => { localStorage.setItem("micfudiddo.profileImage", profileImage); }, [profileImage]);
   useEffect(() => { localStorage.removeItem("micfudiddo.profilePlan"); }, []);
   useEffect(() => { localStorage.setItem("micfudiddo.profileColor", profileColor); }, [profileColor]);
-  useEffect(() => { localStorage.setItem("micfudiddo.profileEntrySound", JSON.stringify(profileEntrySound)); }, [profileEntrySound]);
+  useEffect(() => { localStorage.removeItem("micfudiddo.profileEntrySound"); }, []);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileAvatarCrop", JSON.stringify(profileAvatarCrop)); }, [profileAvatarCrop]);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileBanner", JSON.stringify(profileBanner)); }, [profileBanner]);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileTheme", JSON.stringify(profileTheme)); }, [profileTheme]);
   // As salas mostram o seu perfil (foto, status, cor...). Muda na hora para quem esta na sala com voce.
   useEffect(() => {
     setLocalProfile({
@@ -420,9 +424,11 @@ function App() {
       avatar: profileImage,
       avatarPosition: Number(profileImagePosition) || 50,
       color: profileColor,
-      entrySound: profileEntrySound
+      avatarCrop: profileAvatarCrop,
+      banner: profileBanner,
+      theme: profileTheme
     });
-  }, [profileName, profileSub, profileBio, profileReadme, profileImage, profileImagePosition, profileColor, profileEntrySound]);
+  }, [profileName, profileSub, profileBio, profileReadme, profileImage, profileImagePosition, profileColor, profileAvatarCrop, profileBanner, profileTheme]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileBio", profileBio); }, [profileBio]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileReadme", profileReadme); }, [profileReadme]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileImagePosition", profileImagePosition); }, [profileImagePosition]);
@@ -1118,6 +1124,7 @@ function App() {
             profileImage={profileImage}
             profileImagePosition={profileImagePosition}
             profileColor={profileColor}
+            profileAvatarCrop={profileAvatarCrop}
             onOpenProfile={() => setUserProfileOpen(true)}
             onManageAccount={() => setEditProfileOpen(true)}
             appVersion={appVersion}
@@ -1413,6 +1420,9 @@ function App() {
             profileBio={profileBio}
             profileReadme={profileReadme}
             profileColor={profileColor}
+            profileAvatarCrop={profileAvatarCrop}
+            profileBanner={profileBanner}
+            profileTheme={profileTheme}
             stats={{
               sounds: state?.sounds?.length || 0,
               plays: state?.totalPlayCount || 0,
@@ -1432,9 +1442,12 @@ function App() {
             setProfileSub={setProfileSub}
             profileColor={profileColor}
             setProfileColor={setProfileColor}
-            profileEntrySound={profileEntrySound}
-            setProfileEntrySound={setProfileEntrySound}
-            sounds={state?.sounds || []}
+            profileAvatarCrop={profileAvatarCrop}
+            setProfileAvatarCrop={setProfileAvatarCrop}
+            profileBanner={profileBanner}
+            setProfileBanner={setProfileBanner}
+            profileTheme={profileTheme}
+            setProfileTheme={setProfileTheme}
             profileImage={profileImage}
             setProfileImage={setProfileImage}
             profileImagePosition={profileImagePosition}

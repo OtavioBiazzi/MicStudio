@@ -54,7 +54,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     return () => ipcRenderer.removeListener("hotkey:trigger", listener);
   },
   screen: {
-    sources: () => ipcRenderer.invoke("screen:sources"),
+    sources: (options) => ipcRenderer.invoke("screen:sources", options),
     addresses: () => ipcRenderer.invoke("screen:addresses"),
     hostStart: (options) => ipcRenderer.invoke("screen:host-start", options),
     hostStop: (options) => ipcRenderer.invoke("screen:host-stop", options),
@@ -66,6 +66,19 @@ contextBridge.exposeInMainWorld("micfudiddo", {
     notify: (body) => ipcRenderer.invoke("screen:notify", body),
     saveSound: (payload) => ipcRenderer.invoke("screen:save-sound", payload),
     saveImage: (payload) => ipcRenderer.invoke("screen:save-image", payload),
+    audioStart: (options) => ipcRenderer.invoke("screen:audio-start", options),
+    audioStop: () => ipcRenderer.invoke("screen:audio-stop"),
+    onAudioData: (callback) => {
+      const listener = (_event, chunk) => callback?.(chunk);
+      ipcRenderer.on("screen:audio-data", listener);
+      return () => ipcRenderer.removeListener("screen:audio-data", listener);
+    },
+    onAudioEvent: (callback) => {
+      const listener = (_event, message) => callback?.(message);
+      ipcRenderer.on("screen:audio-event", listener);
+      return () => ipcRenderer.removeListener("screen:audio-event", listener);
+    },
+    saveProfileMedia: (payload) => ipcRenderer.invoke("profile:save-media", payload),
     onRooms: (callback) => {
       const listener = (_event, rooms) => callback?.(rooms);
       ipcRenderer.on("screen:rooms", listener);

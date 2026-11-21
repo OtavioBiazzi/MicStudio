@@ -208,16 +208,19 @@ async function launchBackend() {
     return false;
   }
 
+  // O backend usa o ajudante de som para gravar o PC sem o proprio VozLab (e com o Discord, que fica em outra saida).
+  const tapEnv = { VOZLAB_AUDIOTAP: audioTapPath(), VOZLAB_ELECTRON_PID: String(process.pid) };
   if (isDev) {
     backend = spawn(backendExecutable, ["-m", "micfudiddo.backend", ...backendArgs], {
       cwd: ROOT,
-      windowsHide: true
+      windowsHide: true,
+      env: { ...process.env, ...tapEnv }
     });
   } else {
     backend = spawn(backendExecutable, backendArgs, {
       windowsHide: true,
       cwd: app.getPath("userData"),
-      env: { ...process.env, MICFUDIDDO_LOG_DIR: logDir },
+      env: { ...process.env, MICFUDIDDO_LOG_DIR: logDir, ...tapEnv },
     });
   }
   

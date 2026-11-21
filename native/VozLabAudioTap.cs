@@ -4,6 +4,7 @@
 // VozLab. Este ajudante usa a captura por processo do Windows 10 2004+ (Process Loopback) para:
 //   --app <hwnd>     capturar so o app dono da janela compartilhada;
 //   --system         capturar todos os apps que estao tocando som, menos Discord e VozLab.
+//   --allow-discord  (gravacao do soundboard) deixa o Discord entrar; so o VozLab fica de fora.
 // Saida: PCM 16 bits, 48 kHz, estereo, continuo, no stdout. Avisos em JSON (uma linha cada) no stderr.
 //
 // Compilar: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize /platform:x64 /target:exe
@@ -370,6 +371,7 @@ namespace VozLab
     {
         static readonly string[] BlockedNames = { "discord", "discordptb", "discordcanary", "discorddevelopment", "vozlab", "vozlab studio", "micfudiddo studio", "micfudiddobackend", "vozlabaudiotap", "audiodg" };
         static readonly HashSet<uint> BlockedPids = new HashSet<uint>();
+        static bool AllowDiscord = false;
         static readonly object Gate = new object();
         static readonly Dictionary<uint, Tap> Taps = new Dictionary<uint, Tap>();
         static readonly HashSet<uint> Failed = new HashSet<uint>();
@@ -403,8 +405,10 @@ namespace VozLab
         {
             string lower = (name ?? "").ToLowerInvariant();
             if (lower.EndsWith(".exe")) lower = lower.Substring(0, lower.Length - 4);
+            bool discord = lower.StartsWith("discord");
+            if (discord) return !AllowDiscord;
             foreach (var blocked in BlockedNames) if (lower == blocked) return true;
-            return lower.StartsWith("discord");
+            return false;
         }
 
         static Dictionary<uint, ProcessInfo> Snapshot()
@@ -629,6 +633,7 @@ namespace VozLab
                 else if (args[i] == "--app" && i + 1 < args.Length) { mode = "app"; long.TryParse(args[++i], out hwnd); }
                 else if (args[i] == "--exclude-pid" && i + 1 < args.Length) { uint pid; if (uint.TryParse(args[++i], out pid)) BlockedPids.Add(pid); }
                 else if (args[i] == "--list") mode = "list";
+                else if (args[i] == "--allow-discord") AllowDiscord = true;
             }
             BlockedPids.Add((uint)Process.GetCurrentProcess().Id);
             // Environment.OSVersion "mente" sem manifesto; o numero do build vem do registro.

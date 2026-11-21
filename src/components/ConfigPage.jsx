@@ -570,9 +570,9 @@ export function ConfigPage({
               />
             </Section>
 
-            <Section icon={Record} title="Gravar o som do Windows" advanced desc="Escolha quais saídas de áudio do PC entram nas gravações de PC e de voz + PC.">
-              {(state.recordDevices || []).length === 0 && <p className="cfg-row-desc">Nenhum dispositivo de captura encontrado.</p>}
-              {(state.recordDevices || []).map((device) => (
+            <Section icon={Record} title="Gravar o som do Windows" advanced desc={state.recordUsesApps ? "As gravações de PC pegam o som de todos os apps, em todas as saídas (fone do jogo, fone do chat...), inclusive a call do Discord. O próprio VozLab fica de fora, para não gravar o retorno da sua voz nem os sons do soundboard." : "Escolha quais saídas de áudio do PC entram nas gravações de PC e de voz + PC."}>
+              {!state.recordUsesApps && (state.recordDevices || []).length === 0 && <p className="cfg-row-desc">Nenhum dispositivo de captura encontrado.</p>}
+              {!state.recordUsesApps && (state.recordDevices || []).map((device) => (
                 <Row key={device.index} label={device.name} desc={device.is_loopback ? "Saída do PC (o que você ouve)" : "Entrada (microfone)"}>
                   <Switch
                     checked={selectedRecordDevices.includes(device.index)}

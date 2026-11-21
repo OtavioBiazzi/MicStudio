@@ -4,6 +4,7 @@ build/*
 !build/installer.nsh
 !build/validate-backend.cjs
 !build/build-audiotap.cjs
+!build/release-local.cjs
 __pycache__/
 *.py[cod]
 

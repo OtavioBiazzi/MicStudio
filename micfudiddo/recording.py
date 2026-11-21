@@ -68,6 +68,7 @@ class MultiDeviceRecorder:
         self._lock = threading.Lock()
         self._running = False
         self._started_at = ""
+        self._clock = 0.0
 
     @property
     def running(self) -> bool:
@@ -89,6 +90,7 @@ class MultiDeviceRecorder:
         self.limit_reached = False
         self._streams = []
         self._started_at = time.strftime("%Y%m%d_%H%M%S")
+        self._clock = time.monotonic()
 
         errors: list[str] = []
         for device in devices:
@@ -172,7 +174,10 @@ class MultiDeviceRecorder:
             mix = np.zeros(max_len, dtype=np.float32)
             for track in mono_tracks:
                 mix[: track.size] += track
-            mix /= max(1.0, float(len(mono_tracks)))
+            # Soma as saidas (Game + Chat) sem cortar o volume pela metade; so abaixa se for estourar.
+            peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+            if peak > 0.99:
+                mix *= 0.99 / peak
             mix_path = self.output_dir / f"mix_pc_{self._started_at}.wav"
             sf.write(mix_path, mix, self.sample_rate)
             written.append(mix_path)
@@ -198,6 +203,12 @@ class MultiDeviceRecorder:
             with self._lock:
                 if device.index in self._chunks:
                     captured = self._captured_frames.get(device.index, 0)
+                    # Saida que ficou muda nao manda nada: poe o silencio que faltou para nao sair de sincronia.
+                    gap = fill_gap(captured, time.monotonic() - self._clock, mono.size, self.sample_rate)
+                    if gap and captured + gap < self._max_frames_per_device:
+                        self._chunks[device.index].append(np.zeros(gap, dtype=np.float32))
+                        captured += gap
+                        self._captured_frames[device.index] = captured
                     remaining = self._max_frames_per_device - captured
                     if remaining > 0:
                         block = mono[:remaining].copy()
@@ -223,3 +234,135 @@ def _resample_linear(samples: np.ndarray, source_rate: int, target_rate: int) ->
     source_x = np.linspace(0.0, duration, samples.size, endpoint=False)
     target_x = np.linspace(0.0, duration, target_len, endpoint=False)
     return np.interp(target_x, source_x, samples).astype(np.float32)
+
+
+def audiotap_path() -> Path | None:
+    """Caminho do VozLabAudioTap (o Electron passa pelo ambiente). None se nao existir."""
+    import os
+
+    raw = os.environ.get("VOZLAB_AUDIOTAP", "").strip()
+    if raw and Path(raw).is_file():
+        return Path(raw)
+    return None
+
+
+class AppAudioRecorder:
+    """Grava o som de todos os apps do PC (em qualquer saida: Game, Chat...), menos o proprio VozLab.
+
+    Usa o VozLabAudioTap no modo --allow-discord: a call do Discord entra; o retorno da sua voz e os sons do
+    soundboard nao (eles ja sao gravados pela gravacao de voz). O ajudante manda um fluxo continuo, entao uma
+    saida em silencio nao bagunca a sincronia."""
+
+    RATE = 48000
+    CHANNELS = 2
+
+    def __init__(self, output_dir: Path, executable: Path, exclude_pids: list[int] | None = None, popen=None) -> None:
+        import subprocess
+
+        self.output_dir = Path(output_dir)
+        self.executable = Path(executable)
+        self.exclude_pids = [int(pid) for pid in (exclude_pids or []) if pid]
+        self._popen = popen or subprocess.Popen
+        self._process = None
+        self._reader = None
+        self._chunks: list[bytes] = []
+        self._bytes = 0
+        self._max_bytes = 10 * 60 * self.RATE * self.CHANNELS * 2
+        self.limit_reached = False
+        self._lock = threading.Lock()
+        self._running = False
+        self._started_at = ""
+        self.sources: list[str] = []
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def start(self, _devices=None) -> None:
+        import subprocess
+
+        if self._running:
+            return
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        args = [str(self.executable), "--system", "--allow-discord"]
+        for pid in self.exclude_pids:
+            args += ["--exclude-pid", str(pid)]
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        self._process = self._popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creationflags)
+        time.sleep(0.4)
+        if self._process.poll() is not None:
+            self._process = None
+            raise RuntimeError("O ajudante de som nao abriu (precisa do Windows 10 versao 2004 ou mais novo).")
+        self._chunks = []
+        self._bytes = 0
+        self.limit_reached = False
+        self.sources = []
+        self._started_at = time.strftime("%Y%m%d_%H%M%S")
+        self._running = True
+        self._reader = threading.Thread(target=self._read, daemon=True)
+        self._reader.start()
+        threading.Thread(target=self._read_events, daemon=True).start()
+
+    def _read(self) -> None:
+        stream = self._process.stdout
+        while self._running:
+            data = stream.read(9600)  # 50 ms
+            if not data:
+                break
+            with self._lock:
+                if self._bytes >= self._max_bytes:
+                    self.limit_reached = True
+                    continue
+                self._chunks.append(data)
+                self._bytes += len(data)
+
+    def _read_events(self) -> None:
+        import json
+
+        stream = self._process.stderr
+        for raw in iter(stream.readline, b""):
+            try:
+                message = json.loads(raw.decode("utf-8", "replace"))
+            except Exception:
+                continue
+            if message.get("type") == "sources":
+                self.sources = [str(name) for name in message.get("names", [])]
+
+    def stop(self, discard: bool = False) -> list[Path]:
+        if not self._running and self._process is None:
+            return []
+        self._running = False
+        process = self._process
+        self._process = None
+        if process is not None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=2)
+            except Exception:
+                pass
+        if self._reader is not None:
+            self._reader.join(timeout=2)
+        with self._lock:
+            data = b"".join(self._chunks)
+            self._chunks = []
+            self._bytes = 0
+        if discard or not data:
+            return []
+        usable = len(data) - (len(data) % (self.CHANNELS * 2))
+        audio = np.frombuffer(data[:usable], dtype="<i2").reshape(-1, self.CHANNELS).astype(np.float32) / 32768.0
+        path = self.output_dir / f"pc_{self._started_at}.wav"
+        sf.write(path, audio, self.RATE)
+        return [path]
+
+
+def fill_gap(captured_frames: int, elapsed_seconds: float, block_frames: int, sample_rate: int, tolerance: float = 0.06) -> int:
+    """Quantos quadros de silencio faltam antes deste bloco para ele cair no tempo certo.
+
+    A captura de saida do Windows (loopback) nao manda nada enquanto a saida esta em silencio. Sem preencher esse
+    buraco, uma saida que fica muda (ex.: o fone do Discord) "encolhe" e sai fora de sincronia com as outras."""
+    expected_start = int(elapsed_seconds * sample_rate) - int(block_frames)
+    missing = expected_start - int(captured_frames)
+    return missing if missing > int(tolerance * sample_rate) else 0

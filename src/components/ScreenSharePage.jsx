@@ -528,6 +528,34 @@ function useStreamGain(stream, enabled, gainValue) {
 
 // ---------- janela fixa (sempre por cima) ----------
 const popouts = new Map();
+const POPOUT_ICONS = {
+  top: '<path d="M216 168h-9.29L176 85.07V40a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16v45.07L49.29 168H40a8 8 0 0 0 0 16h80v48a8 8 0 0 0 16 0v-48h80a8 8 0 0 0 0-16Z"/>',
+  fullscreen: '<path d="M216 48v48a8 8 0 0 1-16 0V56h-40a8 8 0 0 1 0-16h48a8 8 0 0 1 8 8ZM96 200H56v-40a8 8 0 0 0-16 0v48a8 8 0 0 0 8 8h48a8 8 0 0 0 0-16Zm112-48a8 8 0 0 0-8 8v40h-40a8 8 0 0 0 0 16h48a8 8 0 0 0 8-8v-48a8 8 0 0 0-8-8ZM96 40H48a8 8 0 0 0-8 8v48a8 8 0 0 0 16 0V56h40a8 8 0 0 0 0-16Z"/>',
+  left: '<path d="M216 40H40a16 16 0 0 0-16 16v144a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16ZM40 56h80v144H40Z"/>',
+  right: '<path d="M216 40H40a16 16 0 0 0-16 16v144a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16Zm0 160h-80V56h80Z"/>',
+  corner: '<path d="M216 40H40a16 16 0 0 0-16 16v144a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16Zm0 160H136v-56h80Z"/>',
+  "next-display": '<path d="M208 40H48a24 24 0 0 0-24 24v112a24 24 0 0 0 24 24h72v16H96a8 8 0 0 0 0 16h64a8 8 0 0 0 0-16h-24v-16h72a24 24 0 0 0 24-24V64a24 24 0 0 0-24-24Zm-38.34 93.66-32 32a8 8 0 0 1-11.32-11.32L144.69 136H88a8 8 0 0 1 0-16h56.69l-18.35-18.34a8 8 0 0 1 11.32-11.32l32 32a8 8 0 0 1 0 11.32Z"/>',
+  close: '<path d="M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z"/>'
+};
+
+const POPOUT_CSS = `
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:"Segoe UI",sans-serif;user-select:none}
+  video{width:100vw;height:100vh;object-fit:contain;background:#000;display:block}
+  body.idle{cursor:none}
+  .bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px;border-radius:14px;background:rgba(17,17,24,.88);border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.5);transition:opacity .3s}
+  .who{position:fixed;left:12px;top:12px;display:flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;border-radius:999px;background:rgba(17,17,24,.8);color:#fff;font-size:13px;font-weight:700;transition:opacity .3s}
+  .who i{width:8px;height:8px;border-radius:50%;background:#ff4d4f;box-shadow:0 0 0 3px rgba(255,77,79,.25)}
+  body.idle .bar, body.idle .who{opacity:0;pointer-events:none}
+  button{width:38px;height:38px;display:grid;place-items:center;border:none;border-radius:10px;background:transparent;color:#d4d4dc;cursor:pointer;position:relative}
+  button:hover{background:rgba(139,92,246,.25);color:#fff}
+  button.on{color:#a78bfa;background:rgba(139,92,246,.18)}
+  button.close:hover{background:rgba(255,77,79,.3)}
+  button svg{width:19px;height:19px;fill:currentColor}
+  button[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:46px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:5px 9px;border-radius:8px;background:#000;color:#fff;font-size:12px;font-weight:600}
+  .sep{width:1px;height:22px;background:rgba(255,255,255,.12);margin:0 4px}
+`;
+
+// Janela fixa: um mini player da tela de alguem, com barra que some quando o mouse para.
 function openPopout(member, stream) {
   const key = member.clientId || member.id;
   const existing = popouts.get(key);
@@ -535,26 +563,77 @@ function openPopout(member, stream) {
     existing.focus();
     return;
   }
-  const win = window.open("", `vozlab-popout-${key}`);
+  const name = `vozlab-popout-${key}`;
+  const win = window.open("", name);
   if (!win) return;
   popouts.set(key, win);
+  const run = (action) => window.micfudiddo?.screen?.popout?.(name, action);
   const doc = win.document;
   doc.title = `${member.name} - VozLab`;
+  doc.head.innerHTML = `<style>${POPOUT_CSS}</style>`;
   doc.body.innerHTML = "";
-  doc.body.style.cssText = "margin:0;background:#000;overflow:hidden;font-family:Segoe UI,sans-serif";
   const video = doc.createElement("video");
   video.autoplay = true;
   video.muted = true; // o som continua tocando pela janela principal (com o volume escolhido)
   video.playsInline = true;
-  video.style.cssText = "width:100vw;height:100vh;object-fit:contain;background:#000;display:block";
   video.srcObject = stream;
-  video.ondblclick = () => (doc.fullscreenElement ? doc.exitFullscreen() : doc.documentElement.requestFullscreen().catch(() => {}));
   doc.body.appendChild(video);
-  const tag = doc.createElement("div");
-  tag.textContent = `${member.name} · clique duas vezes para tela cheia`;
-  tag.style.cssText = "position:fixed;left:10px;top:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;transition:opacity .4s";
-  doc.body.appendChild(tag);
-  setTimeout(() => { tag.style.opacity = "0"; }, 3000);
+
+  const who = doc.createElement("div");
+  who.className = "who";
+  who.innerHTML = "<i></i>";
+  who.appendChild(doc.createTextNode(member.name));
+  doc.body.appendChild(who);
+
+  const bar = doc.createElement("div");
+  bar.className = "bar";
+  const buttons = {};
+  const add = (action, tip, extraClass = "") => {
+    const button = doc.createElement("button");
+    button.dataset.tip = tip;
+    if (extraClass) button.className = extraClass;
+    button.innerHTML = `<svg viewBox="0 0 256 256">${POPOUT_ICONS[action]}</svg>`;
+    button.onclick = async () => {
+      const result = await run(action);
+      if (result) apply(result);
+    };
+    bar.appendChild(button);
+    buttons[action] = button;
+  };
+  const sep = () => { const div = doc.createElement("div"); div.className = "sep"; bar.appendChild(div); };
+  add("top", "Fixar por cima de tudo", "on");
+  add("fullscreen", "Tela cheia (ou clique duas vezes)");
+  sep();
+  add("left", "Encaixar à esquerda");
+  add("right", "Encaixar à direita");
+  add("corner", "Cantinho (mini)");
+  add("next-display", "Mandar para o outro monitor");
+  sep();
+  add("close", "Fechar", "close");
+  doc.body.appendChild(bar);
+
+  const apply = (status) => {
+    buttons.top.classList.toggle("on", Boolean(status.alwaysOnTop));
+    buttons.top.dataset.tip = status.alwaysOnTop ? "Por cima de tudo (clique para soltar)" : "Fixar por cima de tudo";
+    buttons.fullscreen.dataset.tip = status.fullscreen ? "Sair da tela cheia" : "Tela cheia (ou clique duas vezes)";
+    buttons["next-display"].style.display = status.displays > 1 ? "" : "none";
+  };
+  run("status").then((status) => status && apply(status)).catch(() => {});
+
+  video.ondblclick = async () => { const result = await run("fullscreen"); if (result) apply(result); };
+  win.addEventListener("keydown", async (event) => {
+    if (event.key === "Escape") { const result = await run("status"); if (result?.fullscreen) apply(await run("fullscreen")); }
+    if (event.key === "f" || event.key === "F") apply(await run("fullscreen"));
+  });
+  // Mouse parado: tudo some para ver a tela limpa.
+  let idleTimer = null;
+  const wake = () => {
+    doc.body.classList.remove("idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (!bar.matches(":hover")) doc.body.classList.add("idle"); }, 2500);
+  };
+  win.addEventListener("mousemove", wake);
+  wake();
   video.play().catch(() => {});
 }
 
@@ -609,7 +688,16 @@ function StreamTile({ member, stream, focused, onFocus, own = false, watchers = 
   const [volume, setVolume] = useState(() => readVolume(volumeKey));
   const [muted, setMuted] = useState(false);
   const [menu, setMenu] = useState(null);
+  const [idle, setIdle] = useState(false);
+  const idleTimer = useRef(null);
   const mediaStream = stream?.stream || null;
+  // Igual ao Discord: com o mouse parado em cima da tela, os botoes e o cursor somem.
+  const wake = () => {
+    setIdle(false);
+    clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setIdle(true), 2500);
+  };
+  useEffect(() => () => clearTimeout(idleTimer.current), []);
   const hasAudio = !own && Boolean(member.live?.audio);
   useStreamGain(mediaStream, hasAudio, muted ? 0 : volume);
   useEffect(() => () => { if (!own) closePopout(member); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -629,8 +717,11 @@ function StreamTile({ member, stream, focused, onFocus, own = false, watchers = 
   return (
     <div
       ref={tileRef}
-      className={`rmTile ${focused ? "focused" : ""}`}
+      className={`rmTile ${focused ? "focused" : ""} ${idle && !menu ? "idle" : ""}`}
       onClick={() => !focused && onFocus(member.id)}
+      onMouseMove={wake}
+      onMouseEnter={wake}
+      onMouseLeave={() => { clearTimeout(idleTimer.current); setIdle(false); }}
       onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
     >
       {mediaStream && <VideoView stream={mediaStream} className="rmVideo" muted onDoubleClick={fullscreen} />}
@@ -847,7 +938,7 @@ function Lightbox({ attachment, onClose, setToast }) {
   );
 }
 
-function SoundPicker({ sounds, onClose, setToast }) {
+function SoundPicker({ sounds, onClose, setToast, call }) {
   const [query, setQuery] = useState("");
   const [sending, setSending] = useState("");
   const previewRef = useRef(null);
@@ -864,7 +955,8 @@ function SoundPicker({ sounds, onClose, setToast }) {
     setSending(sound.id);
     try {
       previewRef.current?.pause();
-      await sendSound(sound);
+      const result = await sendSound(sound, call);
+      if (result?.trimmed) setToast?.("Esse som passa de 3 minutos: foram só os 3 primeiros.");
       onClose();
     } catch (error) {
       setToast?.(error.message);
@@ -876,7 +968,7 @@ function SoundPicker({ sounds, onClose, setToast }) {
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent rmModal rmSoundPicker" onClick={(e) => e.stopPropagation()}>
         <div className="rmModalHead"><MusicNotes size={18} weight="fill" /> <b>Mandar um som no chat</b></div>
-        <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Até 6 MB por som.</p>
+        <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Sons de até 3 minutos (os mais longos vão só com os 3 primeiros).</p>
         <label className="ssSearch rmSoundSearch">
           <MagnifyingGlass size={14} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procurar no seu soundboard" autoFocus />
@@ -887,6 +979,7 @@ function SoundPicker({ sounds, onClose, setToast }) {
             <div key={sound.id} className="rmSoundRow">
               <button className="ssIconBtn" onClick={() => preview(sound)} aria-label="Ouvir"><Play size={13} weight="fill" /></button>
               <span>{sound.name}</span>
+              {Number(sound.duration) > 0 && <small className="rmSoundLen">{formatDuration(Math.min(Number(sound.duration), 600))}{Number(sound.duration) > MAX_VOICE_SECONDS ? " · vai até 3:00" : ""}</small>}
               <button className="btn btn-primary ssSmallBtn" disabled={Boolean(sending)} onClick={() => send(sound)}>
                 {sending === sound.id ? "Enviando..." : <><PaperPlaneRight size={13} weight="fill" /> Mandar</>}
               </button>
@@ -1107,12 +1200,15 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
             {text.trim() ? (
               <button type="submit" className="ssIconBtn" aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
             ) : (
-              <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 3 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
+              <>
+                <button type="button" className="ssIconBtn" onClick={() => setSoundPicker(true)} title="Mandar um som do seu soundboard (até 3 min)" aria-label="Mandar som do soundboard" disabled={sending}><MusicNotes size={17} weight="fill" /></button>
+                <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 3 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
+              </>
             )}
           </>
         )}
       </form>
-      {soundPicker && <SoundPicker sounds={sounds} onClose={() => setSoundPicker(false)} setToast={setToast} />}
+      {soundPicker && <SoundPicker sounds={sounds} onClose={() => setSoundPicker(false)} setToast={setToast} call={call} />}
       {lightbox && <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} setToast={setToast} />}
     </aside>
   );

@@ -78,7 +78,7 @@ let removeRoomsListener = null;
 let discoveryUsers = 0;
 let lastStatusSignature = "";
 let chatVisible = false;
-let localProfile = { name: "", status: "", bio: "", readme: "", avatar: "", avatarPosition: 50, avatarCrop: null, banner: null, theme: null, color: "violet" };
+let localProfile = { name: "", status: "", bio: "", readme: "", avatar: "", avatarPosition: 50, avatarCrop: null, banner: null, theme: null, color: "violet", stats: null, showStats: false };
 let preparedMedia = { avatarKey: "", avatar: "", bannerKey: "", banner: "" };
 
 // ---------- estado ----------
@@ -595,7 +595,8 @@ function publicProfile() {
     status: localProfile.status,
     bio: localProfile.bio,
     readme: localProfile.readme,
-    color: localProfile.color
+    color: localProfile.color,
+    stats: localProfile.showStats && localProfile.stats ? localProfile.stats : null
   };
 }
 
@@ -729,12 +730,28 @@ export async function sendImage(file, text = "") {
   send({ t: "chat", text: String(text || "").slice(0, 500), attachment: { kind: "image", name: file.name || "imagem", data, width, height } });
 }
 
-export async function sendSound(sound) {
+// Som do soundboard no chat: o backend converte para um MP3 leve de ate 3 minutos (WAVs grandes cabem).
+export async function sendSound(sound, call) {
   if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
   if (!sound?.path) throw new Error("Esse som não tem arquivo.");
-  const data = await readSoundFile(sound.path, MAX_ATTACHMENT_BYTES);
-  const duration = Number(sound.duration) || 0;
-  send({ t: "chat", text: "", attachment: { kind: "sound", name: sound.name || "som", data, duration } });
+  let filePath = sound.path;
+  let duration = Number(sound.duration) || 0;
+  let trimmed = false;
+  if (call && sound.id) {
+    try {
+      const prepared = await call("/api/sounds/chat-export", { id: sound.id });
+      if (prepared?.path) {
+        filePath = prepared.path;
+        duration = Number(prepared.duration) || duration;
+        trimmed = Boolean(prepared.trimmed);
+      }
+    } catch {
+      // backend antigo ou falha na conversao: tenta mandar o arquivo original
+    }
+  }
+  const data = await readSoundFile(filePath, MAX_ATTACHMENT_BYTES);
+  send({ t: "chat", text: "", attachment: { kind: "sound", name: sound.name || "som", data, duration: Math.min(duration, MAX_VOICE_SECONDS) } });
+  return { trimmed };
 }
 
 function audioDuration(src) {

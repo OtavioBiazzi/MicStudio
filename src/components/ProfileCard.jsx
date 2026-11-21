@@ -65,8 +65,20 @@ export function ProfilePhoto({ image, position = 50, crop = null, name = "", col
 
 // Cartao de perfil. profile: { name, status, bio, readme, avatar, avatarPosition, avatarCrop, banner: {data|src, crop}, theme, color }
 // onEditAvatar/onEditBanner: quando vem, passar o mouse mostra "trocar" (igual ao Discord).
+const STAT_LABELS = [
+  ["sounds", "Sons"],
+  ["plays", "Reproduções"],
+  ["favoriteVoices", "Vozes favoritas"],
+  ["favoriteSounds", "Sons favoritos"],
+  ["customVoices", "Vozes criadas"]
+];
+
+export function profileStatItems(stats) {
+  return stats ? STAT_LABELS.map(([key, label]) => [label, stats[key] || 0]) : [];
+}
+
 export function ProfileCard({ profile, badges = null, stats = null, actions = null, onClose, onEditAvatar, onEditBanner }) {
-  const items = stats || [];
+  const items = stats || profileStatItems(profile.stats);
   const bannerSrc = profile.banner?.data || profile.banner?.src || "";
   const theme = profile.theme;
   const style = theme ? { "--pf-primary": theme.primary, "--pf-accent": theme.accent } : undefined;

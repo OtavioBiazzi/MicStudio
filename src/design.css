@@ -1492,3 +1492,8 @@ input[type=range] { touch-action: none; }
   .rmReactBar button:nth-child(n+4) { display: none; }
   .rmLiveInfo small { display: none; }
 }
+/* 2.8.1: mouse parado em cima da tela deixa ela limpa (igual ao Discord) */
+.rmTile.idle { cursor: none; }
+.rmTile.idle .rmTileBar, .rmTile.focused.idle .rmTileBar { opacity: 0 !important; pointer-events: none; }
+.rmTile.focused .rmTileBar { transition: opacity .35s; }
+.rmSoundLen { flex: none; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }

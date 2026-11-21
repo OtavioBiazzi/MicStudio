@@ -17,41 +17,62 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Se a versao ja foi gerada e publicada pelo PC (npm run release:local), nao compila de novo.
+      - name: Check local release
+        id: local
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --json assets -q '.assets[].name' 2>/dev/null | grep -q 'Setup.*\.exe$'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release ja publicada pelo PC; pulando o build."
+          fi
+
       - name: Set up Python
+        if: steps.local.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Set up Node.js
+        if: steps.local.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install Dependencies
+        if: steps.local.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Install npm Packages
+        if: steps.local.outputs.skip != 'true'
         run: npm ci
 
       - name: Build Web Assets
+        if: steps.local.outputs.skip != 'true'
         run: npm run build:web
 
       - name: Build Python Backend
+        if: steps.local.outputs.skip != 'true'
         run: |
           pyinstaller --noconfirm --clean --onedir --windowed --collect-all imageio_ffmpeg --collect-all yt_dlp --name MicFudiddoBackend --distpath backend-dist --workpath build/backend backend_run.py
 
       - name: Build native audio helper
+        if: steps.local.outputs.skip != 'true'
         run: node build/build-audiotap.cjs
 
       - name: Package Electron App
+        if: steps.local.outputs.skip != 'true'
         run: npx electron-builder --win
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to GitHub Releases
+        if: steps.local.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |

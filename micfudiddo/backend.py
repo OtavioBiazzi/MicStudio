@@ -33,7 +33,7 @@ from .engine import AudioEngine, EngineConfig
 from . import profiles as audio_profiles
 from .hotkeys import HoldTracker
 from .processing import EffectsSettings
-from .recording import MultiDeviceRecorder, query_record_devices
+from .recording import AppAudioRecorder, MultiDeviceRecorder, audiotap_path, query_record_devices
 from .soundboard import (
     SoundDefaults,
     SoundLibrary,
@@ -210,7 +210,13 @@ class AppState:
         self.profile_path = self.library.base_dir / "profile.json"
         self.settings = self.load_app_settings()
         self.profile = self.load_profile()
-        self.pc_recorder = MultiDeviceRecorder(self.library.base_dir / "pc_recordings")
+        self.device_recorder = MultiDeviceRecorder(self.library.base_dir / "pc_recordings")
+        self.pc_recorder = self.device_recorder
+        tap = audiotap_path()
+        if tap is not None:
+            # Grava o som dos apps (inclui o Discord em qualquer saida), sem o proprio VozLab.
+            electron_pid = int(os.environ.get("VOZLAB_ELECTRON_PID", "0") or 0)
+            self.pc_recorder = AppAudioRecorder(self.library.base_dir / "pc_recordings", tap, exclude_pids=[os.getpid(), electron_pid])
         self.clipping_manager = AudioClippingManager(self)
         self.engine._clipping_manager = self.clipping_manager
         self.combo_recording = False
@@ -979,6 +985,7 @@ class AppState:
                 "monitor_hostapi": self.selected_monitor_hostapi,
             },
             "recordSelected": sorted(self.record_selected_indexes),
+            "recordUsesApps": isinstance(self.pc_recorder, AppAudioRecorder),
             "voiceFavorites": self.voice_favorites,
             "soundboardFavorites": self.soundboard_favorites,
             "voiceRecents": self.voice_recents,
@@ -1827,24 +1834,36 @@ class AppState:
         self.save_profile()
         return devices[:2]
 
+    def start_pc_recorder(self, devices: list) -> str:
+        """Comeca a gravar o PC. Se o ajudante de som falhar, volta para a gravacao por dispositivo."""
+        if isinstance(self.pc_recorder, AppAudioRecorder):
+            try:
+                self.pc_recorder.start(devices)
+                return "o som dos apps (com o Discord, sem o VozLab)"
+            except Exception as exc:
+                print("Gravacao por apps indisponivel, usando dispositivos:", exc)
+                self.pc_recorder = self.device_recorder
+        if not devices:
+            raise RuntimeError("Nenhuma fonte de PC/loopback encontrada para gravar.")
+        self.pc_recorder.start(devices)
+        return ", ".join(device.name for device in devices)
+
     def start_combo_recording(self, indexes: set[int]) -> None:
         if self.combo_recording:
             return
         if self.engine.recording or self.pc_recorder.running:
             raise RuntimeError("Pare a gravacao atual antes de iniciar voz + PC.")
-        devices = self.resolve_pc_record_devices(indexes)
-        if not devices:
-            raise RuntimeError("Nenhuma fonte de PC/loopback encontrada para gravar junto com a voz.")
+        devices = [] if isinstance(self.pc_recorder, AppAudioRecorder) else self.resolve_pc_record_devices(indexes)
         if not self.engine.running:
             self.start()
-        self.pc_recorder.start(devices)
+        source_label = self.start_pc_recorder(devices)
         try:
             self.engine.start_recording()
         except Exception:
             self.pc_recorder.stop(discard=True)
             raise
         self.combo_recording = True
-        self.status = f"Gravando voz + PC: {', '.join(device.name for device in devices)}"
+        self.status = f"Gravando voz + {source_label}"
 
     def stop_combo_recording(self) -> dict:
         if not self.combo_recording:
@@ -1891,7 +1910,10 @@ class AppState:
         mix = np.zeros(max_len, dtype=np.float32)
         for track in tracks:
             mix[: track.size] += track
-        mix /= max(1.0, float(len(tracks)))
+        # Voz + PC somados sem cortar o volume pela metade; so abaixa se for estourar.
+        peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+        if peak > 0.99:
+            mix *= 0.99 / peak
         output_path.parent.mkdir(parents=True, exist_ok=True)
         sf.write(output_path, np.nan_to_num(mix, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32), sample_rate)
 
@@ -2326,6 +2348,8 @@ class AppState:
             "settings": dict(self.settings),
             "recordDevices": [asdict(device) for device in self.record_devices],
             "recordSelected": sorted(self.record_selected_indexes),
+            "recordUsesApps": isinstance(self.pc_recorder, AppAudioRecorder),
+            "recordUsesApps": isinstance(self.pc_recorder, AppAudioRecorder),
             "recording": {
                 "voice": self.engine.recording,
                 "pc": self.pc_recorder.running,
@@ -3381,19 +3405,20 @@ class Handler(BaseHTTPRequestHandler):
             indexes = {int(value) for value in data.get("indexes", STATE.record_selected_indexes)}
             STATE.record_selected_indexes = indexes
             STATE.save_profile()
-            devices = STATE.resolve_pc_record_devices(indexes)
-            STATE.pc_recorder.start(devices)
-            STATE.status = f"Gravando PC: {', '.join(device.name for device in devices)}"
+            devices = [] if isinstance(STATE.pc_recorder, AppAudioRecorder) else STATE.resolve_pc_record_devices(indexes)
+            STATE.status = f"Gravando {STATE.start_pc_recorder(devices)}"
             return None
         if path == "/api/record/pc/stop":
             if STATE.combo_recording:
                 raise RuntimeError("Use Parar voz + PC para finalizar a gravacao combinada.")
             paths = STATE.pc_recorder.stop()
+            # Um som so no soundboard: a mistura de todas as saidas (ou a unica gravacao).
+            keep = [path_item for path_item in paths if path_item.name.startswith("mix_pc_")] or paths[:1]
             sound_ids = []
-            for path_item in paths:
-                item = STATE.add_recording_to_soundboard(path_item)
+            for path_item in keep:
+                item = STATE.add_recording_to_soundboard(path_item, name=f"PC {time.strftime('%H%M%S')}")
                 sound_ids.append(item.id)
-            STATE.status = f"{len(sound_ids)} gravacao(oes) adicionada(s) ao soundboard"
+            STATE.status = "Gravacao do PC adicionada ao soundboard" if sound_ids else "A gravacao do PC ficou vazia"
             return {"paths": [str(path_item) for path_item in paths], "soundIds": sound_ids, **STATE.snapshot()}
         if path == "/api/record/combo/start":
             indexes = {int(value) for value in data.get("indexes", STATE.record_selected_indexes)}

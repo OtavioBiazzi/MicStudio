@@ -304,7 +304,7 @@ test("o perfil de cada um aparece na sala e muda na hora", async () => {
   try {
     const ana = await connect(port, { name: "Ana", clientId: "a", profile: { avatar: TINY_JPEG, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink", lixo: "x" } });
     const welcome = await ana.next("welcome");
-    assert.deepEqual(welcome.members[0].profile, { avatar: TINY_JPEG, avatarPosition: 50, avatarCrop: null, banner: null, theme: null, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink" });
+    assert.deepEqual(welcome.members[0].profile, { avatar: TINY_JPEG, avatarPosition: 50, avatarCrop: null, banner: null, theme: null, status: "Jogando Valorant", bio: "oi", readme: "# eu", color: "pink", stats: null });
     const bruno = await connect(port, { name: "Bruno", clientId: "b", profile: { avatar: "javascript:alert(1)", color: "nao-existe" } });
     const seen = await bruno.next("welcome");
     const brunoProfile = seen.members.find((m) => m.name === "Bruno").profile;
@@ -384,6 +384,21 @@ test("som de entrada toca para quem ja esta na sala", async () => {
     const joined = ana.inbox.find((m) => m.t === "join");
     assert.equal(joined.member.hasEntrySound, true);
     assert.equal("entrySound" in joined.member, false, "o arquivo do som nao vai junto na lista de membros");
+    ana.close(); bruno.close();
+  } finally {
+    await hub.close({ announce: false });
+  }
+});
+
+test("estatisticas do perfil vao para a sala so como numeros", async () => {
+  const { hub, port } = await openHub();
+  try {
+    const ana = await connect(port, { name: "Ana", clientId: "a", profile: { stats: { sounds: 293, plays: "2641", favoriteVoices: -4, favoriteSounds: 53.7, customVoices: 6, hack: "<b>" } } });
+    const welcome = await ana.next("welcome");
+    assert.deepEqual(welcome.members[0].profile.stats, { sounds: 293, plays: 2641, favoriteVoices: 0, favoriteSounds: 54, customVoices: 6 });
+    const bruno = await connect(port, { name: "Bruno", clientId: "b", profile: { stats: "muitos" } });
+    const seen = await bruno.next("welcome");
+    assert.equal(seen.members.find((m) => m.name === "Bruno").profile.stats, null, "sem estatisticas validas, nao mostra nada");
     ana.close(); bruno.close();
   } finally {
     await hub.close({ announce: false });

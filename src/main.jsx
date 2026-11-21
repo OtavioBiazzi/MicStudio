@@ -177,6 +177,7 @@ function App() {
   const [profileAvatarCrop, setProfileAvatarCrop] = useState(() => readJsonSetting("micfudiddo.profileAvatarCrop"));
   const [profileBanner, setProfileBanner] = useState(() => readJsonSetting("micfudiddo.profileBanner"));
   const [profileTheme, setProfileTheme] = useState(() => readJsonSetting("micfudiddo.profileTheme"));
+  const [profileShowStats, setProfileShowStats] = useState(() => localStorage.getItem("micfudiddo.profileShowStats") !== "false");
   const [profileBio, setProfileBio] = useState(() => {
     return localStorage.getItem("micfudiddo.profileBio") !== null ? localStorage.getItem("micfudiddo.profileBio") : "Olá! Bem-vindo ao meu perfil.";
   });
@@ -414,6 +415,15 @@ function App() {
   useEffect(() => { localStorage.setItem("micfudiddo.profileAvatarCrop", JSON.stringify(profileAvatarCrop)); }, [profileAvatarCrop]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileBanner", JSON.stringify(profileBanner)); }, [profileBanner]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileTheme", JSON.stringify(profileTheme)); }, [profileTheme]);
+  useEffect(() => { localStorage.setItem("micfudiddo.profileShowStats", String(profileShowStats)); }, [profileShowStats]);
+  // Estatisticas que voce pode mostrar no seu perfil das salas.
+  const profileStats = useMemo(() => ({
+    sounds: state?.sounds?.length || 0,
+    plays: state?.totalPlayCount || 0,
+    favoriteVoices: favorites.length,
+    favoriteSounds: soundboardFavorites.length,
+    customVoices: customVoices.length
+  }), [state?.sounds?.length, state?.totalPlayCount, favorites.length, soundboardFavorites.length, customVoices.length]);
   // As salas mostram o seu perfil (foto, status, cor...). Muda na hora para quem esta na sala com voce.
   useEffect(() => {
     setLocalProfile({
@@ -426,9 +436,11 @@ function App() {
       color: profileColor,
       avatarCrop: profileAvatarCrop,
       banner: profileBanner,
-      theme: profileTheme
+      theme: profileTheme,
+      showStats: profileShowStats,
+      stats: profileStats
     });
-  }, [profileName, profileSub, profileBio, profileReadme, profileImage, profileImagePosition, profileColor, profileAvatarCrop, profileBanner, profileTheme]);
+  }, [profileName, profileSub, profileBio, profileReadme, profileImage, profileImagePosition, profileColor, profileAvatarCrop, profileBanner, profileTheme, profileShowStats, profileStats]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileBio", profileBio); }, [profileBio]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileReadme", profileReadme); }, [profileReadme]);
   useEffect(() => { localStorage.setItem("micfudiddo.profileImagePosition", profileImagePosition); }, [profileImagePosition]);
@@ -1448,6 +1460,9 @@ function App() {
             setProfileBanner={setProfileBanner}
             profileTheme={profileTheme}
             setProfileTheme={setProfileTheme}
+            profileShowStats={profileShowStats}
+            setProfileShowStats={setProfileShowStats}
+            profileStats={profileStats}
             profileImage={profileImage}
             setProfileImage={setProfileImage}
             profileImagePosition={profileImagePosition}

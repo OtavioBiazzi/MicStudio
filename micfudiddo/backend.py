@@ -46,6 +46,7 @@ from .soundboard import (
     resample_linear,
 )
 from .storage import atomic_write_json, load_json_with_backup
+from .chat_export import chat_export
 from .windows_audio import (
     com_initialized,
     find_virtual_microphone_endpoint,
@@ -2566,6 +2567,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/sounds/import-youtube",
                 "/api/sounds/export-mfsound",
                 "/api/sounds/import-mfsound",
+                "/api/sounds/chat-export",
                 # A sintese de voz pode levar minutos em textos longos; nao pode travar o app inteiro.
                 "/api/tts/speak",
                 "/api/tts/save",
@@ -2660,6 +2662,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             STATE.update_settings(data.get("settings", data))
             return None
+        if path == "/api/sounds/chat-export":
+            # Som do soundboard para o chat das salas: MP3 leve de ate 3 minutos.
+            item = STATE.library.by_id(str(data.get("id") or ""))
+            if item is None:
+                raise RuntimeError("Som nao encontrado.")
+            duration = 0.0
+            try:
+                duration = float(audio_duration_seconds(item.path) or 0.0)
+            except Exception:
+                pass
+            result = chat_export(item.path, STATE.library.base_dir / "chat_cache", duration)
+            return {"ok": True, "name": item.name, **result}
         if path == "/api/sounds/export-mfsound":
             sound_id = str(data["id"])
             export_path = str(data["exportPath"])

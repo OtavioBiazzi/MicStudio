@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
       return () => ipcRenderer.removeListener("screen:audio-event", listener);
     },
     saveProfileMedia: (payload) => ipcRenderer.invoke("profile:save-media", payload),
+    popout: (name, action) => ipcRenderer.invoke("popout:command", { name, action }),
     onRooms: (callback) => {
       const listener = (_event, rooms) => callback?.(rooms);
       ipcRenderer.on("screen:rooms", listener);

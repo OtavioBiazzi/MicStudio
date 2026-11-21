@@ -593,7 +593,8 @@ async function storeProfileMedia(kind, dataUrl) {
 export function EditProfileModal({
   onClose, profileName, setProfileName, profileSub, setProfileSub, profileImage, setProfileImage, profileImagePosition,
   setProfileImagePosition, profileAvatarCrop, setProfileAvatarCrop, profileBanner, setProfileBanner, profileTheme,
-  setProfileTheme, profileBio, setProfileBio, profileReadme, setProfileReadme, profileColor, setProfileColor
+  setProfileTheme, profileBio, setProfileBio, profileReadme, setProfileReadme, profileColor, setProfileColor,
+  profileShowStats = true, setProfileShowStats, profileStats = null
 }) {
   const avatarInput = useRef(null);
   const bannerInput = useRef(null);
@@ -655,7 +656,8 @@ export function EditProfileModal({
 
   const previewProfile = {
     name: profileName, status: profileSub, bio: profileBio, readme: profileReadme, avatar: profileImage,
-    avatarPosition: profileImagePosition, avatarCrop: profileAvatarCrop, banner: profileBanner, theme: profileTheme, color: profileColor
+    avatarPosition: profileImagePosition, avatarCrop: profileAvatarCrop, banner: profileBanner, theme: profileTheme, color: profileColor,
+    stats: profileShowStats ? profileStats : null
   };
 
   return (
@@ -726,6 +728,19 @@ export function EditProfileModal({
               <label>Cor de cima <input type="color" value={profileTheme?.primary || "#8b5cf6"} onChange={(e) => setProfileTheme({ primary: e.target.value, accent: profileTheme?.accent || "#ec4899" })} /></label>
               <label>Cor de baixo <input type="color" value={profileTheme?.accent || "#ec4899"} onChange={(e) => setProfileTheme({ primary: profileTheme?.primary || "#8b5cf6", accent: e.target.value })} /></label>
             </div>
+          </section>
+
+          <section className="pfEditorSection">
+            <label className="ssToggleRow">
+              <span>
+                <b>Mostrar minhas estatísticas</b>
+                <small>Sons, reproduções, vozes e sons favoritos e vozes criadas aparecem no seu cartão para os amigos.</small>
+              </span>
+              <span className="toggleSwitch">
+                <input type="checkbox" checked={profileShowStats} onChange={(e) => setProfileShowStats?.(e.target.checked)} />
+                <span className="toggleTrack" />
+              </span>
+            </label>
           </section>
 
           <section className="pfEditorSection">
@@ -1629,6 +1644,20 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.8.1": `### Versão 2.8.1
+
+**Sons do seu soundboard no chat (até 3 minutos)**
+- Novo botão de **nota musical** ao lado do microfone no chat da sala: escolha um som do seu soundboard e mande.
+- O app converte o som para um MP3 leve antes de mandar, então até WAVs grandes vão sem erro. Sons com mais de 3 minutos vão só com os 3 primeiros.
+- Os amigos ouvem no chat e clicam em **Salvar** para levar o som para o soundboard deles.
+
+**Estatísticas no perfil**
+- Nova opção no editor de perfil: **Mostrar minhas estatísticas**. Sons, reproduções, vozes favoritas, sons favoritos e vozes criadas aparecem no seu cartão para os amigos na sala.
+
+**Telas mais limpas**
+- Com o mouse parado em cima de uma tela, os botões e o cursor somem depois de alguns segundos, igual ao Discord. É só mexer o mouse para voltarem.
+- **Janela fixa** com barra de controles (que também some com o mouse parado): **fixar por cima de tudo** (liga e desliga), **tela cheia**, **encaixar à esquerda ou à direita**, **cantinho** pequeno e **mandar para o outro monitor**. Dá para deixar a tela de um amigo cheia no segundo monitor enquanto usa o principal, ou num canto enquanto joga.
+`,
   "v2.8.0": `### Versão 2.8.0
 
 **Compartilhar tela igual ao Discord**

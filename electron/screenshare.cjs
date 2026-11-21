@@ -145,8 +145,17 @@ function cleanProfile(value) {
     status: cleanText(profile.status, 60),
     bio: cleanText(profile.bio, 120),
     readme: String(profile.readme ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").slice(0, 4000),
-    color: PROFILE_COLORS.includes(profile.color) ? profile.color : "violet"
+    color: PROFILE_COLORS.includes(profile.color) ? profile.color : "violet",
+    stats: cleanStats(profile.stats)
   };
+}
+
+const STAT_KEYS = ["sounds", "plays", "favoriteVoices", "favoriteSounds", "customVoices"];
+function cleanStats(value) {
+  if (!value || typeof value !== "object") return null;
+  const stats = {};
+  for (const key of STAT_KEYS) stats[key] = Math.round(clampNumber(value[key], 0, 1e9, 0));
+  return stats;
 }
 
 function cleanEntrySound(value) {

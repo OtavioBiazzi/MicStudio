@@ -30,7 +30,8 @@ let shortcutConflicts = new Map();
 let rendererRecoveryAttempts = 0;
 let uiSleepTimer = null;
 let screenRoom = null; // sala aberta enquanto voce transmite a tela
-let screenShareActive = false; // transmitindo ou assistindo: a janela nao pode dormir
+let screenShareActive = false;
+const popoutWindows = new Map(); // janelas fixas das telas da sala // transmitindo ou assistindo: a janela nao pode dormir
 const UI_SLEEP_DELAY_MS = 20000;
 const claimUpdateCheck = createSessionGate();
 let openIntroVideo;
@@ -632,6 +633,14 @@ function createWindow({ show = true, wake = false } = {}) {
     }
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on("did-create-window", (child, details) => {
+    const name = String(details?.frameName || "");
+    if (!name.startsWith("vozlab-popout")) return;
+    popoutWindows.set(name, child);
+    child.setMenuBarVisibility(false);
+    child.setAlwaysOnTop(true, "screen-saver"); // por cima ate de jogo em janela sem borda
+    child.on("closed", () => { if (popoutWindows.get(name) === child) popoutWindows.delete(name); });
   });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
@@ -1385,6 +1394,55 @@ ipcMain.handle("screen:audio-start", (_event, options = {}) => {
 });
 
 ipcMain.handle("screen:audio-stop", () => stopAudioTap());
+
+// Janela fixa de uma tela da sala: por cima de tudo, tela cheia, encaixar e trocar de monitor.
+ipcMain.handle("popout:command", (_event, payload = {}) => {
+  const { screen } = require("electron");
+  const win = popoutWindows.get(String(payload.name || ""));
+  if (!win || win.isDestroyed()) return null;
+  const displays = screen.getAllDisplays();
+  const current = screen.getDisplayMatching(win.getBounds());
+  const area = current.workArea;
+  const place = (bounds) => {
+    if (win.isFullScreen()) win.setFullScreen(false);
+    if (win.isMaximized()) win.unmaximize();
+    win.setBounds(bounds, false);
+  };
+  switch (payload.action) {
+    case "top":
+      win.setAlwaysOnTop(!win.isAlwaysOnTop(), "screen-saver");
+      break;
+    case "fullscreen":
+      win.setFullScreen(!win.isFullScreen());
+      break;
+    case "left":
+      place({ x: area.x, y: area.y, width: Math.round(area.width / 2), height: area.height });
+      break;
+    case "right":
+      place({ x: area.x + Math.round(area.width / 2), y: area.y, width: area.width - Math.round(area.width / 2), height: area.height });
+      break;
+    case "corner": {
+      const width = Math.max(360, Math.round(area.width * 0.26));
+      const height = Math.round((width * 9) / 16);
+      place({ x: area.x + area.width - width - 16, y: area.y + area.height - height - 16, width, height });
+      break;
+    }
+    case "next-display": {
+      if (displays.length < 2) break;
+      const index = displays.findIndex((item) => item.id === current.id);
+      const next = displays[(index + 1) % displays.length];
+      const wasFull = win.isFullScreen();
+      place({ x: next.workArea.x, y: next.workArea.y, width: next.workArea.width, height: next.workArea.height });
+      if (wasFull) setTimeout(() => { if (!win.isDestroyed()) win.setFullScreen(true); }, 150);
+      break;
+    }
+    case "close":
+      win.close();
+      return null;
+    default:
+  }
+  return { alwaysOnTop: win.isAlwaysOnTop(), fullscreen: win.isFullScreen(), displays: displays.length };
+});
 
 // Foto e faixa do perfil (podem ser GIFs grandes): ficam em arquivo, nao no armazenamento do navegador.
 ipcMain.handle("profile:save-media", async (_event, payload = {}) => {

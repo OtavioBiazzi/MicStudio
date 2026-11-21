@@ -1,6 +1,6 @@
 {
   "name": "micfudiddo-studio",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "private": true,
   "description": "VozLab Studio - modificador de voz e soundboard",
   "main": "electron/main.cjs",
@@ -11,8 +11,9 @@
     "vite": "vite --host 127.0.0.1 --port 5177",
     "electron": "wait-on http://127.0.0.1:5177 http://127.0.0.1:38717/api/health && electron .",
     "build:web": "vite build",
+    "build:native": "node build/build-audiotap.cjs",
     "build:backend": ".venv\\\\Scripts\\\\pyinstaller.exe --noconfirm --clean --onedir --windowed --collect-all imageio_ffmpeg --collect-all yt_dlp --name MicFudiddoBackend --distpath backend-dist --workpath build\\\\backend backend_run.py",
-    "build:studio": "npm run build:web && npm run build:backend && electron-builder --win",
+    "build:studio": "npm run build:web && npm run build:backend && npm run build:native && electron-builder --win",
     "start:electron": "electron ."
   },
   "dependencies": {
@@ -47,6 +48,10 @@
       {
         "from": "backend-dist/MicFudiddoBackend",
         "to": "backend"
+      },
+      {
+        "from": "native-dist/VozLabAudioTap.exe",
+        "to": "native/VozLabAudioTap.exe"
       }
     ],
     "win": {

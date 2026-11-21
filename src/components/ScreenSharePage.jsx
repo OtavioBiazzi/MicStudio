@@ -3,15 +3,16 @@ import {
   Monitor, AppWindow, Broadcast, Copy, ArrowClockwise, X, CornersOut, SignOut, Lock, WifiHigh, WifiSlash, Trash,
   Info, StopCircle, SpeakerHigh, SpeakerSlash, SpeakerSimpleHigh, ArrowsLeftRight, Question, CaretDown, ArrowSquareOut,
   Users, Crown, Hash, PaperPlaneRight, Plus, Eye, EyeSlash, Screencast, ChatsCircle, UsersThree, SignIn,
-  Play, Stop, Check, DownloadSimple, MusicNotes, MagnifyingGlass, ImageSquare, PlusCircle, BellRinging, BellSlash
+  Play, Stop, Check, DownloadSimple, MusicNotes, MagnifyingGlass, ImageSquare, PlusCircle, Microphone, FileAudio,
+  PictureInPicture, UserCircle
 } from "@phosphor-icons/react";
 import { ProfileCard, ProfilePhoto } from "./ProfileCard";
 import {
-  SCREEN_QUALITIES, DEFAULT_ROOM, useScreenShare, isScreenShareAvailable, listScreenSources, listAddresses, enterRoom,
+  RESOLUTIONS, FRAME_RATES, MAX_VOICE_SECONDS, DEFAULT_ROOM, useScreenShare, isScreenShareAvailable, listScreenSources, listAddresses, enterRoom,
   leaveRoom, createRoomId, startDiscovery, stopDiscovery, probeRoom, readRecentHosts, forgetRecentHost, readHostPrefs,
   saveHostPrefs, startShare, stopShare, watch, unwatch, setFocus, sendChat, setChatVisible, kickMember, readVolume,
   saveVolume, clearScreenShareError, installScreenShareBridge, REACTIONS, react, sendImage, sendSound, saveSoundToDisk,
-  saveImageToDisk, readEntrySoundsEnabled, setEntrySoundsEnabled
+  saveImageToDisk, sendAudioBlob
 } from "../screenShare";
 
 const RADMIN_URL = "https://www.radmin-vpn.com/br/";
@@ -24,7 +25,7 @@ function avatarColor(seed) {
 }
 
 function Avatar({ name, seed, size = 32, live = false, profile = null }) {
-  if (profile) return <ProfilePhoto image={profile.avatar} position={profile.avatarPosition} name={name} color={profile.color} size={size} live={live} />;
+  if (profile) return <ProfilePhoto image={profile.avatar} position={profile.avatarPosition} crop={profile.avatarCrop} name={name} color={profile.color} size={size} live={live} />;
   return (
     <span className={`rmAvatar ${live ? "live" : ""}`} style={{ width: size, height: size, background: avatarColor(seed || name), fontSize: size * 0.42 }}>
       {String(name || "?").trim().charAt(0).toUpperCase()}
@@ -324,45 +325,65 @@ function Lobby({ share, setToast }) {
 }
 
 // ---------- dentro da sala ----------
+// Lista de telas e apps: primeiro rapido (nome + icone), depois as miniaturas chegam.
 function useSources() {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
+  const generation = useRef(0);
   const refresh = useCallback(async () => {
+    const run = ++generation.current;
     setLoading(true);
+    let quick = [];
     try {
-      const list = await listScreenSources();
-      setSources(list);
-      return list;
+      quick = await listScreenSources({ thumbnails: false });
+      if (run === generation.current) setSources(quick);
+    } catch {}
+    try {
+      const full = await listScreenSources({ thumbnails: true });
+      if (run !== generation.current) return quick;
+      const icons = new Map(quick.map((item) => [item.id, item.icon]));
+      const merged = full.map((item) => ({ ...item, icon: item.icon || icons.get(item.id) || "" }));
+      setSources(merged);
+      return merged;
     } catch {
-      setSources([]);
-      return [];
+      return quick;
     } finally {
-      setLoading(false);
+      if (run === generation.current) setLoading(false);
     }
   }, []);
   return { sources, loading, refresh };
 }
 
+// Escolher o que compartilhar, igual ao Discord: abas Aplicativos/Telas e depois resolucao, FPS e som.
 function SharePicker({ current, onClose, setToast }) {
   const { sources, loading, refresh } = useSources();
-  const prefs = readHostPrefs();
-  const [selected, setSelected] = useState(null);
-  const [quality, setQuality] = useState(current?.quality || prefs.quality);
-  const [shareAudio, setShareAudio] = useState(current ? current.shareAudio : prefs.shareAudio);
+  const prefs = useMemo(() => readHostPrefs(), []);
+  const [tab, setTab] = useState(current ? (current.isScreen ? "screens" : "apps") : "apps");
+  const [selectedId, setSelectedId] = useState(current?.sourceId || "");
+  const [resolution, setResolution] = useState(current?.resolution || prefs.resolution);
+  const [fps, setFps] = useState(current?.fps || prefs.fps);
+  const [audioMode, setAudioMode] = useState(current?.audioMode || prefs.audioMode);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    refresh().then((list) => {
-      setSelected(list.find((item) => item.id === current?.sourceId) || list.find((item) => item.id === prefs.lastSourceId) || list.find((item) => item.isScreen) || list[0] || null);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const go = async () => {
-    if (!selected) return;
+  const apps = sources.filter((item) => !item.isScreen);
+  const screens = sources.filter((item) => item.isScreen);
+  const list = tab === "apps" ? apps : screens;
+  const selected = sources.find((item) => item.id === selectedId) || null;
+  const mode = selected?.isScreen && audioMode === "app" ? "system" : audioMode;
+
+  const select = (item) => {
+    setSelectedId(item.id);
+    if (item.isScreen && audioMode === "app") setAudioMode("system");
+  };
+
+  const go = async (item = selected) => {
+    if (!item) return;
     setBusy(true);
     try {
-      await startShare({ sourceId: selected.id, sourceName: selected.name, isScreen: selected.isScreen, quality, shareAudio });
+      const chosenMode = item.isScreen && audioMode === "app" ? "system" : audioMode;
+      await startShare({ sourceId: item.id, sourceName: item.name, isScreen: item.isScreen, resolution, fps, audioMode: chosenMode });
       onClose();
     } catch (error) {
       setToast?.(error.message);
@@ -371,58 +392,74 @@ function SharePicker({ current, onClose, setToast }) {
     }
   };
 
-  const screens = sources.filter((item) => item.isScreen);
-  const windows = sources.filter((item) => !item.isScreen);
-  const renderItem = (item) => (
-    <button key={item.id} className={`ssSource ${selected?.id === item.id ? "on" : ""}`} onClick={() => setSelected(item)} title={item.name}>
-      <span className="ssThumb">{item.thumbnail ? <img src={item.thumbnail} alt="" /> : item.isScreen ? <Monitor size={28} /> : <AppWindow size={28} />}</span>
-      <span className="ssSourceName">{item.isScreen ? <Monitor size={13} /> : <AppWindow size={13} />}{item.name}</span>
-    </button>
-  );
-
   return (
     <div className="modalOverlay" onClick={() => !busy && onClose()}>
-      <div className="modalContent rmPicker" onClick={(e) => e.stopPropagation()}>
-        <div className="rmPickerHead">
-          <span className="ttsHeadIcon"><Screencast size={20} weight="fill" /></span>
-          <div className="ttsHeadText">
+      <div className="modalContent dsPicker" onClick={(e) => e.stopPropagation()}>
+        <div className="dsHead">
+          <div>
             <h3>{current ? "Trocar o que você compartilha" : "Compartilhar tela"}</h3>
-            <p>Escolha uma tela inteira ou uma janela.</p>
+            <p>Escolha um aplicativo ou uma tela inteira.</p>
           </div>
-          <button className="ttsIconBtn" onClick={refresh} disabled={loading} title="Atualizar" aria-label="Atualizar"><ArrowClockwise size={17} /></button>
+          <button className="ttsIconBtn" onClick={refresh} disabled={loading} title="Atualizar" aria-label="Atualizar"><ArrowClockwise size={17} className={loading ? "dsSpin" : ""} /></button>
           <button className="ttsIconBtn" onClick={onClose} disabled={busy} aria-label="Fechar"><X size={18} /></button>
         </div>
-        <div className="rmPickerBody">
-          {loading && sources.length === 0 && <p className="ssMuted">Procurando telas e janelas...</p>}
-          {screens.length > 0 && <><span className="ssSubLabel">Telas</span><div className="ssSources">{screens.map(renderItem)}</div></>}
-          {windows.length > 0 && <><span className="ssSubLabel">Janelas abertas</span><div className="ssSources">{windows.map(renderItem)}</div></>}
-          <div className="rmPickerOptions">
-            <div>
-              <span className="ssSubLabel">Qualidade</span>
-              <div className="rmSegment">
-                {Object.values(SCREEN_QUALITIES).map((item) => (
-                  <button key={item.id} className={quality === item.id ? "on" : ""} onClick={() => setQuality(item.id)} title={item.hint}>
-                    <b>{item.label}</b><small>{item.detail}</small>
-                  </button>
-                ))}
-              </div>
+        <div className="dsTabs" role="tablist">
+          <button role="tab" aria-selected={tab === "apps"} className={tab === "apps" ? "on" : ""} onClick={() => setTab("apps")}><AppWindow size={16} /> Aplicativos <em>{apps.length}</em></button>
+          <button role="tab" aria-selected={tab === "screens"} className={tab === "screens" ? "on" : ""} onClick={() => setTab("screens")}><Monitor size={16} /> Telas <em>{screens.length}</em></button>
+        </div>
+        <div className="dsGrid">
+          {list.length === 0 && (
+            <div className="dsEmpty">{loading ? <><span className="ssSpinner" /> Procurando...</> : tab === "apps" ? "Nenhum aplicativo aberto." : "Nenhuma tela encontrada."}</div>
+          )}
+          {list.map((item) => (
+            <button
+              key={item.id}
+              className={`dsCard ${selectedId === item.id ? "on" : ""}`}
+              onClick={() => select(item)}
+              onDoubleClick={() => go(item)}
+              title={item.name}
+            >
+              <span className={`dsThumb ${item.thumbnail ? "" : "loading"}`}>
+                {item.thumbnail ? <img src={item.thumbnail} alt="" /> : item.icon ? <img className="dsBigIcon" src={item.icon} alt="" /> : item.isScreen ? <Monitor size={34} /> : <AppWindow size={34} />}
+              </span>
+              <span className="dsName">
+                {item.icon ? <img src={item.icon} alt="" /> : item.isScreen ? <Monitor size={14} /> : <AppWindow size={14} />}
+                <span>{item.name}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className={`dsOptions ${selected ? "" : "disabled"}`}>
+          <div className="dsOption">
+            <span className="dsLabel">Resolução</span>
+            <div className="dsSegment">
+              {RESOLUTIONS.map((item) => (
+                <button key={item.id} className={resolution === item.id ? "on" : ""} onClick={() => setResolution(item.id)}>{item.label}</button>
+              ))}
             </div>
-            <label className="ssToggleRow">
-              <span>
-                <b>{shareAudio ? <SpeakerHigh size={14} /> : <SpeakerSlash size={14} />} Mandar o som do PC</b>
-                <small>Vai junto tudo o que toca no seu PC, inclusive o Discord. Em call, deixe desligado para não dar eco.</small>
-              </span>
-              <span className="toggleSwitch">
-                <input type="checkbox" checked={shareAudio} onChange={(e) => setShareAudio(e.target.checked)} />
-                <span className="toggleTrack" />
-              </span>
-            </label>
+          </div>
+          <div className="dsOption">
+            <span className="dsLabel">Taxa de quadros</span>
+            <div className="dsSegment">
+              {FRAME_RATES.map((rate) => (
+                <button key={rate} className={fps === rate ? "on" : ""} onClick={() => setFps(rate)}>{rate} FPS</button>
+              ))}
+            </div>
+          </div>
+          <div className="dsOption">
+            <span className="dsLabel">Som</span>
+            <div className="dsSegment">
+              <button className={mode === "none" ? "on" : ""} onClick={() => setAudioMode("none")}><SpeakerSlash size={14} /> Sem som</button>
+              <button className={mode === "app" ? "on" : ""} disabled={selected?.isScreen} onClick={() => setAudioMode("app")} title={selected?.isScreen ? "Escolha um aplicativo para mandar só o som dele" : "Só o som desse aplicativo"}><AppWindow size={14} /> Só deste app</button>
+              <button className={mode === "system" ? "on" : ""} onClick={() => setAudioMode("system")}><SpeakerHigh size={14} /> PC inteiro</button>
+            </div>
           </div>
         </div>
-        <div className="ttsFoot">
+        <div className="dsFoot">
+          <small className="dsNote"><Info size={14} /> O som do Discord e do VozLab nunca vai junto: ninguém ouve eco nem a sua voz.</small>
           <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancelar</button>
-          <button className="btn btn-primary ttsAct" onClick={go} disabled={!selected || busy}>
-            <Broadcast size={16} weight="fill" /> {busy ? "Abrindo..." : current ? "Trocar" : "Ficar ao vivo"}
+          <button className="btn btn-primary dsGo" onClick={() => go()} disabled={!selected || busy}>
+            <Broadcast size={16} weight="fill" /> {busy ? "Abrindo..." : current ? "Trocar" : "Ao vivo"}
           </button>
         </div>
       </div>
@@ -454,11 +491,129 @@ function MemberRow({ member, me, isHostView, watching, onWatch, onOpen }) {
   );
 }
 
-function StreamTile({ member, stream, focused, onFocus, own = false, watchers = 0 }) {
+// ---------- som das telas: volume de 0 a 1000% (WebAudio) ----------
+let playbackContext = null;
+function getPlaybackContext() {
+  if (!playbackContext || playbackContext.state === "closed") playbackContext = new AudioContext({ latencyHint: "interactive" });
+  if (playbackContext.state === "suspended") playbackContext.resume().catch(() => {});
+  return playbackContext;
+}
+
+function useStreamGain(stream, enabled, gainValue) {
+  const gainRef = useRef(null);
+  const audioCount = stream?.getAudioTracks?.().length || 0;
+  useEffect(() => {
+    if (!enabled || !stream || !audioCount) return undefined;
+    const ctx = getPlaybackContext();
+    let source;
+    try {
+      source = ctx.createMediaStreamSource(stream);
+    } catch {
+      return undefined;
+    }
+    const gain = ctx.createGain();
+    gain.gain.value = gainValue;
+    source.connect(gain).connect(ctx.destination);
+    gainRef.current = gain;
+    return () => {
+      try { source.disconnect(); gain.disconnect(); } catch {}
+      if (gainRef.current === gain) gainRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream, enabled, audioCount]);
+  useEffect(() => {
+    if (gainRef.current) gainRef.current.gain.setTargetAtTime(gainValue, gainRef.current.context.currentTime, 0.02);
+  }, [gainValue]);
+}
+
+// ---------- janela fixa (sempre por cima) ----------
+const popouts = new Map();
+function openPopout(member, stream) {
+  const key = member.clientId || member.id;
+  const existing = popouts.get(key);
+  if (existing && !existing.closed) {
+    existing.focus();
+    return;
+  }
+  const win = window.open("", `vozlab-popout-${key}`);
+  if (!win) return;
+  popouts.set(key, win);
+  const doc = win.document;
+  doc.title = `${member.name} - VozLab`;
+  doc.body.innerHTML = "";
+  doc.body.style.cssText = "margin:0;background:#000;overflow:hidden;font-family:Segoe UI,sans-serif";
+  const video = doc.createElement("video");
+  video.autoplay = true;
+  video.muted = true; // o som continua tocando pela janela principal (com o volume escolhido)
+  video.playsInline = true;
+  video.style.cssText = "width:100vw;height:100vh;object-fit:contain;background:#000;display:block";
+  video.srcObject = stream;
+  video.ondblclick = () => (doc.fullscreenElement ? doc.exitFullscreen() : doc.documentElement.requestFullscreen().catch(() => {}));
+  doc.body.appendChild(video);
+  const tag = doc.createElement("div");
+  tag.textContent = `${member.name} · clique duas vezes para tela cheia`;
+  tag.style.cssText = "position:fixed;left:10px;top:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;transition:opacity .4s";
+  doc.body.appendChild(tag);
+  setTimeout(() => { tag.style.opacity = "0"; }, 3000);
+  video.play().catch(() => {});
+}
+
+function closePopout(member) {
+  const key = member.clientId || member.id;
+  const win = popouts.get(key);
+  popouts.delete(key);
+  try { win?.close(); } catch {}
+}
+
+function TileMenu({ x, y, member, own, live, volume, muted, onVolume, onMute, onFullscreen, onPopout, onProfile, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const close = (event) => { if (!ref.current?.contains(event.target)) onClose(); };
+    const key = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
+  }, [onClose]);
+  const left = Math.min(x, window.innerWidth - 260);
+  const top = Math.min(y, window.innerHeight - 330);
+  const percent = Math.round(volume * 100);
+  return (
+    <div ref={ref} className="rmMenu" style={{ left, top }} onContextMenu={(e) => e.preventDefault()}>
+      <div className="rmMenuHead">
+        <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={26} />
+        <b>{own ? "Sua tela" : member.name}</b>
+      </div>
+      {!own && live?.audio && (
+        <div className="rmMenuVolume">
+          <span>Volume da tela <em>{muted ? "mudo" : `${percent}%`}</em></span>
+          <input type="range" min={0} max={10} step={0.05} value={muted ? 0 : volume} onChange={(e) => onVolume(Number(e.target.value))} aria-label="Volume da tela" style={{ "--fill": `${((muted ? 0 : volume) / 10) * 100}%` }} />
+          <div className="rmMenuMarks"><span>0%</span><span>100%</span><span>1000%</span></div>
+        </div>
+      )}
+      {!own && live?.audio && <button onClick={onMute}>{muted ? <SpeakerSimpleHigh size={15} /> : <SpeakerSlash size={15} />} {muted ? "Ativar o som" : "Silenciar"}</button>}
+      <button onClick={onFullscreen}><CornersOut size={15} /> Tela cheia</button>
+      <button onClick={onPopout}><PictureInPicture size={15} /> Abrir em janela fixa</button>
+      {!own && <button onClick={onProfile}><UserCircle size={15} /> Ver perfil</button>}
+      {own ? (
+        <button className="danger" onClick={() => { stopShare(); onClose(); }}><StopCircle size={15} /> Parar de compartilhar</button>
+      ) : (
+        <button className="danger" onClick={() => { unwatch(member.id); onClose(); }}><X size={15} /> Parar de assistir</button>
+      )}
+    </div>
+  );
+}
+
+function StreamTile({ member, stream, focused, onFocus, own = false, watchers = 0, audioSources = [], onOpenProfile }) {
   const tileRef = useRef(null);
   const volumeKey = member.clientId || member.id;
   const [volume, setVolume] = useState(() => readVolume(volumeKey));
   const [muted, setMuted] = useState(false);
+  const [menu, setMenu] = useState(null);
+  const mediaStream = stream?.stream || null;
+  const hasAudio = !own && Boolean(member.live?.audio);
+  useStreamGain(mediaStream, hasAudio, muted ? 0 : volume);
+  useEffect(() => () => { if (!own) closePopout(member); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fullscreen = () => {
     const el = tileRef.current;
     if (!el) return;
@@ -472,32 +627,55 @@ function StreamTile({ member, stream, focused, onFocus, own = false, watchers = 
   };
   const status = own ? "live" : stream?.status;
   return (
-    <div ref={tileRef} className={`rmTile ${focused ? "focused" : ""}`} onClick={() => !focused && onFocus(member.id)}>
-      {(own ? stream?.stream : stream?.stream) && <VideoView stream={stream.stream} className="rmVideo" muted={own || muted || !member.live?.audio} volume={volume} onDoubleClick={fullscreen} />}
+    <div
+      ref={tileRef}
+      className={`rmTile ${focused ? "focused" : ""}`}
+      onClick={() => !focused && onFocus(member.id)}
+      onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
+    >
+      {mediaStream && <VideoView stream={mediaStream} className="rmVideo" muted onDoubleClick={fullscreen} />}
       {status === "connecting" && <div className="rmTileWait"><span className="ssSpinner" /> Abrindo a tela de {member.name}...</div>}
       {status === "error" && <div className="rmTileWait error">{stream.error}</div>}
       <div className="rmTileBar" onClick={(e) => e.stopPropagation()}>
         <span className="rmTileName">
           <span className="rmLivePill small"><span className="ssDot" /> AO VIVO</span>
           <b>{own ? "Você" : member.name}</b>
-          <small>{own ? `${watchers} assistindo` : statText(stream?.stats)}</small>
+          <small>{own ? `${watchers} assistindo${audioSources.length ? ` · som: ${audioSources.join(", ")}` : ""}` : statText(stream?.stats)}</small>
         </span>
-        {!own && member.live?.audio && (
+        {hasAudio && (
           <span className="ssVolume">
             <button className="ssIconBtn light" onClick={() => setMuted((value) => !value)} aria-label={muted ? "Ligar o som" : "Tirar o som"}>
               {muted || volume === 0 ? <SpeakerSlash size={16} /> : <SpeakerSimpleHigh size={16} />}
             </button>
-            <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => changeVolume(Number(e.target.value))} aria-label="Volume" style={{ "--fill": `${(muted ? 0 : volume) * 100}%` }} />
+            <input type="range" min={0} max={2} step={0.05} value={muted ? 0 : Math.min(2, volume)} onChange={(e) => changeVolume(Number(e.target.value))} aria-label="Volume" title="Até 200% aqui; clique com o botão direito para ir até 1000%" style={{ "--fill": `${((muted ? 0 : Math.min(2, volume)) / 2) * 100}%` }} />
           </span>
         )}
+        <button className="ssIconBtn light" onClick={() => openPopout(member, mediaStream)} title="Abrir em janela fixa" aria-label="Abrir em janela fixa"><PictureInPicture size={17} /></button>
         <button className="ssIconBtn light" onClick={fullscreen} title="Tela cheia (ou clique duas vezes)" aria-label="Tela cheia"><CornersOut size={17} /></button>
         {!own && <button className="ssIconBtn light" onClick={() => unwatch(member.id)} title="Parar de assistir" aria-label="Parar de assistir"><X size={16} /></button>}
       </div>
+      {menu && (
+        <TileMenu
+          x={menu.x}
+          y={menu.y}
+          member={member}
+          own={own}
+          live={member.live}
+          volume={volume}
+          muted={muted}
+          onVolume={changeVolume}
+          onMute={() => setMuted((value) => !value)}
+          onFullscreen={() => { setMenu(null); fullscreen(); }}
+          onPopout={() => { setMenu(null); if (mediaStream) openPopout(member, mediaStream); }}
+          onProfile={() => { setMenu(null); onOpenProfile?.(member); }}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
 
-function Stage({ share, setToast, onShare }) {
+function Stage({ share, setToast, onShare, onOpenProfile }) {
   const me = share.me;
   const members = share.members;
   const watchedIds = Object.keys(share.streams);
@@ -510,6 +688,15 @@ function Stage({ share, setToast, onShare }) {
   const focusId = tiles.some((tile) => tile.member.id === share.focus) ? share.focus : tiles[0]?.member.id;
   const focused = tiles.find((tile) => tile.member.id === focusId);
   const others = tiles.filter((tile) => tile !== focused);
+  const tileProps = (tile) => ({
+    member: tile.member,
+    stream: tile.stream,
+    own: tile.own,
+    watchers: share.watchers.length,
+    audioSources: tile.own ? share.share?.audioSources || [] : [],
+    onFocus: setFocus,
+    onOpenProfile
+  });
 
   return (
     <div className="rmStage">
@@ -523,7 +710,7 @@ function Stage({ share, setToast, onShare }) {
                 {liveOthers.map((member) => (
                   <button key={member.id} className="rmLiveCard" onClick={() => watch(member.id)}>
                     <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={40} live />
-                    <span><b>{member.name}</b><small>{member.live.title}{member.live.audio ? " · com som" : ""}</small></span>
+                    <span><b>{member.name}</b><small>{member.live.title}{member.live.quality ? ` · ${member.live.quality}` : ""}{member.live.audio ? " · com som" : ""}</small></span>
                     <span className="rmLiveCardBtn"><Eye size={15} /> Assistir</span>
                   </button>
                 ))}
@@ -539,12 +726,10 @@ function Stage({ share, setToast, onShare }) {
         </div>
       ) : (
         <>
-          {focused && <StreamTile key={`f-${focused.member.id}`} member={focused.member} stream={focused.stream} own={focused.own} focused watchers={share.watchers.length} onFocus={setFocus} />}
+          {focused && <StreamTile key={`f-${focused.member.id}`} {...tileProps(focused)} focused />}
           {(others.length > 0 || notWatched.length > 0) && (
             <div className="rmStrip">
-              {others.map((tile) => (
-                <StreamTile key={`s-${tile.member.id}`} member={tile.member} stream={tile.stream} own={tile.own} watchers={share.watchers.length} onFocus={setFocus} />
-              ))}
+              {others.map((tile) => <StreamTile key={`s-${tile.member.id}`} {...tileProps(tile)} />)}
               {notWatched.map((member) => (
                 <button key={`n-${member.id}`} className="rmStripLive" onClick={() => watch(member.id)}>
                   <Avatar name={member.name} seed={member.clientId} profile={member.profile} size={30} live />
@@ -608,12 +793,12 @@ function SoundAttachment({ attachment, mine, setToast, call }) {
   };
   if (attachment.expired || !attachment.data) return <div className="rmAttach expired">Som que não está mais disponível.</div>;
   return (
-    <div className="rmSound">
+    <div className={`rmSound ${attachment.voice ? "voice" : ""}`}>
       <button className={`rmSoundPlay ${playing ? "on" : ""}`} onClick={toggle} aria-label={playing ? "Parar" : "Ouvir"}>
         {playing ? <Stop size={15} weight="fill" /> : <Play size={15} weight="fill" />}
       </button>
       <div className="rmSoundInfo">
-        <b>{attachment.name}</b>
+        <b>{attachment.voice ? <><Microphone size={12} weight="fill" /> Mensagem de voz</> : attachment.name}</b>
         <span className="rmSoundBar"><span style={{ width: `${progress * 100}%` }} /></span>
         <small>{[formatDuration(attachment.duration), formatBytes(attachment.size)].filter(Boolean).join(" · ")}</small>
       </div>
@@ -714,6 +899,97 @@ function SoundPicker({ sounds, onClose, setToast }) {
   );
 }
 
+// Grava uma mensagem de voz (ate 3 minutos) com o microfone padrao do Windows.
+function VoiceRecorder({ onCancel, onSend, setToast }) {
+  const [seconds, setSeconds] = useState(0);
+  const [level, setLevel] = useState(0);
+  const recorder = useRef(null);
+  const chunks = useRef([]);
+  const media = useRef(null);
+  const sendOnStop = useRef(false);
+  const startedAt = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+    let meterCtx = null;
+    let raf = 0;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        media.current = stream;
+        const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+        const rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 64000 });
+        recorder.current = rec;
+        rec.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
+        rec.onstop = () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const duration = (performance.now() - startedAt.current) / 1000;
+          if (sendOnStop.current) onSend(new Blob(chunks.current, { type: "audio/webm" }), Math.min(MAX_VOICE_SECONDS, duration));
+        };
+        startedAt.current = performance.now();
+        rec.start(250);
+        timer = setInterval(() => {
+          const elapsed = (performance.now() - startedAt.current) / 1000;
+          setSeconds(elapsed);
+          if (elapsed >= MAX_VOICE_SECONDS && rec.state === "recording") {
+            sendOnStop.current = true;
+            rec.stop();
+          }
+        }, 200);
+        // medidor de volume para mostrar que esta captando
+        meterCtx = new AudioContext();
+        const analyser = meterCtx.createAnalyser();
+        analyser.fftSize = 512;
+        meterCtx.createMediaStreamSource(stream).connect(analyser);
+        const data = new Uint8Array(analyser.fftSize);
+        const tick = () => {
+          analyser.getByteTimeDomainData(data);
+          let peak = 0;
+          for (const value of data) peak = Math.max(peak, Math.abs(value - 128));
+          setLevel(peak / 128);
+          raf = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch {
+        setToast?.("Não consegui usar o microfone para gravar.");
+        onCancel();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      cancelAnimationFrame(raf);
+      try { meterCtx?.close(); } catch {}
+      if (recorder.current?.state === "recording") {
+        sendOnStop.current = false;
+        recorder.current.stop();
+      }
+      media.current?.getTracks().forEach((t) => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const finish = () => {
+    if (recorder.current?.state === "recording") {
+      sendOnStop.current = true;
+      recorder.current.stop();
+    }
+  };
+
+  return (
+    <div className="rmRecorder">
+      <span className="rmRecDot" style={{ transform: `scale(${1 + level * 1.4})` }} />
+      <span className="rmRecTime">{formatDuration(seconds) || "0:00"}</span>
+      <span className="rmRecLimit">/ 3:00</span>
+      <span className="rmRecBar"><span style={{ width: `${Math.min(100, (seconds / MAX_VOICE_SECONDS) * 100)}%` }} /></span>
+      <button type="button" className="ssIconBtn" onClick={onCancel} title="Cancelar" aria-label="Cancelar gravação"><Trash size={16} /></button>
+      <button type="button" className="rmRecSend" onClick={finish} title="Enviar" aria-label="Enviar gravação"><PaperPlaneRight size={16} weight="fill" /></button>
+    </div>
+  );
+}
+
 function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
   const [text, setText] = useState("");
   const [menu, setMenu] = useState(false);
@@ -721,8 +997,21 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
   const [lightbox, setLightbox] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
   const listRef = useRef(null);
   const fileRef = useRef(null);
+  const audioFileRef = useRef(null);
+
+  const sendAudio = async (blob, options) => {
+    setSending(true);
+    try {
+      await sendAudioBlob(blob, options);
+    } catch (error) {
+      setToast?.(error.message);
+    } finally {
+      setSending(false);
+    }
+  };
   useEffect(() => {
     setChatVisible(true);
     return () => setChatVisible(false);
@@ -793,12 +1082,35 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
             <div className="rmAttachMenu" onMouseLeave={() => setMenu(false)}>
               <button type="button" onClick={() => { setMenu(false); fileRef.current?.click(); }}><ImageSquare size={16} /> Imagem</button>
               <button type="button" onClick={() => { setMenu(false); setSoundPicker(true); }}><MusicNotes size={16} /> Som do soundboard</button>
+              <button type="button" onClick={() => { setMenu(false); audioFileRef.current?.click(); }}><FileAudio size={16} /> Arquivo de áudio (até 3 min)</button>
+              <button type="button" onClick={() => { setMenu(false); setRecording(true); }}><Microphone size={16} /> Gravar mensagem de voz</button>
             </div>
           )}
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { sendImages(e.target.files); e.target.value = ""; }} />
+          <input
+            ref={audioFileRef}
+            type="file"
+            accept="audio/*"
+            hidden
+            onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) sendAudio(file, { name: file.name.replace(/\.[^.]+$/, "") }); }}
+          />
         </div>
-        <input value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} placeholder={`Conversar na ${share.room?.name || "sala"}`} maxLength={500} />
-        <button type="submit" className="ssIconBtn" disabled={!text.trim()} aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
+        {recording ? (
+          <VoiceRecorder
+            setToast={setToast}
+            onCancel={() => setRecording(false)}
+            onSend={(blob, duration) => { setRecording(false); sendAudio(blob, { name: "Mensagem de voz", voice: true, duration }); }}
+          />
+        ) : (
+          <>
+            <input value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} placeholder={`Conversar na ${share.room?.name || "sala"}`} maxLength={500} />
+            {text.trim() ? (
+              <button type="submit" className="ssIconBtn" aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
+            ) : (
+              <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 3 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
+            )}
+          </>
+        )}
       </form>
       {soundPicker && <SoundPicker sounds={sounds} onClose={() => setSoundPicker(false)} setToast={setToast} />}
       {lightbox && <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} setToast={setToast} />}
@@ -854,7 +1166,6 @@ function Reactions({ reactions }) {
 function RoomView({ share, setToast, sounds, call }) {
   const [picker, setPicker] = useState(false);
   const [profileOf, setProfileOf] = useState(null);
-  const [entryOn, setEntryOn] = useState(readEntrySoundsEnabled);
   const room = share.room;
   const meMember = share.members.find((member) => member.id === share.me);
   const hostMember = share.members.find((member) => member.isHost);
@@ -870,12 +1181,6 @@ function RoomView({ share, setToast, sounds, call }) {
   }, []);
 
   const toggleWatch = (id) => (share.streams[id] ? unwatch(id) : watch(id));
-  const toggleEntry = () => {
-    const next = !entryOn;
-    setEntryOn(next);
-    setEntrySoundsEnabled(next);
-    setToast?.(next ? "Sons de entrada ligados." : "Sons de entrada desligados.");
-  };
 
   return (
     <div className="rmRoom">
@@ -886,9 +1191,6 @@ function RoomView({ share, setToast, sounds, call }) {
           {hostMember && <span className="rmHostTag"><Crown size={12} weight="fill" /> {hostMember.id === share.me ? "Você é o host" : `Host: ${hostMember.name}`}</span>}
           {share.reconnecting && <span className="rmReconnecting"><span className="ssSpinner tiny" /> Reconectando...</span>}
         </div>
-        <button className={`rmTopIcon ${entryOn ? "on" : ""}`} onClick={toggleEntry} title={entryOn ? "Sons de entrada ligados (clique para desligar)" : "Sons de entrada desligados (clique para ligar)"} aria-label="Sons de entrada">
-          {entryOn ? <BellRinging size={17} weight="fill" /> : <BellSlash size={17} />}
-        </button>
         {inviteIp && inviteIp !== "127.0.0.1" && (
           <button className="rmInvite" onClick={() => copy(inviteIp, setToast)} title="Copiar o IP para quem não vê a sala sozinho">
             <Copy size={13} /> {inviteIp}
@@ -915,7 +1217,7 @@ function RoomView({ share, setToast, sounds, call }) {
 
         <div className="rmCenter">
           <div className="rmStageWrap">
-            <Stage share={share} setToast={setToast} onShare={() => setPicker(true)} />
+            <Stage share={share} setToast={setToast} onShare={() => setPicker(true)} onOpenProfile={(member) => setProfileOf(member.id)} />
             <Reactions reactions={share.reactions || []} />
           </div>
           <div className="rmControls">
@@ -924,7 +1226,7 @@ function RoomView({ share, setToast, sounds, call }) {
                 <span className="rmLiveInfo">
                   <span className="rmLivePill"><span className="ssDot" /> AO VIVO</span>
                   <b>{share.share.sourceName}</b>
-                  <small>{SCREEN_QUALITIES[share.share.quality]?.label} · {share.watchers.length} assistindo{share.share.hasAudio ? " · com som" : ""}</small>
+                  <small>{share.share.label} · {share.watchers.length} assistindo{share.share.hasAudio ? ` · som: ${share.share.audioSources?.length ? share.share.audioSources.join(", ") : share.share.audioMode === "app" ? "do app" : "do PC"}` : " · sem som"}</small>
                 </span>
               </>
             ) : (

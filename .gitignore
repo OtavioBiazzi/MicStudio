@@ -3,6 +3,7 @@ node_modules/
 build/*
 !build/installer.nsh
 !build/validate-backend.cjs
+!build/build-audiotap.cjs
 __pycache__/
 *.py[cod]
 
@@ -11,6 +12,7 @@ dist/
 studio-dist/
 studio-release/
 backend-dist/
+native-dist/
 pacotes/
 
 # Temporary run/log files

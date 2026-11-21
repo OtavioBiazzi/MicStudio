@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   X, Play, Minus, Trash, Star, UploadSimple, FolderOpen, MagnifyingGlass,
   Pencil, Waveform, MusicNotes, ArrowClockwise, ArrowCounterClockwise,
-  StopCircle, Sparkle, YoutubeLogo, PushPin, Microphone, Eraser
+  StopCircle, Sparkle, YoutubeLogo, PushPin, Microphone, Eraser, ImageSquare
 } from "@phosphor-icons/react";
 import {
   filePathToUrl,
@@ -14,7 +14,7 @@ import {
   EffectSliderRow
 } from "../utils";
 import { useTtsVoices } from "../useTtsVoices";
-import { ProfileCard, ProfilePhoto, AvatarCropper, PROFILE_COLORS } from "./ProfileCard";
+import { ProfileCard, ProfilePhoto, ImageCropper, PROFILE_COLORS, PROFILE_THEMES, profileGradient } from "./ProfileCard";
 
 const playbackModes = [
   { value: "restart", label: "Recomeçar do início", desc: "Tocar de novo recomeça o som do início." },
@@ -527,7 +527,7 @@ function ProfileAvatar({ image, position = 50, size = 72 }) {
 }
 
 // --- UserProfileModal ---
-export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profileImage, profileImagePosition, profileBio, profileReadme, profileColor, stats }) {
+export function UserProfileModal({ onClose, onEdit, profileName, profileSub, profileImage, profileImagePosition, profileAvatarCrop, profileBanner, profileTheme, profileBio, profileReadme, profileColor, stats }) {
   const items = stats ? [
     ["Sons", stats.sounds],
     ["Reproduções", stats.plays],
@@ -547,9 +547,11 @@ export function UserProfileModal({ onClose, onEdit, profileName, profileSub, pro
         transition={{ duration: 0.15 }}
       >
         <ProfileCard
-          profile={{ name: profileName, status: profileSub, bio: profileBio, readme: profileReadme, avatar: profileImage, avatarPosition: profileImagePosition, color: profileColor }}
+          profile={{ name: profileName, status: profileSub, bio: profileBio, readme: profileReadme, avatar: profileImage, avatarPosition: profileImagePosition, avatarCrop: profileAvatarCrop, banner: profileBanner, theme: profileTheme, color: profileColor }}
           stats={items}
           onClose={onClose}
+          onEditAvatar={onEdit}
+          onEditBanner={onEdit}
           actions={<button className="btn btn-ghost ssSmallBtn" onClick={onEdit}><Pencil size={13} /> Editar perfil</button>}
         />
         {!(profileReadme && profileReadme.trim()) && (
@@ -568,6 +570,10 @@ function readFileAsDataUrl(file) {
       reject(new Error("Escolha um arquivo de imagem (PNG, JPG, WEBP ou GIF)."));
       return;
     }
+    if (file.size > 8 * 1024 * 1024) {
+      reject(new Error("Imagem grande demais (máximo 8 MB)."));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error("Não consegui abrir essa imagem."));
@@ -575,39 +581,69 @@ function readFileAsDataUrl(file) {
   });
 }
 
-// --- EditProfileModal ---
-export function EditProfileModal({ onClose, profileName, setProfileName, profileSub, setProfileSub, profileImage, setProfileImage, profileImagePosition, setProfileImagePosition, profileBio, setProfileBio, profileReadme, setProfileReadme, profileColor, setProfileColor, profileEntrySound, setProfileEntrySound, sounds = [] }) {
-  const fileInputRef = useRef(null);
-  const previewRef = useRef(null);
-  const [readmeMode, setReadmeMode] = useState("edit");
-  const [avatarError, setAvatarError] = useState("");
-  const [cropSrc, setCropSrc] = useState("");
-  const [entrySearch, setEntrySearch] = useState("");
+// GIFs e faixas vao para um arquivo do app (sao grandes demais para o armazenamento do navegador).
+async function storeProfileMedia(kind, dataUrl) {
+  const save = window.micfudiddo?.screen?.saveProfileMedia;
+  if (!save) return dataUrl;
+  const filePath = await save({ kind, data: dataUrl });
+  return "file:///" + String(filePath).replace(/\\/g, "/");
+}
 
-  const handleAvatarChange = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+// --- EditProfileModal (no estilo do editor de perfil do Discord) ---
+export function EditProfileModal({
+  onClose, profileName, setProfileName, profileSub, setProfileSub, profileImage, setProfileImage, profileImagePosition,
+  setProfileImagePosition, profileAvatarCrop, setProfileAvatarCrop, profileBanner, setProfileBanner, profileTheme,
+  setProfileTheme, profileBio, setProfileBio, profileReadme, setProfileReadme, profileColor, setProfileColor
+}) {
+  const avatarInput = useRef(null);
+  const bannerInput = useRef(null);
+  const [readmeMode, setReadmeMode] = useState("edit");
+  const [error, setError] = useState("");
+  const [cropper, setCropper] = useState(null); // { shape, src, isGif, crop }
+  const [busy, setBusy] = useState(false);
+
+  const pick = async (event, shape) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
     try {
-      setAvatarError("");
-      setCropSrc(await readFileAsDataUrl(file));
-    } catch (error) {
-      setAvatarError(error.message);
+      setError("");
+      const src = await readFileAsDataUrl(file);
+      const isGif = file.type === "image/gif";
+      if (isGif && shape === "circle" && file.size > 1000 * 1024) setError("GIFs de foto acima de 1 MB aparecem parados para os amigos na sala.");
+      if (isGif && shape === "banner" && file.size > 2500 * 1024) setError("GIFs de faixa acima de 2,5 MB aparecem parados para os amigos na sala.");
+      setCropper({ shape, src, isGif, crop: null });
+    } catch (err) {
+      setError(err.message);
     }
   };
 
-  const previewEntry = (sound) => {
+  const applyCrop = async (result) => {
+    const target = cropper;
+    setCropper(null);
+    setBusy(true);
     try {
-      previewRef.current?.pause();
-      if (!sound?.path) return;
-      const audio = new Audio(filePathToUrl(sound.path));
-      audio.volume = 0.6;
-      previewRef.current = audio;
-      audio.play().catch(() => {});
-      setTimeout(() => { if (previewRef.current === audio) audio.pause(); }, 7000);
-    } catch {}
+      if (target.shape === "circle") {
+        // Foto parada (ja recortada) fica no armazenamento normal; GIF vai para arquivo e guarda o ajuste.
+        const src = result.isGif ? (result.data.startsWith("data:") ? await storeProfileMedia("avatar", result.data) : result.data) : result.data;
+        setProfileImage(src);
+        setProfileAvatarCrop(result.isGif ? result.crop : null);
+        setProfileImagePosition("50");
+      } else {
+        const src = result.data.startsWith("data:") ? await storeProfileMedia("banner", result.data) : result.data;
+        setProfileBanner({ src, crop: result.isGif ? result.crop : null, gif: Boolean(result.isGif) });
+      }
+    } catch (err) {
+      setError(err.message || "Não consegui salvar a imagem.");
+    } finally {
+      setBusy(false);
+    }
   };
-  useEffect(() => () => previewRef.current?.pause(), []);
+
+  const adjust = (shape) => {
+    if (shape === "circle" && profileImage) setCropper({ shape, src: profileImage, isGif: Boolean(profileAvatarCrop) || /\.gif$/i.test(profileImage), crop: profileAvatarCrop });
+    if (shape === "banner" && profileBanner?.src) setCropper({ shape, src: profileBanner.src, isGif: Boolean(profileBanner.gif), crop: profileBanner.crop });
+  };
 
   const field = (label, value, setValue, { max, placeholder, hint } = {}) => (
     <div className="labField">
@@ -617,85 +653,88 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
     </div>
   );
 
-  const query = entrySearch.trim().toLowerCase();
-  const entryOptions = (sounds || []).filter((sound) => sound.path && (!query || String(sound.name || "").toLowerCase().includes(query))).slice(0, 40);
+  const previewProfile = {
+    name: profileName, status: profileSub, bio: profileBio, readme: profileReadme, avatar: profileImage,
+    avatarPosition: profileImagePosition, avatarCrop: profileAvatarCrop, banner: profileBanner, theme: profileTheme, color: profileColor
+  };
 
   return (
     <div className="modalOverlay" onClick={onClose}>
       <motion.div
-        className="modalContent accountModal editProfileModal pfEditModal"
+        className="modalContent pfEditor"
         onClick={(e) => e.stopPropagation()}
-        initial={{ scale: 0.95, opacity: 0 }}
+        initial={{ scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
+        exit={{ scale: 0.97, opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        <div className="modalHeader">
-          <h3>Editar perfil</h3>
-          <button className="closeBtn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
-        </div>
+        <aside className="pfEditorSide">
+          <div className="pfEditorTitle">Editar perfil {busy && <span className="ssSpinner tiny" />}</div>
 
-        <div className="pfEditGrid">
-          <div className="pfEditForm">
-            <div className="labField">
-              <label>Foto</label>
-              <div className="pfPhotoRow">
-                <ProfilePhoto image={profileImage} position={profileImagePosition} name={profileName} color={profileColor} size={56} />
-                <button className="btn btn-ghost ssSmallBtn" onClick={() => fileInputRef.current?.click()}>Trocar foto</button>
-                {profileImage && <button className="btn btn-ghost ssSmallBtn" onClick={() => setCropSrc(profileImage)}>Ajustar</button>}
-                {profileImage && <button className="btn btn-ghost ssSmallBtn danger" onClick={() => setProfileImage("")}>Remover</button>}
-                <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
+          <section className="pfEditorSection">
+            <span className="pfEditorLabel">Avatar</span>
+            <div className="pfEditorTiles">
+              <button className="pfTile" onClick={() => avatarInput.current?.click()} title="Trocar foto (aceita GIF)">
+                <ProfilePhoto image={profileImage} position={profileImagePosition} crop={profileAvatarCrop} name={profileName} color={profileColor} size={58} />
+              </button>
+              <div className="pfTileActions">
+                <button className="btn btn-ghost ssSmallBtn" onClick={() => avatarInput.current?.click()}>Trocar</button>
+                {profileImage && <button className="btn btn-ghost ssSmallBtn" onClick={() => adjust("circle")}>Ajustar</button>}
+                {profileImage && <button className="btn btn-ghost ssSmallBtn danger" onClick={() => { setProfileImage(""); setProfileAvatarCrop(null); }}>Remover</button>}
               </div>
-              {avatarError && <small style={{ color: "var(--danger)" }}>{avatarError}</small>}
             </div>
+            <small className="selectHint">Aceita GIF animado.</small>
+            <input type="file" ref={avatarInput} accept="image/*" hidden onChange={(e) => pick(e, "circle")} />
+          </section>
 
+          <section className="pfEditorSection">
+            <span className="pfEditorLabel">Faixa do perfil</span>
+            <button className={`pfBannerPick ${profileBanner?.src ? "has" : ""}`} onClick={() => bannerInput.current?.click()} style={profileBanner?.src ? undefined : { background: profileGradient(profileColor) }}>
+              {profileBanner?.src && <span className="pfBannerClip"><img src={profileBanner.src} alt="" style={profileBanner.crop ? { transform: `translate(${profileBanner.crop.x * 100}%, ${profileBanner.crop.y * 100}%) scale(${profileBanner.crop.zoom})` } : undefined} /></span>}
+              <span className="pfBannerPickHint"><ImageSquare size={16} /> {profileBanner?.src ? "Trocar imagem" : "Pôr imagem ou GIF"}</span>
+            </button>
+            {profileBanner?.src && (
+              <div className="pfTileActions">
+                <button className="btn btn-ghost ssSmallBtn" onClick={() => adjust("banner")}>Ajustar</button>
+                <button className="btn btn-ghost ssSmallBtn danger" onClick={() => setProfileBanner(null)}>Tirar imagem</button>
+              </div>
+            )}
+            <div className="pfSwatches">
+              {Object.entries(PROFILE_COLORS).map(([key, tone]) => (
+                <button key={key} className={`pfSwatch ${profileColor === key && !profileBanner?.src ? "on" : ""}`} style={{ background: `linear-gradient(135deg, ${tone.from}, ${tone.to})` }} onClick={() => { setProfileColor(key); }} title={tone.label} aria-label={tone.label} />
+              ))}
+            </div>
+            <input type="file" ref={bannerInput} accept="image/*" hidden onChange={(e) => pick(e, "banner")} />
+          </section>
+
+          <section className="pfEditorSection">
+            <span className="pfEditorLabel">Tema do perfil</span>
+            <div className="pfThemes">
+              <button className={`pfThemeChip none ${!profileTheme ? "on" : ""}`} onClick={() => setProfileTheme(null)} title="Sem tema">Sem tema</button>
+              {PROFILE_THEMES.map((theme) => (
+                <button
+                  key={theme.label}
+                  className={`pfThemeChip ${profileTheme?.primary === theme.primary && profileTheme?.accent === theme.accent ? "on" : ""}`}
+                  style={{ background: `linear-gradient(160deg, ${theme.primary}, ${theme.accent})` }}
+                  onClick={() => setProfileTheme({ primary: theme.primary, accent: theme.accent })}
+                  title={theme.label}
+                  aria-label={theme.label}
+                />
+              ))}
+            </div>
+            <div className="pfThemeCustom">
+              <label>Cor de cima <input type="color" value={profileTheme?.primary || "#8b5cf6"} onChange={(e) => setProfileTheme({ primary: e.target.value, accent: profileTheme?.accent || "#ec4899" })} /></label>
+              <label>Cor de baixo <input type="color" value={profileTheme?.accent || "#ec4899"} onChange={(e) => setProfileTheme({ primary: profileTheme?.primary || "#8b5cf6", accent: e.target.value })} /></label>
+            </div>
+          </section>
+
+          <section className="pfEditorSection">
             {field("Nome", profileName, setProfileName, { max: 24, placeholder: "Como você quer ser chamado" })}
-            {field("Status", profileSub, setProfileSub, { max: 60, placeholder: "Ex.: Jogando Valorant", hint: "Aparece embaixo do seu nome, aqui e nas salas." })}
+            {field("Status", profileSub, setProfileSub, { max: 60, placeholder: "Ex.: Jogando Valorant 🎯" })}
             {field("Frase curta", profileBio, setProfileBio, { max: 90, placeholder: "Uma linha sobre você" })}
+          </section>
 
-            <div className="labField">
-              <label>Cor do cartão</label>
-              <div className="pfSwatches">
-                {Object.entries(PROFILE_COLORS).map(([key, tone]) => (
-                  <button
-                    key={key}
-                    className={`pfSwatch ${profileColor === key ? "on" : ""}`}
-                    style={{ background: `linear-gradient(135deg, ${tone.from}, ${tone.to})` }}
-                    onClick={() => setProfileColor(key)}
-                    title={tone.label}
-                    aria-label={tone.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="labField">
-              <label>Som de entrada nas salas <span className="fieldCount">{profileEntrySound ? "ligado" : "nenhum"}</span></label>
-              <small className="selectHint">Toca para os amigos quando você entra numa sala (até 7 segundos; sons pequenos, até 650 KB).</small>
-              {profileEntrySound ? (
-                <div className="pfEntryChosen">
-                  <MusicNotes size={16} weight="fill" />
-                  <b>{profileEntrySound.name}</b>
-                  <button className="ssIconBtn" onClick={() => previewEntry(profileEntrySound)} title="Ouvir" aria-label="Ouvir"><Play size={14} weight="fill" /></button>
-                  <button className="ssIconBtn" onClick={() => setProfileEntrySound(null)} title="Tirar" aria-label="Tirar"><X size={14} /></button>
-                </div>
-              ) : (
-                <>
-                  <input type="text" value={entrySearch} onChange={(e) => setEntrySearch(e.target.value)} placeholder="Procurar um som do seu soundboard" />
-                  <div className="pfEntryList">
-                    {entryOptions.length === 0 && <small className="selectHint">Nenhum som encontrado.</small>}
-                    {entryOptions.map((sound) => (
-                      <div key={sound.id} className="pfEntryItem">
-                        <button className="ssIconBtn" onClick={() => previewEntry(sound)} title="Ouvir" aria-label="Ouvir"><Play size={13} weight="fill" /></button>
-                        <span>{sound.name}</span>
-                        <button className="btn btn-ghost ssSmallBtn" onClick={() => { previewRef.current?.pause(); setProfileEntrySound({ id: sound.id, name: sound.name, path: sound.path }); }}>Usar</button>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
+          <section className="pfEditorSection">
             <div className="labField">
               <label>
                 Sobre mim (aceita Markdown)
@@ -716,24 +755,32 @@ export function EditProfileModal({ onClose, profileName, setProfileName, profile
                 <div className="readme-container profileReadme">{renderMarkdown(profileReadme || "")}</div>
               )}
             </div>
-          </div>
+          </section>
+          {error && <div className="ssWarn">{error}</div>}
+        </aside>
 
-          <div className="pfEditPreview">
-            <span className="ssLabel">Como os amigos te veem</span>
-            <ProfileCard profile={{ name: profileName, status: profileSub, bio: profileBio, readme: "", avatar: profileImage, avatarPosition: profileImagePosition, color: profileColor }} />
+        <div className="pfEditorPreview">
+          <button className="pfEditorClose" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+          <span className="ssLabel">Prévia: é assim que os amigos te veem</span>
+          <div className="pfEditorCard">
+            <ProfileCard
+              profile={previewProfile}
+              onEditAvatar={() => avatarInput.current?.click()}
+              onEditBanner={() => bannerInput.current?.click()}
+            />
           </div>
-        </div>
-
-        <div className="modalFooter" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 16 }}>
-          <small style={{ color: "var(--text-muted)" }}>As alterações são salvas na hora.</small>
-          <button className="btn btn-primary" onClick={onClose} style={{ padding: "6px 18px", fontSize: 12 }}>Pronto</button>
+          <small className="selectHint">Passe o mouse na foto ou na faixa para trocar. Tudo é salvo na hora.</small>
+          <button className="btn btn-primary pfEditorDone" onClick={onClose}>Pronto</button>
         </div>
       </motion.div>
-      {cropSrc && (
-        <AvatarCropper
-          src={cropSrc}
-          onCancel={() => setCropSrc("")}
-          onApply={(dataUrl) => { setProfileImage(dataUrl); setProfileImagePosition("50"); setCropSrc(""); }}
+      {cropper && (
+        <ImageCropper
+          src={cropper.src}
+          isGif={cropper.isGif}
+          shape={cropper.shape}
+          initialCrop={cropper.crop}
+          onCancel={() => setCropper(null)}
+          onApply={applyCrop}
         />
       )}
     </div>
@@ -1582,6 +1629,27 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.8.0": `### Versão 2.8.0
+
+**Compartilhar tela igual ao Discord**
+- A janela de compartilhar agora é separada em **Aplicativos** e **Telas** e abre na hora (os nomes e ícones aparecem primeiro, as miniaturas logo depois).
+- Depois de escolher, você define a **resolução** (720p, 1080p, 1440p ou Original) e os **FPS** (15, 30 ou 60). Clique duas vezes num app para ficar ao vivo direto.
+- **Som da transmissão:** "Sem som", "Só deste app" (só o som do aplicativo compartilhado) ou "PC inteiro". O som do **Discord** e do **VozLab** nunca vai junto, então ninguém ouve eco nem a sua própria voz. Na sala aparece de quais apps o som está vindo.
+- **Botão direito numa tela:** volume de 0 a **1000%**, silenciar, tela cheia, **abrir em janela fixa** (fica sempre por cima dos outros programas), ver perfil e parar de assistir.
+
+**Perfil estilo Nitro**
+- **Faixa com imagem ou GIF**, com ajuste de arrastar e zoom, além das cores.
+- **Foto animada (GIF)**: o ajuste de posição e zoom funciona sem perder a animação.
+- **Tema do perfil**: o cartão inteiro com duas cores (temas prontos ou cores à sua escolha).
+- Editor novo no estilo do Discord: opções do lado e a prévia do cartão do outro. Passe o mouse na foto ou na faixa para trocar.
+- **Corrigido:** fotos antigas grandes não apareciam para os amigos na sala. Agora elas são reduzidas antes de enviar.
+
+**Chat da sala**
+- **Mensagem de voz** de até 3 minutos: clique no microfone do lado da caixa de texto.
+- **Arquivo de áudio** do PC (até 3 minutos) pelo botão +.
+- Saiu o som de entrada nas salas.
+- Todos precisam estar na **2.8.0**.
+`,
   "v2.7.0": `### Versão 2.7.0
 
 **Perfis mais legais**

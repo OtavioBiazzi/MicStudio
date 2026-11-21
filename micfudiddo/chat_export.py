@@ -1,6 +1,6 @@
 """Prepara um som do soundboard para mandar no chat das salas.
 
-Sons do soundboard podem ser WAV enormes; o chat aceita ate ~6 MB. Aqui o som vira um MP3 leve (ate 3 minutos),
+Sons do soundboard podem ser WAV enormes; o chat aceita ate ~6 MB. Aqui o som vira um MP3 leve (ate 5 minutos),
 com o ffmpeg que ja vem junto com o app. O resultado fica num cache e e reaproveitado enquanto o arquivo nao mudar.
 """
 
@@ -10,9 +10,9 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-MAX_SECONDS = 180
+MAX_SECONDS = 300
 BITRATE = "128k"
-MAX_BYTES = 6 * 1024 * 1024
+MAX_BYTES = 7 * 1024 * 1024
 
 
 def _ffmpeg() -> str | None:
@@ -25,7 +25,7 @@ def _ffmpeg() -> str | None:
 
 
 def chat_export(source: str, cache_dir: Path, duration: float = 0.0, ffmpeg: str | None = None, run=subprocess.run) -> dict:
-    """Converte `source` para MP3 de ate 3 minutos. Devolve {path, trimmed, duration}."""
+    """Converte `source` para MP3 de ate 5 minutos. Devolve {path, trimmed, duration}."""
     src = Path(source)
     if not src.is_file():
         raise RuntimeError("Nao achei o arquivo desse som.")

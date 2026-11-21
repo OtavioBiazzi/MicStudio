@@ -956,7 +956,7 @@ function SoundPicker({ sounds, onClose, setToast, call }) {
     try {
       previewRef.current?.pause();
       const result = await sendSound(sound, call);
-      if (result?.trimmed) setToast?.("Esse som passa de 3 minutos: foram só os 3 primeiros.");
+      if (result?.trimmed) setToast?.("Esse som passa de 5 minutos: foram só os 5 primeiros.");
       onClose();
     } catch (error) {
       setToast?.(error.message);
@@ -968,7 +968,7 @@ function SoundPicker({ sounds, onClose, setToast, call }) {
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent rmModal rmSoundPicker" onClick={(e) => e.stopPropagation()}>
         <div className="rmModalHead"><MusicNotes size={18} weight="fill" /> <b>Mandar um som no chat</b></div>
-        <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Sons de até 3 minutos (os mais longos vão só com os 3 primeiros).</p>
+        <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Sons de até 5 minutos (os mais longos vão só com os 5 primeiros).</p>
         <label className="ssSearch rmSoundSearch">
           <MagnifyingGlass size={14} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procurar no seu soundboard" autoFocus />
@@ -979,7 +979,7 @@ function SoundPicker({ sounds, onClose, setToast, call }) {
             <div key={sound.id} className="rmSoundRow">
               <button className="ssIconBtn" onClick={() => preview(sound)} aria-label="Ouvir"><Play size={13} weight="fill" /></button>
               <span>{sound.name}</span>
-              {Number(sound.duration) > 0 && <small className="rmSoundLen">{formatDuration(Math.min(Number(sound.duration), 600))}{Number(sound.duration) > MAX_VOICE_SECONDS ? " · vai até 3:00" : ""}</small>}
+              {Number(sound.duration) > 0 && <small className="rmSoundLen">{formatDuration(Math.min(Number(sound.duration), 600))}{Number(sound.duration) > MAX_VOICE_SECONDS ? " · vai até 5:00" : ""}</small>}
               <button className="btn btn-primary ssSmallBtn" disabled={Boolean(sending)} onClick={() => send(sound)}>
                 {sending === sound.id ? "Enviando..." : <><PaperPlaneRight size={13} weight="fill" /> Mandar</>}
               </button>
@@ -992,7 +992,7 @@ function SoundPicker({ sounds, onClose, setToast, call }) {
   );
 }
 
-// Grava uma mensagem de voz (ate 3 minutos) com o microfone padrao do Windows.
+// Grava uma mensagem de voz (ate 5 minutos) com o microfone padrao do Windows.
 function VoiceRecorder({ onCancel, onSend, setToast }) {
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
@@ -1075,7 +1075,7 @@ function VoiceRecorder({ onCancel, onSend, setToast }) {
     <div className="rmRecorder">
       <span className="rmRecDot" style={{ transform: `scale(${1 + level * 1.4})` }} />
       <span className="rmRecTime">{formatDuration(seconds) || "0:00"}</span>
-      <span className="rmRecLimit">/ 3:00</span>
+      <span className="rmRecLimit">/ 5:00</span>
       <span className="rmRecBar"><span style={{ width: `${Math.min(100, (seconds / MAX_VOICE_SECONDS) * 100)}%` }} /></span>
       <button type="button" className="ssIconBtn" onClick={onCancel} title="Cancelar" aria-label="Cancelar gravação"><Trash size={16} /></button>
       <button type="button" className="rmRecSend" onClick={finish} title="Enviar" aria-label="Enviar gravação"><PaperPlaneRight size={16} weight="fill" /></button>
@@ -1175,7 +1175,7 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
             <div className="rmAttachMenu" onMouseLeave={() => setMenu(false)}>
               <button type="button" onClick={() => { setMenu(false); fileRef.current?.click(); }}><ImageSquare size={16} /> Imagem</button>
               <button type="button" onClick={() => { setMenu(false); setSoundPicker(true); }}><MusicNotes size={16} /> Som do soundboard</button>
-              <button type="button" onClick={() => { setMenu(false); audioFileRef.current?.click(); }}><FileAudio size={16} /> Arquivo de áudio (até 3 min)</button>
+              <button type="button" onClick={() => { setMenu(false); audioFileRef.current?.click(); }}><FileAudio size={16} /> Arquivo de áudio (até 5 min)</button>
               <button type="button" onClick={() => { setMenu(false); setRecording(true); }}><Microphone size={16} /> Gravar mensagem de voz</button>
             </div>
           )}
@@ -1201,8 +1201,8 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
               <button type="submit" className="ssIconBtn" aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
             ) : (
               <>
-                <button type="button" className="ssIconBtn" onClick={() => setSoundPicker(true)} title="Mandar um som do seu soundboard (até 3 min)" aria-label="Mandar som do soundboard" disabled={sending}><MusicNotes size={17} weight="fill" /></button>
-                <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 3 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
+                <button type="button" className="ssIconBtn" onClick={() => setSoundPicker(true)} title="Mandar um som do seu soundboard (até 5 min)" aria-label="Mandar som do soundboard" disabled={sending}><MusicNotes size={17} weight="fill" /></button>
+                <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 5 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
               </>
             )}
           </>

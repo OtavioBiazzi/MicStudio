@@ -1644,6 +1644,12 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.8.2": `### Versão 2.8.2
+
+**Áudios de até 5 minutos no chat**
+- Sons do seu soundboard, mensagens de voz e arquivos de áudio agora podem ter até **5 minutos** (antes eram 3).
+- Sons do soundboard mais longos vão só com os 5 primeiros minutos.
+`,
   "v2.8.1": `### Versão 2.8.1
 
 **Sons do seu soundboard no chat (até 3 minutos)**

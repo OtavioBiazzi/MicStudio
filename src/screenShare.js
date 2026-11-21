@@ -34,8 +34,8 @@ export function streamPreset(resolution = "1080", fps = 30) {
 export const DEFAULT_ROOM = { id: "padrao", name: "Sala da galera" };
 export const MAX_WATCHERS = 6;
 export const REACTIONS = ["🔥", "😂", "👏", "😮", "💀", "❤️", "🤡", "👀"];
-export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
-export const MAX_VOICE_SECONDS = 180;
+export const MAX_ATTACHMENT_BYTES = 7.5 * 1024 * 1024;
+export const MAX_VOICE_SECONDS = 300;
 const PORT = 47920;
 const WS_PATH = "/vozlab/ws";
 const HOST_PREFS_KEY = "vozlab.screen.host";
@@ -700,7 +700,7 @@ function loadImage(src) {
 async function prepareImage(file) {
   if (!file?.type?.startsWith("image/")) throw new Error("Escolha uma imagem (PNG, JPG, WEBP ou GIF).");
   if (file.type === "image/gif") {
-    if (file.size > MAX_ATTACHMENT_BYTES) throw new Error("GIF grande demais (máximo 6 MB).");
+    if (file.size > MAX_ATTACHMENT_BYTES) throw new Error("GIF grande demais (máximo 7,5 MB).");
     const data = await fileToDataUrl(file);
     const image = await loadImage(data);
     return { data, width: image.naturalWidth, height: image.naturalHeight };
@@ -730,7 +730,7 @@ export async function sendImage(file, text = "") {
   send({ t: "chat", text: String(text || "").slice(0, 500), attachment: { kind: "image", name: file.name || "imagem", data, width, height } });
 }
 
-// Som do soundboard no chat: o backend converte para um MP3 leve de ate 3 minutos (WAVs grandes cabem).
+// Som do soundboard no chat: o backend converte para um MP3 leve de ate 5 minutos (WAVs grandes cabem).
 export async function sendSound(sound, call) {
   if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
   if (!sound?.path) throw new Error("Esse som não tem arquivo.");
@@ -773,14 +773,14 @@ function audioDuration(src) {
   });
 }
 
-// Audio gravado na hora (mensagem de voz) ou arquivo de audio do PC: ate 3 minutos.
+// Audio gravado na hora (mensagem de voz) ou arquivo de audio do PC: ate 5 minutos.
 export async function sendAudioBlob(blob, { name = "audio", voice = false, duration = 0 } = {}) {
   if (state.phase !== "room") throw new Error("Entre numa sala primeiro.");
   if (!blob?.type?.startsWith("audio/") && !voice) throw new Error("Escolha um arquivo de áudio.");
-  if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error("Áudio grande demais (máximo 6 MB). Use MP3, OGG ou M4A.");
+  if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error("Áudio grande demais (máximo 7,5 MB). Use MP3, OGG ou M4A.");
   const data = await fileToDataUrl(blob.type ? blob : new Blob([blob], { type: "audio/webm" }));
   const seconds = duration || (await audioDuration(data));
-  if (seconds > MAX_VOICE_SECONDS + 1) throw new Error("Áudio longo demais (máximo 3 minutos).");
+  if (seconds > MAX_VOICE_SECONDS + 1) throw new Error("Áudio longo demais (máximo 5 minutos).");
   send({ t: "chat", text: "", attachment: { kind: "sound", name, data, duration: seconds, voice } });
 }
 

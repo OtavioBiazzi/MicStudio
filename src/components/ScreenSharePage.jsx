@@ -971,7 +971,7 @@ function SoundPicker({ sounds, onClose, setToast, call }) {
         <p className="ssMuted small">Os amigos ouvem no chat e podem salvar no soundboard deles. Sons de até 5 minutos (os mais longos vão só com os 5 primeiros).</p>
         <label className="ssSearch rmSoundSearch">
           <MagnifyingGlass size={14} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procurar no seu soundboard" autoFocus />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procurar no seu soundboard" />
         </label>
         <div className="rmSoundList">
           {list.length === 0 && <p className="ssMuted small">Nenhum som encontrado.</p>}
@@ -1200,10 +1200,7 @@ function ChatPanel({ share, sounds, setToast, call, onOpenProfile }) {
             {text.trim() ? (
               <button type="submit" className="ssIconBtn" aria-label="Enviar"><PaperPlaneRight size={17} weight="fill" /></button>
             ) : (
-              <>
-                <button type="button" className="ssIconBtn" onClick={() => setSoundPicker(true)} title="Mandar um som do seu soundboard (até 5 min)" aria-label="Mandar som do soundboard" disabled={sending}><MusicNotes size={17} weight="fill" /></button>
-                <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 5 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
-              </>
+              <button type="button" className="ssIconBtn" onClick={() => setRecording(true)} title="Gravar mensagem de voz (até 5 min)" aria-label="Gravar mensagem de voz" disabled={sending}><Microphone size={17} weight="fill" /></button>
             )}
           </>
         )}

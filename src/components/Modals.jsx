@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   X, Play, Minus, Trash, Star, UploadSimple, FolderOpen, MagnifyingGlass,
   Pencil, Waveform, MusicNotes, ArrowClockwise, ArrowCounterClockwise,
-  StopCircle, Sparkle, YoutubeLogo, PushPin, Microphone, Eraser, ImageSquare
+  StopCircle, Sparkle, YoutubeLogo, PushPin, Microphone, Eraser, ImageSquare, DownloadSimple
 } from "@phosphor-icons/react";
 import {
   filePathToUrl,
@@ -1644,6 +1644,23 @@ export function AdvancedSoundEditorModal({ state, selected, onClose, call, setTo
 }
 
 const LOCAL_CHANGELOGS = {
+  "v2.8.4": `### Versão 2.8.4
+
+**Microfone do Windows não fica mais preso no CABLE**
+- Ao fechar, o VozLab devolve o seu microfone de antes. Antes ele procurava só pelo código interno do aparelho, que muda (fone em outra porta USB, driver atualizado), e aí a volta falhava e o Windows ficava com o microfone errado: era o "app que se desconfigura".
+- Agora ele guarda também o **nome** do microfone e acha por ele quando o código muda. E nunca mais guarda o próprio CABLE como se fosse o seu microfone original.
+
+**Atualização mais confiável**
+- Se o Windows ou o antivírus bloquear o instalador, o app não fecha mais à toa: mostra o erro e deixa tentar de novo.
+- Novo botão **Baixar pelo navegador** na janela de atualização, para instalar manualmente quando nada mais funcionar.
+- O download agora detecta quando trava ou vem incompleto.
+
+**Problemas de áudio: pedido para IA**
+- Novo botão **Copiar pedido para IA** em "Problemas de áudio". Ele copia um texto completo (diagnóstico, dispositivos, configurações e registros do app) para colar no Claude Code ou outra IA que mexe no PC, que investiga e resolve com você.
+
+**Chat da sala**
+- A janela de mandar som não abre mais com a busca selecionada, e o som do soundboard fica só no botão **+**.
+`,
   "v2.8.3": `### Versão 2.8.3
 
 **Gravação do som do PC corrigida**
@@ -2570,37 +2587,62 @@ export function ReleasesModal({ onClose, currentVersion, onUpdateApp }) {
 // --- UpdateAlertModal ---
 export function UpdateAlertModal({ onClose, latestVersion, changelog, onConfirm }) {
   const displayChangelog = changelog || LOCAL_CHANGELOGS[latestVersion];
+  const [phase, setPhase] = useState("idle"); // idle | working | error
+  const [error, setError] = useState("");
+  const openReleases = () => {
+    if (window.micfudiddo?.openReleases) window.micfudiddo.openReleases();
+    else window.open("https://github.com/OtavioBiazzi/MicStudio/releases/latest", "_blank", "noopener");
+  };
+  const update = async () => {
+    setPhase("working");
+    setError("");
+    try {
+      await onConfirm();
+    } catch (err) {
+      setPhase("error");
+      setError(String(err?.message || err || "Não deu para atualizar.").replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+    }
+  };
   return (
-    <div className="modalOverlay" onClick={onClose}>
-      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, padding: 24 }}>
+    <div className="modalOverlay" onClick={() => phase !== "working" && onClose()}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, padding: 24 }}>
         <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 12, padding: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--purple)", display: "flex", alignItems: "center", gap: 8 }}>
-            🚀 Nova Atualização Disponível!
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
+            <DownloadSimple size={18} weight="bold" color="var(--purple)" /> Nova versão disponível
           </h3>
-          <button className="closeBtn" onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
+          <button className="closeBtn" onClick={onClose} disabled={phase === "working"} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}><X size={18} /></button>
         </div>
         <div className="modalBody" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
-            Uma nova versão <strong>{latestVersion}</strong> do MicFudiddo Studio está disponível para download.
+            A versão <strong>{latestVersion}</strong> do VozLab Studio está pronta para baixar.
           </p>
-          
-          <div style={{ fontSize: 11.5, maxHeight: 150, overflowY: "auto", padding: "10px 12px", background: "rgba(0,0,0,0.15)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 11.5, maxHeight: 160, overflowY: "auto", padding: "10px 12px", background: "rgba(0,0,0,0.15)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
             <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--text)" }}>Novidades desta versão:</div>
             <div className="changelog-markdown" style={{ color: "var(--text-secondary)" }}>
               {renderMarkdown(displayChangelog || "*Nenhuma nota de versão fornecida.*")}
             </div>
           </div>
+          {phase === "working" && <div className="ssWarn" style={{ borderColor: "rgba(var(--accent-rgb), .4)", background: "rgba(var(--accent-rgb), .1)", color: "var(--text)" }}><span className="ssSpinner tiny" /> Baixando o instalador... o app fecha sozinho quando o instalador abrir.</div>}
+          {phase === "error" && (
+            <div className="ssWarn">
+              <span>{error} Se não der de jeito nenhum, clique em <b>Baixar pelo navegador</b>, baixe o <b>VozLab-Setup</b> e abra o arquivo (seus sons e configurações continuam).</span>
+            </div>
+          )}
         </div>
-        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
-          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>
+        <div className="modalFooter" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 12, marginRight: "auto" }} onClick={openReleases}>
+            Baixar pelo navegador
+          </button>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose} disabled={phase === "working"}>
             Depois
           </button>
           <button
             className="btn btn-primary"
             style={{ padding: "8px 16px", fontSize: 12, background: "linear-gradient(135deg, var(--purple), var(--purple-dim))" }}
-            onClick={onConfirm}
+            onClick={update}
+            disabled={phase === "working"}
           >
-            ⚡ Atualizar Agora
+            {phase === "working" ? "Baixando..." : phase === "error" ? "Tentar de novo" : "Atualizar agora"}
           </button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { runAudioChecks, summarizeChecks, buildReport, VB_CABLE_URL } from "../audioChecks.js";
+import { runAudioChecks, summarizeChecks, buildReport, buildAiPrompt, VB_CABLE_URL } from "../audioChecks.js";
 import { getAPI } from "../apiClient";
 
 const ICON = { ok: "✅", warn: "⚠️", error: "❌" };
@@ -28,6 +28,17 @@ export function AudioAssistant({ state, call, updateControls, setPage, setToast,
       setToast?.("Relatório copiado! Cole na conversa de suporte.");
     } catch {
       setToast?.("Não consegui copiar o relatório.");
+    }
+  };
+  // Pedido pronto para colar numa IA (Claude Code, ChatGPT...): tem o diagnostico, os dispositivos e os registros.
+  const copyAiPrompt = async () => {
+    try {
+      let logs = {};
+      try { logs = (await window.micfudiddo?.readBackendLogs?.()) || {}; } catch { /* sem registros */ }
+      await navigator.clipboard.writeText(buildAiPrompt(state, appVersion, logs));
+      setToast?.("Pedido para IA copiado! Cole no Claude Code (ou outra IA) e escreva o seu problema no começo.");
+    } catch {
+      setToast?.("Não consegui copiar o pedido.");
     }
   };
   const checks = runAudioChecks(state);
@@ -91,7 +102,7 @@ export function AudioAssistant({ state, call, updateControls, setPage, setToast,
     <div className="modalOverlay" onClick={onClose}>
       <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, padding: 24 }}>
         <div className="modalHeader" style={{ borderBottom: "none", marginBottom: 6, padding: 0 }}>
-          <h3 className="modalTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>🛠️ Problemas de áudio?</h3>
+          <h3 className="modalTitle" style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Problemas de áudio?</h3>
         </div>
         <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 14px" }}>
           {summary.ok
@@ -139,6 +150,14 @@ export function AudioAssistant({ state, call, updateControls, setPage, setToast,
               )}
             </div>
           ))}
+        </div>
+
+        <div className="aiHelp">
+          <div>
+            <b>Não resolveu?</b>
+            <span>Copie um pedido completo (diagnóstico, dispositivos e registros) e cole numa IA que mexe no PC, como o Claude Code. Ela investiga e te guia.</span>
+          </div>
+          <button className="btn btn-primary" onClick={copyAiPrompt}>Copiar pedido para IA</button>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>

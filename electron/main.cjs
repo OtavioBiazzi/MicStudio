@@ -934,54 +934,84 @@ ipcMain.handle("app:get-version", () => {
   return app.getVersion();
 });
 
+// Baixa o instalador da versao nova e roda. So fecha o app depois que o instalador abriu de verdade:
+// se o Windows/antivirus bloquear, o app continua aberto e mostra o erro (com o plano B de baixar pelo navegador).
+const UPDATE_RELEASES_URL = "https://github.com/OtavioBiazzi/MicStudio/releases/latest";
+
 ipcMain.handle("app:update-app", async (_event, downloadUrl) => {
   const fs = require("fs");
   const https = require("https");
   const { spawn } = require("child_process");
-  
-  return new Promise((resolve, reject) => {
-    const tempDir = app.getPath("temp");
-    const installerPath = path.join(tempDir, "VozLabStudioSetup.exe");
-    const file = fs.createWriteStream(installerPath);
-    
-    const download = (url) => {
-      https.get(url, (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          download(response.headers.location);
-          return;
-        }
-        if (response.statusCode !== 200) {
-          reject(new Error(`Falha no download: ${response.statusCode}`));
-          return;
-        }
-        response.pipe(file);
-        file.on("finish", () => {
-          file.close(async () => {
-            try {
-              quitting = true;
-              await stopBackend();
-              
-              const child = spawn(installerPath, [], {
-                detached: true,
-                stdio: "ignore"
-              });
-              child.unref();
-              
-              app.quit();
-              resolve(true);
-            } catch (e) {
-              reject(e);
-            }
-          });
+
+  const url = String(downloadUrl || "");
+  if (!/^https:\/\/(github\.com|objects\.githubusercontent\.com|github-releases\.githubusercontent\.com)\//.test(url)) {
+    throw new Error("Link de atualização inválido.");
+  }
+  const installerPath = path.join(app.getPath("temp"), `VozLab-Setup-${Date.now()}.exe`);
+
+  const downloadTo = (target, link, redirects = 0) => new Promise((resolve, reject) => {
+    if (redirects > 6) {
+      reject(new Error("Redirecionamentos demais no download."));
+      return;
+    }
+    const request = https.get(link, { headers: { "User-Agent": "VozLab-Updater" } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume();
+        resolve(downloadTo(target, response.headers.location, redirects + 1));
+        return;
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`O GitHub respondeu ${response.statusCode} no download.`));
+        return;
+      }
+      const expected = Number(response.headers["content-length"]) || 0;
+      let received = 0;
+      const file = fs.createWriteStream(target);
+      response.on("data", (chunk) => { received += chunk.length; });
+      response.on("error", (error) => { file.destroy(); reject(error); });
+      file.on("error", (error) => { response.destroy(); reject(new Error(`Não consegui salvar o instalador: ${error.message}`)); });
+      file.on("finish", () => {
+        file.close(() => {
+          if (expected && received !== expected) reject(new Error("O download veio incompleto. Tente de novo."));
+          else if (received < 1024 * 1024) reject(new Error("O instalador baixado está vazio ou corrompido."));
+          else resolve(target);
         });
-      }).on("error", (err) => {
-        fs.unlink(installerPath, () => reject(err));
       });
-    };
-    
-    download(downloadUrl);
+      response.pipe(file);
+    });
+    // Se ficar 60 s sem chegar nada, desiste (internet caiu).
+    request.setTimeout(60_000, () => request.destroy(new Error("O download travou (sem resposta por 60 s).")));
+    request.on("error", reject);
   });
+
+  try {
+    await downloadTo(installerPath, url);
+  } catch (error) {
+    fs.unlink(installerPath, () => {});
+    throw new Error(`${error.message} Se continuar, use "Baixar pelo navegador".`);
+  }
+
+  // Abre o instalador e espera ele realmente comecar antes de fechar o app.
+  await new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(installerPath, [], { detached: true, stdio: "ignore" });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    child.once("spawn", () => { child.unref(); resolve(); });
+    child.once("error", (error) => reject(new Error(`O Windows não deixou abrir o instalador (${error.code || error.message}). Use "Baixar pelo navegador" e rode o instalador manualmente.`)));
+  });
+
+  quitting = true;
+  await stopBackend();
+  setTimeout(() => app.quit(), 300);
+  return true;
 });
+
+ipcMain.handle("app:open-releases", () => shell.openExternal(UPDATE_RELEASES_URL));
 
 function cleanOldVersion() {
   const fs = require("fs");
@@ -1130,6 +1160,30 @@ ipcMain.handle("backend:retry", async () => {
   return backendRetryPromise;
 });
 ipcMain.handle("backend:open-logs", () => shell.openPath(path.join(app.getPath("userData"), "logs")));
+
+// Final dos registros, para o "pedido para IA" do Problemas de audio.
+ipcMain.handle("backend:read-logs", async () => {
+  const fs = require("fs");
+  const dir = path.join(app.getPath("userData"), "logs");
+  const readTail = async (name, maxBytes = 24000) => {
+    try {
+      const file = path.join(dir, name);
+      const stat = await fs.promises.stat(file);
+      const handle = await fs.promises.open(file, "r");
+      try {
+        const length = Math.min(maxBytes, stat.size);
+        const buffer = Buffer.alloc(length);
+        await handle.read(buffer, 0, length, stat.size - length);
+        return buffer.toString("utf8");
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      return "";
+    }
+  };
+  return { backend: await readTail("backend.log"), runtime: await readTail("backend-runtime.log", 12000) };
+});
 
 // ---------- Compartilhar tela (salas) ----------
 let screenBeacon = null; // aviso UDP da sala para a rede

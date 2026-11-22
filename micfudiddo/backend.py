@@ -47,6 +47,7 @@ from .soundboard import (
 )
 from .storage import atomic_write_json, load_json_with_backup
 from .chat_export import chat_export
+from .mic_restore import describe_defaults, pick_restore_target, read_saved_defaults
 from .windows_audio import (
     com_initialized,
     find_virtual_microphone_endpoint,
@@ -107,6 +108,7 @@ DEFAULT_APP_SETTINGS = {
     "shortcutRecordCombo": "",
     "shortcutCommandGlitch": "Ctrl+Alt+G",
     "defaultMicOnClose": "restore",
+    "defaultMicOnCloseName": "",
     "voiceEditPersistence": "save",
     "confirmClose": True,
     "closeBehavior": "ask",
@@ -263,15 +265,16 @@ class AppState:
         self.api_port = 38717
         self.saved_capture_defaults_path = self.library.base_dir / "temp_capture_defaults.json"
         self.saved_capture_defaults: dict[int, str] = {}
+        self.saved_capture_names: dict[int, str] = {}
         if self.saved_capture_defaults_path.exists():
             try:
                 import json
                 raw = json.loads(self.saved_capture_defaults_path.read_text(encoding="utf-8"))
-                self.saved_capture_defaults = {int(k): v for k, v in raw.items()}
+                self.saved_capture_defaults, self.saved_capture_names = read_saved_defaults(raw)
                 restored = bool(self.saved_capture_defaults) and restore_default_capture_ids(self.saved_capture_defaults)
                 if not restored:
                     selected_names = self.profile.get("selected_names", {})
-                    restored = self.restore_capture_by_name(str(selected_names.get("input") or ""))
+                    restored = self.restore_mic_by_names([*self.saved_capture_names.values(), str(selected_names.get("input") or "")])
                 if restored:
                     self.saved_capture_defaults_path.unlink(missing_ok=True)
                     self.saved_capture_defaults = {}
@@ -1618,11 +1621,16 @@ class AppState:
             # Keep the original device captured before a previous interrupted shutdown.
             restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
         if not self.saved_capture_defaults:
-            self.saved_capture_defaults = get_default_capture_ids()
+            # Guarda o microfone de antes com id E nome (o id muda; o nome nao). O CABLE nunca e guardado como original.
+            try:
+                described = describe_defaults(get_default_capture_ids(), list_capture_endpoints())
+            except Exception:
+                described = {"ids": {}, "names": {}}
+            self.saved_capture_defaults, self.saved_capture_names = read_saved_defaults(described)
             try:
                 import json
                 temporary_path = self.saved_capture_defaults_path.with_suffix(".tmp")
-                temporary_path.write_text(json.dumps(self.saved_capture_defaults), encoding="utf-8")
+                temporary_path.write_text(json.dumps(described), encoding="utf-8")
                 temporary_path.replace(self.saved_capture_defaults_path)
             except Exception as e:
                 print("Erro ao persistir microfone padrao temporario:", e)
@@ -1649,6 +1657,22 @@ class AppState:
         self.stop()
         self.restore_microphone_safety()
         self.virtual_mode_active = False
+
+    def restore_mic_by_names(self, names: list) -> bool:
+        """Volta o microfone padrao do Windows procurando pelo nome (o id do aparelho pode ter mudado)."""
+        try:
+            endpoints = list_capture_endpoints()
+        except Exception:
+            return False
+        target = pick_restore_target(endpoints, "", "", [name for name in names if name])
+        if target is None:
+            return False
+        try:
+            set_default_capture_id(target.id)
+            current = get_default_capture_ids()
+            return bool(current) and all(device_id == target.id for device_id in current.values())
+        except Exception:
+            return False
 
     def restore_capture_by_name(self, preferred_name: str) -> bool:
         preferred = str(preferred_name or "").strip().casefold()
@@ -1687,17 +1711,34 @@ class AppState:
             elif default_mic == "keep":
                 restored = True
             else:
+                # Microfone escolhido nas Configuracoes. Se o id dele mudou, acha pelo nome e corrige o id salvo.
                 try:
-                    from .windows_audio import set_default_capture_id
-                    set_default_capture_id(default_mic)
-                    restored = True
-                except Exception as e:
-                    print("Erro ao restaurar o microfone selecionado no encerramento:", e)
+                    endpoints = list_capture_endpoints()
+                except Exception:
+                    endpoints = []
+                target = pick_restore_target(
+                    endpoints,
+                    default_mic,
+                    str(self.settings.get("defaultMicOnCloseName") or ""),
+                    [*self.saved_capture_names.values(), self.selected_input_name],
+                )
+                if target is not None:
+                    try:
+                        set_default_capture_id(target.id)
+                        restored = True
+                        if target.id != default_mic:
+                            self.settings["defaultMicOnClose"] = target.id
+                            self.settings["defaultMicOnCloseName"] = target.name
+                            self.save_app_settings()
+                    except Exception as e:
+                        print("Erro ao restaurar o microfone selecionado no encerramento:", e)
+                if not restored:
                     restored = restore_default_capture_ids(self.saved_capture_defaults, attempts=8)
             if not restored:
-                restored = self.restore_capture_by_name(self.selected_input_name)
+                restored = self.restore_mic_by_names([*self.saved_capture_names.values(), self.selected_input_name])
         if restored:
             self.saved_capture_defaults = {}
+            self.saved_capture_names = {}
             if self.saved_capture_defaults_path.exists():
                 try:
                     self.saved_capture_defaults_path.unlink(missing_ok=True)

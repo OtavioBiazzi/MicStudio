@@ -1545,10 +1545,7 @@ function App() {
             onClose={() => setUpdateAvailable(null)}
             latestVersion={updateAvailable.version}
             changelog={updateAvailable.changelog}
-            onConfirm={() => {
-              handleUpdateApp(updateAvailable.downloadUrl);
-              setUpdateAvailable(null);
-            }}
+            onConfirm={() => handleUpdateApp(updateAvailable.downloadUrl)}
           />
         )}
         {state?.youtubeStatus && state.youtubeStatus !== "" && !state.youtubeStatus.startsWith("Concluido") && !state.youtubeStatus.startsWith("Erro") && !state.youtubeStatus.startsWith("Importacao cancelada") && (

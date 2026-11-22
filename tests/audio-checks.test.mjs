@@ -35,3 +35,19 @@ test("voz que caiu mostra o motivo", () => {
   assert.equal(v.level, "error");
   assert.match(v.detail, /sem microfone/);
 });
+
+test("pedido para IA tem o diagnostico, os dispositivos e os registros", async () => {
+  const { buildAiPrompt } = await import("../src/audioChecks.js");
+  const prompt = buildAiPrompt({
+    running: true,
+    devices: { inputs: [{ index: 1, name: "Microfone JBL" }], outputs: [{ index: 2, name: "CABLE Input" }] },
+    selected: { input: 1, output: 2 },
+    settings: { defaultMicOnClose: "restore" },
+    windowsCaptureEndpoints: [{ id: "{a}", name: "Microfone JBL" }]
+  }, "v2.8.4", { backend: "linha 1\nErro ao restaurar", runtime: "" });
+  assert.match(prompt, /VozLab Studio v2\.8\.4/);
+  assert.match(prompt, /\[1\] Microfone JBL  <- em uso/);
+  assert.match(prompt, /Erro ao restaurar/);
+  assert.match(prompt, /O problema \(o usuário escreve aqui\)/);
+  assert.match(prompt, /nunca apague sons/);
+});

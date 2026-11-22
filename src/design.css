@@ -1497,3 +1497,10 @@ input[type=range] { touch-action: none; }
 .rmTile.idle .rmTileBar, .rmTile.focused.idle .rmTileBar { opacity: 0 !important; pointer-events: none; }
 .rmTile.focused .rmTileBar { transition: opacity .35s; }
 .rmSoundLen { flex: none; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.aiHelp { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(var(--accent-rgb), .1); border: 1px solid rgba(var(--accent-rgb), .35); }
+.aiHelp > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.aiHelp b { font-size: 13px; }
+.aiHelp span { font-size: 11.5px; color: var(--text-secondary, var(--text-muted)); line-height: 1.45; }
+.aiHelp .btn { flex: none; white-space: nowrap; }
+.rmSoundSearch:focus-within { border-color: rgba(var(--accent-rgb), .6); }
+.rmSoundSearch input, .rmSoundSearch input:focus { border: none !important; box-shadow: none !important; outline: none !important; background: transparent !important; padding: 0 !important; height: auto; }

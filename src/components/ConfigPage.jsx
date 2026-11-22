@@ -725,7 +725,7 @@ export function ConfigPage({
                 <SelectRow
                   label="Microfone padrão depois de fechar"
                   value={settings.defaultMicOnClose || "restore"}
-                  onChange={(v) => save({ defaultMicOnClose: v })}
+                  onChange={(v) => save({ defaultMicOnClose: v, defaultMicOnCloseName: (state.windowsCaptureEndpoints || []).find((ep) => ep.id === v)?.name || "" })}
                   options={[
                     ["restore", "O que eu usava antes (recomendado)"],
                     ["keep", "Deixar como está"],

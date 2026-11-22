@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   getBackendStatus: () => ipcRenderer.invoke("backend:get-status"),
   retryBackend: () => ipcRenderer.invoke("backend:retry"),
   openBackendLogs: () => ipcRenderer.invoke("backend:open-logs"),
+  readBackendLogs: () => ipcRenderer.invoke("backend:read-logs"),
   onBackendStatus: (callback) => {
     const listener = (_event, status) => callback?.(status);
     ipcRenderer.on("backend:status", listener);
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld("micfudiddo", {
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke("app:set-launch-at-startup", Boolean(enabled)),
   getLaunchAtStartup: () => ipcRenderer.invoke("app:get-launch-at-startup"),
   updateApp: (downloadUrl) => ipcRenderer.invoke("app:update-app", downloadUrl),
+  openReleases: () => ipcRenderer.invoke("app:open-releases"),
   openSoundSettings: () => ipcRenderer.invoke("system:open-sound-settings"),
   openSoundControlPanel: () => ipcRenderer.invoke("system:open-mmsys"),
   getShortcutConflicts: () => ipcRenderer.invoke("shortcuts:get-conflicts"),
